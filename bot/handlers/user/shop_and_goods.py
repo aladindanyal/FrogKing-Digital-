@@ -40,6 +40,8 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     data = await state.get_data()
     if not back_data:
         back_data = data.get('item_back_data', 'gp_0')
+    
+    current_quantity = data.get('item_quantity', 1)
 
     item_info_data = await get_item_info_cached(item_name)
     if not item_info_data:
@@ -70,27 +72,30 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     applied_promo = data.get('applied_promo')
 
     # Build price line
-    price = Decimal(str(item_info_data["price"]))
+    unit_price = Decimal(str(item_info_data["price"]))
     if applied_promo:
         promo_data = data.get('applied_promo_data', {})
         if promo_data.get('discount_type') == 'percent':
-            discount = price * Decimal(str(promo_data.get('discount_value', 0))) / 100
+            discount = unit_price * Decimal(str(promo_data.get('discount_value', 0))) / 100
         else:
-            discount = min(Decimal(str(promo_data.get('discount_value', 0))), price)
-        discounted = (price - discount).quantize(Decimal("0.01"))
+            discount = min(Decimal(str(promo_data.get('discount_value', 0))), unit_price)
+        unit_discounted = (unit_price - discount).quantize(Decimal("0.01"))
+        total_discounted = unit_discounted * current_quantity
+        total_original = unit_price * current_quantity
         price_line = localize(
             "shop.item.price_discounted",
-            original=price, discounted=discounted,
+            original=total_original, discounted=total_discounted,
             currency=EnvKeys.PAY_CURRENCY, code=applied_promo,
         )
     else:
-        price_line = localize("shop.item.price", amount=price, currency=EnvKeys.PAY_CURRENCY)
+        total_price = unit_price * current_quantity
+        price_line = localize("shop.item.price", amount=total_price, currency=EnvKeys.PAY_CURRENCY)
 
     markup = item_info(
         item_name, back_data,
         avg_rating=avg_rating, review_count=review_count_val,
         has_purchased=purchased, applied_promo=applied_promo,
-        reviews_enabled=reviews_enabled,
+        reviews_enabled=reviews_enabled, quantity=current_quantity,
     )
 
     text_lines = [
@@ -300,11 +305,46 @@ async def item_info_callback_handler(call: CallbackQuery, state: FSMContext):
     if metrics:
         metrics.track_conversion("purchase_funnel", "view_item", call.from_user.id)
 
-    # Save item name and back_data in state
-    await state.update_data(csrf_item=item_name, item_back_data=back_data)
+    # Save item name, back_data and reset quantity in state
+    await state.update_data(csrf_item=item_name, item_back_data=back_data, item_quantity=1)
 
     await _render_item_page(call, state, item_name, back_data, user_id=call.from_user.id)
 
+@router.callback_query(F.data == "qty_inc")
+async def qty_inc_handler(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    if not item_name:
+        await call.answer(localize("shop.item.not_found"), show_alert=True)
+        return
+        
+    current_qty = data.get('item_quantity', 1)
+    
+    # Check max limit (either available stock or 10 for infinity)
+    from bot.database.methods import check_value, select_item_values_amount_cached
+    is_infinity = await check_value(item_name)
+    max_qty = 10 if is_infinity else await select_item_values_amount_cached(item_name)
+    
+    if current_qty < max_qty:
+        await state.update_data(item_quantity=current_qty + 1)
+        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+    else:
+        await call.answer(localize("shop.out_of_stock") if not is_infinity else "Max quantity reached", show_alert=True)
+
+@router.callback_query(F.data == "qty_dec")
+async def qty_dec_handler(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    if not item_name:
+        await call.answer(localize("shop.item.not_found"), show_alert=True)
+        return
+        
+    current_qty = data.get('item_quantity', 1)
+    if current_qty > 1:
+        await state.update_data(item_quantity=current_qty - 1)
+        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+    else:
+        await call.answer()
 
 
 # --- Promo Code Application ---

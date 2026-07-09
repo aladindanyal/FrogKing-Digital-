@@ -423,10 +423,13 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
 
         metrics = get_metrics()
 
+        current_qty = data.get('item_quantity', 1)
+
         # Validation via Pydantic
         purchase_request = ItemPurchaseRequest(
             item_name=raw_item_name,
-            user_id=call.from_user.id
+            user_id=call.from_user.id,
+            quantity=current_qty
         )
 
         # Additional check for SQL injection
@@ -456,6 +459,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             user_id,
             purchase_request.item_name,
             promo_code=promo_code,
+            quantity=purchase_request.quantity,
         )
 
         if not success:
@@ -490,27 +494,56 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             })
             metrics.track_conversion("purchase_funnel", "purchase", call.from_user.id)
 
-        safe_value = sanitize_html(purchase_data['value'])
+        delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])
+        if purchase_request.quantity > 1:
+            formatted_values = []
+            for i, val in enumerate(delivered_values, 1):
+                formatted_values.append(f"{i}) {sanitize_html(val)}")
+            safe_value = "\n".join(formatted_values)
+        else:
+            safe_value = sanitize_html(delivered_values[0] if delivered_values else purchase_data.get('value', ''))
+
         username = call.from_user.username or call.from_user.first_name
 
         from bot.keyboards.inline import simple_buttons
-        buttons = [
-            (f"📦 {purchase_data['item_name']}", f"bought-item:{purchase_data['bought_id']}:back_to_item"),
-            (localize("btn.back"), "back_to_item"),
-        ]
+        buttons = []
+        
+        bought_id = purchase_data.get('bought_id')
+        if isinstance(bought_id, list):
+            bought_id = bought_id[0] if bought_id else 0
+
+        buttons.append((f"📦 {purchase_data['item_name']}", f"bought-item:{bought_id}:back_to_item"))
+        buttons.append((localize("btn.back"), "back_to_item"))
+
+        # In strings.py, shop.purchase.receipt has "💲 Итого: {price} {currency}" and "💰 Цена: {price} {currency}".
+        # Since we pass `price=total_price` to `localize`, both are showing total_price right now.
+        # Let's fix that text properly.
+        unit_price = (Decimal(str(purchase_data['price'])) / purchase_request.quantity).quantize(Decimal("0.01"))
+        
+        receipt_text = localize(
+            'shop.purchase.receipt',
+            item_name=purchase_data['item_name'],
+            price=purchase_data['price'],
+            unique_id=purchase_data['unique_id'],
+            datetime=purchase_data['bought_datetime'],
+            username=username,
+            user_id=call.from_user.id,
+            value=safe_value,
+            currency=EnvKeys.PAY_CURRENCY,
+        )
+        
+        if purchase_request.quantity > 1:
+            receipt_text = receipt_text.replace("1 шт.", f"{purchase_request.quantity} pcs")
+            receipt_text = receipt_text.replace("Qty: 1", f"Qty: {purchase_request.quantity}")
+            receipt_text = receipt_text.replace(f"💰 Цена: {purchase_data['price']}", f"💰 Цена: {unit_price}")
+            receipt_text = receipt_text.replace(f"💰 Price: {purchase_data['price']}", f"💰 Price: {unit_price}")
+        else:
+            receipt_text = receipt_text.replace("1 шт.", "1 pc")
+            
+        receipt_text = receipt_text.replace("📦 Кол-во:", "📦 Qty:")
 
         await call.message.edit_text(
-            localize(
-                'shop.purchase.receipt',
-                item_name=purchase_data['item_name'],
-                price=purchase_data['price'],
-                unique_id=purchase_data['unique_id'],
-                datetime=purchase_data['bought_datetime'],
-                username=username,
-                user_id=call.from_user.id,
-                value=safe_value,
-                currency=EnvKeys.PAY_CURRENCY,
-            ),
+            receipt_text,
             parse_mode='HTML',
             reply_markup=simple_buttons(buttons),
         )
@@ -523,7 +556,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
                 user_id=user_id,
                 resource_type="Item",
                 resource_id=purchase_request.item_name[:100],
-                details=f"name={user_info.first_name[:50]}, price={purchase_data['price']} {EnvKeys.PAY_CURRENCY}, unique_id={purchase_data['unique_id']}",
+                details=f"name={user_info.first_name[:50]}, price={purchase_data['price']} {EnvKeys.PAY_CURRENCY}, qty={purchase_request.quantity}, unique_id={purchase_data['unique_id']}",
             )
         except Exception as e:
             await log_audit("purchase", level="ERROR", user_id=user_id, resource_type="Item", details=f"log_failed: {e}")

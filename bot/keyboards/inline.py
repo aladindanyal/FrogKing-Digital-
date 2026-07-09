@@ -135,24 +135,44 @@ def item_info(
         item_name: str, back_data: str, avg_rating: float = None,
         review_count: int = 0, has_purchased: bool = False,
         applied_promo: str = None, reviews_enabled: bool = True,
+        quantity: int = 1,
 ) -> InlineKeyboardMarkup:
     """
-    Product card with buy, cart, promo, review buttons.
+    Product card with buy, promo, review buttons, and quantity controls.
     """
     kb = InlineKeyboardBuilder()
+    
+    # Quantity controls
+    qty_label = f"{quantity} pc" if quantity == 1 else f"{quantity} pcs"
+    kb.button(text="➖", callback_data="qty_dec")
+    kb.button(text=qty_label, callback_data="noop")
+    kb.button(text="➕", callback_data="qty_inc")
+    
     kb.button(text=localize("btn.buy"), callback_data="buy")
-    kb.button(text=localize("btn.add_to_cart"), callback_data="add_to_cart")
+    
     if applied_promo:
         kb.button(text=localize("btn.remove_promo"), callback_data="remove_promo")
     else:
         kb.button(text=localize("btn.apply_promo"), callback_data="apply_promo")
+    
     if reviews_enabled:
         if review_count > 0:
             kb.button(text=localize("btn.view_reviews", count=review_count), callback_data=f"reviews:{item_name}:0")
         if has_purchased:
             kb.button(text=localize("btn.leave_review"), callback_data=f"review:{item_name}")
+            
     kb.button(text=localize("btn.back"), callback_data=back_data)
-    kb.adjust(2)
+    
+    sizes = [3, 1]  # Quantity row (3 buttons), Buy button (1 button)
+    sizes.append(1) # Promo button
+    if reviews_enabled:
+        if review_count > 0:
+            sizes.append(1)
+        if has_purchased:
+            sizes.append(1)
+    sizes.append(1) # Back button
+    
+    kb.adjust(*sizes)
     return kb.as_markup()
 
 

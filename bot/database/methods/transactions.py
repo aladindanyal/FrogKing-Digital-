@@ -14,7 +14,7 @@ from bot.database.methods.cache_utils import safe_create_task
 from bot.database.methods.audit import log_audit
 
 
-async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str = None) -> tuple[bool, str, dict | None]:
+async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str = None, quantity: int = 1) -> tuple[bool, str, dict | None]:
     """
     Complete transactional purchase of goods with checks and locks.
     Returns: (success, message, purchase_data)
@@ -101,33 +101,51 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                         "original_price": float(price),
                         "discount": float(price - final_price),
                     }
+                    
+                # Multiply final price by quantity
+                total_final_price = final_price * quantity
 
                 # 3. Checking the balance
-                if user.balance < final_price:
+                if user.balance < total_final_price:
                     await s.rollback()
                     return False, "insufficient_funds", None
 
-                # 4. Receive and lock the goods for purchase (blocking wait for row lock)
-                item_value = (await s.execute(
-                    select(ItemValues).where(ItemValues.item_id == goods.id).with_for_update()
-                )).scalars().first()
+                # 4. Receive and lock the goods for purchase
+                # Fetch up to `quantity` rows
+                item_values = (await s.execute(
+                    select(ItemValues).where(ItemValues.item_id == goods.id).limit(quantity).with_for_update()
+                )).scalars().all()
 
-                if not item_value:
+                if not item_values:
+                    await s.rollback()
+                    return False, "out_of_stock", None
+                
+                first_item = item_values[0]
+                is_infinity = first_item.is_infinity
+                
+                if not is_infinity and len(item_values) < quantity:
                     await s.rollback()
                     return False, "out_of_stock", None
 
-                # 5. If the product is not endless, we remove it
-                if not item_value.is_infinity:
-                    await s.delete(item_value)
+                # 5. Consume values
+                purchased_values = []
+                if is_infinity:
+                    purchased_values = [first_item.value] * quantity
+                else:
+                    for iv in item_values:
+                        purchased_values.append(iv.value)
+                        await s.delete(iv)
+                        
+                combined_value = "\n".join(purchased_values)
 
                 # 6. Write off the balance
-                user.balance -= final_price
+                user.balance -= total_final_price
 
                 # 7. Create a purchase record
                 bought_item = BoughtGoods(
                     name=item_name,
-                    value=item_value.value,
-                    price=final_price,
+                    value=combined_value,
+                    price=total_final_price,
                     buyer_id=telegram_id,
                     bought_datetime=datetime.now(timezone.utc),
                     unique_id=uuid4().int >> 65
@@ -144,8 +162,10 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
 
                 result_data = {
                     "item_name": item_name,
-                    "value": item_value.value,
-                    "price": float(final_price),
+                    "value": combined_value,
+                    "delivered_values": purchased_values,
+                    "price": float(total_final_price),
+                    "quantity": quantity,
                     "new_balance": float(user.balance),
                     "unique_id": bought_item.unique_id,
                     "bought_id": bought_item.id,

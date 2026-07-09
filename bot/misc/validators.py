@@ -25,6 +25,7 @@ class ItemPurchaseRequest(BaseModel):
     """Validate item purchase request"""
     item_name: Annotated[str, StringConstraints(min_length=1, max_length=100, strip_whitespace=True)]
     user_id: int = Field(..., gt=0)
+    quantity: int = Field(1, gt=0, le=100)
 
     @field_validator('item_name')
     @classmethod
