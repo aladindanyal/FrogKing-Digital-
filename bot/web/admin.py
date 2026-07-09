@@ -57,7 +57,7 @@ from bot.database.main import Database
 from bot.database.models.main import (
     User, Role, Categories, Goods, ItemValues,
     BoughtGoods, Operations, Payments, ReferralEarnings,
-    AuditLog, PromoCodes, CartItems, Reviews,
+    AuditLog, PromoCodes, CartItems, Reviews, StoreSettings,
 )
 from bot.misc.metrics import get_metrics
 from bot.misc.caching import get_cache_manager
@@ -199,12 +199,23 @@ class RoleAdmin(AuditModelView, model=Role):
 
 
 class CategoryAdmin(AuditModelView, model=Categories):
-    column_list = [Categories.id, Categories.name, Categories.parent_id]
+    column_list = [Categories.id, Categories.name, Categories.description, Categories.parent_id]
     column_searchable_list = [Categories.name]
     column_sortable_list = [Categories.id, Categories.name]
     name = "Category"
     name_plural = "Categories"
     icon = "fa-solid fa-folder"
+    form_columns = [Categories.name, Categories.description, Categories.parent]
+
+
+class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
+    column_list = [StoreSettings.id, StoreSettings.shop_root_title]
+    name = "Store Setting"
+    name_plural = "Store Settings"
+    icon = "fa-solid fa-gear"
+    can_create = False
+    can_delete = False
+    form_columns = [StoreSettings.shop_root_title, StoreSettings.shop_root_description]
 
 
 class GoodsAdmin(AuditModelView, model=Goods):
@@ -418,6 +429,7 @@ def create_admin_app() -> Starlette:
     admin.add_view(AuditLogAdmin)
     admin.add_view(PromoCodeAdmin)
     admin.add_view(CartItemsAdmin)
+    admin.add_view(StoreSettingsAdmin)
     if EnvKeys.REVIEWS_ENABLED == "1":
         admin.add_view(ReviewsAdmin)
 

@@ -7,7 +7,7 @@ from sqlalchemy import func, exists, select
 
 from bot.database.models import Database, User, ItemValues, Goods, Categories, Role, BoughtGoods, \
     Operations, ReferralEarnings, Permission
-from bot.database.models.main import PromoCodes, PromoCodeUsages, CartItems, Reviews
+from bot.database.models.main import PromoCodes, PromoCodeUsages, CartItems, Reviews, StoreSettings
 from bot.misc.caching import get_cache_manager
 
 F = TypeVar('F', bound=Callable[..., Coroutine[Any, Any, Any]])
@@ -216,6 +216,26 @@ async def check_category(category_name: str) -> dict | None:
         result = await s.execute(select(Categories).where(Categories.name == category_name))
         obj = result.scalars().first()
         return _obj_to_dict(obj, Categories) if obj else None
+
+
+async def get_category_by_id(category_id: int) -> dict | None:
+    """Return category as dict by id, or None."""
+    async with Database().session() as s:
+        result = await s.execute(select(Categories).where(Categories.id == category_id))
+        obj = result.scalars().first()
+        return _obj_to_dict(obj, Categories) if obj else None
+
+
+async def get_store_settings() -> dict | None:
+    """Return StoreSettings row 1 as dict. Seed if missing."""
+    async with Database().session() as s:
+        result = await s.execute(select(StoreSettings).where(StoreSettings.id == 1))
+        obj = result.scalars().first()
+        if not obj:
+            obj = StoreSettings(id=1, shop_root_title=None, shop_root_description=None)
+            s.add(obj)
+            await s.commit()
+        return {"shop_root_title": obj.shop_root_title, "shop_root_description": obj.shop_root_description}
 
 
 async def select_item_values_amount(item_name: str) -> int:

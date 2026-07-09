@@ -13,6 +13,7 @@ from bot.database.methods import (
 from bot.database.methods.read import (
     get_item_avg_rating, has_purchased_item, validate_promo_for_item,
     get_user_review, invalidate_rating_cache, get_item_info,
+    get_store_settings, get_category_by_id,
 )
 from bot.database.methods.create import create_review
 from bot.database.methods.lazy_queries import query_item_reviews
@@ -167,9 +168,25 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
 
     if parent_id is None:
         back_cb = "back_to_menu"
+        
+        # Root shop text
+        settings = await get_store_settings()
+        title = settings.get("shop_root_title") if settings and settings.get("shop_root_title") else localize("shop.categories.title")
+        description = settings.get("shop_root_description") if settings and settings.get("shop_root_description") else ""
+        
+        display_text = f"<b>{title}</b>\n\n{description}".strip()
     else:
         grandparent_id = await get_category_parent_id(parent_id)
         back_cb = f"cpage:{grandparent_id}:0" if grandparent_id is not None else "cpage:None:0"
+        
+        # Subcategory text
+        cat_info = await get_category_by_id(parent_id)
+        if cat_info:
+            display_text = f"<b>{cat_info['name']}</b>"
+            if cat_info.get("description"):
+                display_text += f"\n\n{cat_info['description']}"
+        else:
+            display_text = localize("shop.categories.title")
 
     # item is (id, name)
     markup = await lazy_paginated_keyboard(
@@ -182,7 +199,7 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
         row_width=2
     )
 
-    await _edit_message_safe(call, call.message, localize("shop.categories.title"), markup)
+    await _edit_message_safe(call, call.message, display_text, markup)
     await state.set_state(ShopStates.viewing_categories)
 
 
@@ -216,6 +233,15 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
     parent_id = await get_category_parent_id(category_id)
     back_cb = f"cpage:{parent_id}:0" if parent_id is not None else "cpage:None:0"
     
+    # Category text
+    cat_info = await get_category_by_id(category_id)
+    if cat_info:
+        display_text = f"<b>{cat_info['name']}</b>"
+        if cat_info.get("description"):
+            display_text += f"\n\n{cat_info['description']}"
+    else:
+        display_text = localize("shop.goods.choose")
+    
     markup = await lazy_paginated_keyboard(
         paginator=paginator,
         item_text=lambda item: item,
@@ -225,7 +251,7 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
         nav_cb_prefix="gp_"
     )
     
-    await _edit_message_safe(call, call.message, localize("shop.goods.choose"), markup)
+    await _edit_message_safe(call, call.message, display_text, markup)
     await state.set_state(ShopStates.viewing_goods)
 
 

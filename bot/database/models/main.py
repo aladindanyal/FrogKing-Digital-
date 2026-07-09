@@ -142,10 +142,18 @@ class User(Database.BASE):
         return str(self.telegram_id)
 
 
+class StoreSettings(Database.BASE):
+    __tablename__ = 'store_settings'
+    id = Column(Integer, primary_key=True)
+    shop_root_title = Column(String(255), nullable=True)
+    shop_root_description = Column(Text, nullable=True)
+
+
 class Categories(Database.BASE):
     __tablename__ = 'categories'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
     
     items = relationship("Goods", back_populates="category", lazy='raise')
