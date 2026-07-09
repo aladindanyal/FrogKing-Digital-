@@ -101,6 +101,7 @@ async def lazy_paginated_keyboard(
         back_cb: str | None = None,
         nav_cb_prefix: str = "",
         back_text: str | None = None,
+        row_width: int = 1,
 ) -> InlineKeyboardMarkup:
     """
     Lazy pagination keyboard with data loading on demand
@@ -112,7 +113,7 @@ async def lazy_paginated_keyboard(
 
     for item in items:
         kb.button(text=item_text(item), callback_data=item_callback(item))
-    kb.adjust(1)
+    kb.adjust(row_width)
 
     # Navigation
     total_pages = await paginator.get_total_pages()

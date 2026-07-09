@@ -6,7 +6,7 @@ from sqlalchemy import (
     DateTime, Numeric, Index, UniqueConstraint, CheckConstraint, func, select
 )
 from bot.database.main import Database
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 
 class Permission:
@@ -146,7 +146,10 @@ class Categories(Database.BASE):
     __tablename__ = 'categories'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
+    parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
+    
     items = relationship("Goods", back_populates="category", lazy='raise')
+    subcategories = relationship("Categories", backref=backref('parent', remote_side=[id]), lazy='raise')
 
     def __init__(self, name: str = None, **kw: Any):
         super().__init__(**kw)

@@ -9,30 +9,44 @@ from bot.database.models import (
 from bot.database.models.main import PromoCodes, Reviews
 
 
-async def query_categories(offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:
-    """Query categories with pagination"""
+async def query_categories(parent_id: int | None = None, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:
+    """Query categories with pagination, optionally by parent_id"""
     async with Database().session() as s:
+        query = select(Categories)
+        if parent_id is None:
+            query = query.where(Categories.parent_id.is_(None))
+        else:
+            query = query.where(Categories.parent_id == parent_id)
+            
         if count_only:
-            return (await s.execute(select(func.count(Categories.id)))).scalar() or 0
+            return (await s.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
+            
         result = await s.execute(
-            select(Categories.name)
-            .order_by(Categories.name.asc())
+            query.order_by(Categories.name.asc())
             .offset(offset)
             .limit(limit)
         )
-        return [row[0] for row in result.all()]
+        return [(row.id, row.name) for row in result.scalars().all()]
 
 
-async def query_items_in_category(category_name: str, offset: int = 0, limit: int = 10,
-                                  count_only: bool = False) -> Any:
+async def check_category_has_subcategories(category_id: int) -> bool:
+    """Check if a category has child categories"""
+    async with Database().session() as s:
+        result = await s.execute(select(Categories.id).where(Categories.parent_id == category_id).limit(1))
+        return result.scalar() is not None
+
+
+async def get_category_parent_id(category_id: int) -> int | None:
+    """Get the parent_id of a given category"""
+    async with Database().session() as s:
+        result = await s.execute(select(Categories.parent_id).where(Categories.id == category_id))
+        return result.scalar()
+
+
+async def query_items_in_category(category_id: int, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:
     """Query items in category with pagination"""
     async with Database().session() as s:
-        cat_id = (await s.execute(
-            select(Categories.id).where(Categories.name == category_name)
-        )).scalar()
-        if not cat_id:
-            return 0 if count_only else []
-        query = select(Goods.name).where(Goods.category_id == cat_id)
+        query = select(Goods.name).where(Goods.category_id == category_id)
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))
             return count_result.scalar() or 0

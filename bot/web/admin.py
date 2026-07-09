@@ -199,8 +199,9 @@ class RoleAdmin(AuditModelView, model=Role):
 
 
 class CategoryAdmin(AuditModelView, model=Categories):
-    column_list = [Categories.name]
+    column_list = [Categories.id, Categories.name, Categories.parent_id]
     column_searchable_list = [Categories.name]
+    column_sortable_list = [Categories.id, Categories.name]
     name = "Category"
     name_plural = "Categories"
     icon = "fa-solid fa-folder"
