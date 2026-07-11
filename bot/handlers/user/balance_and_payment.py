@@ -4,10 +4,12 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery, SuccessfulPayment
+from bot.misc.utils import answer_callback_safe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from bot.database.methods import get_user_referral, buy_item_transaction, process_payment_with_referral, create_pending_payment
+from bot.misc.utils import safe_edit_or_send
 from bot.keyboards import back, payment_menu, close, get_payment_choice
 from bot.logger_mesh import logger
 from bot.database.methods.audit import log_audit
@@ -45,12 +47,13 @@ async def _notify_referrer_bonus(bot, user_id: int, amount: int, payer_name: str
 
 @router.callback_query(F.data == "replenish_balance")
 async def replenish_balance_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """Ask user for the amount if at least one payment method is enabled."""
     if not _any_payment_method_enabled():
-        await call.answer(localize("payments.not_configured"), show_alert=True)
+        await answer_callback_safe(call, localize("payments.not_configured"), show_alert=True)
         return
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("payments.replenish_prompt", currency=EnvKeys.PAY_CURRENCY),
         reply_markup=back('profile')
     )
@@ -105,13 +108,14 @@ async def invalid_amount(message: Message, state: FSMContext):
     F.data.in_(["pay_cryptopay", "pay_stars", "pay_fiat"])
 )
 async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """Create an invoice for the chosen payment method."""
     data = await state.get_data()
     amount = data.get('amount')
 
     if amount is None:
-        await call.answer(localize("payments.session_expired"), show_alert=True)
-        await call.message.edit_text(localize("menu.title"), reply_markup=back('back_to_menu'))
+        await answer_callback_safe(call, localize("payments.session_expired"), show_alert=True)
+        await safe_edit_or_send(call, localize("menu.title"), reply_markup=back('back_to_menu'))
         await state.clear()
         return
 
@@ -136,7 +140,7 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
 
         if call.data == "pay_cryptopay":
             if not EnvKeys.CRYPTO_PAY_TOKEN:
-                await call.answer(localize("payments.not_configured"), show_alert=True)
+                await answer_callback_safe(call, localize("payments.not_configured"), show_alert=True)
                 return
 
             try:
@@ -150,11 +154,11 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
                 )
             except CryptoPayAPIError as e:
                 await log_audit("cryptopay_error", level="ERROR", user_id=call.from_user.id, resource_type="Payment", details=f"[{e.code}] {e.name}")
-                await call.answer(localize("payments.crypto.api_error", error=e.name), show_alert=True)
+                await answer_callback_safe(call, localize("payments.crypto.api_error", error=e.name), show_alert=True)
                 return
             except Exception as e:
                 await log_audit("cryptopay_invoice_fail", level="ERROR", user_id=call.from_user.id, resource_type="Payment", details=str(e))
-                await call.answer(localize("payments.crypto.create_fail", error=str(e)), show_alert=True)
+                await answer_callback_safe(call, localize("payments.crypto.create_fail", error=str(e)), show_alert=True)
                 return
 
             pay_url = invoice.get("mini_app_invoice_url")
@@ -170,7 +174,7 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
 
             await state.update_data(invoice_id=invoice_id, payment_type="cryptopay")
 
-            await call.message.edit_text(
+            await safe_edit_or_send(call, 
                 localize("payments.invoice.summary",
                          amount=int(amount_dec),
                          minutes=int(ttl_seconds / 60),
@@ -189,16 +193,16 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
                     )
                 except Exception as e:
                     await log_audit("stars_invoice_fail", level="ERROR", user_id=call.from_user.id, resource_type="Payment", details=str(e))
-                    await call.answer(localize("payments.stars.create_fail", error=str(e)), show_alert=True)
+                    await answer_callback_safe(call, localize("payments.stars.create_fail", error=str(e)), show_alert=True)
                     return
                 await state.clear()
             else:
-                await call.answer(localize("payments.not_configured"), show_alert=True)
+                await answer_callback_safe(call, localize("payments.not_configured"), show_alert=True)
                 return
 
         elif call.data == "pay_fiat":
             if not EnvKeys.TELEGRAM_PROVIDER_TOKEN:
-                await call.answer(localize("payments.not_configured"), show_alert=True)
+                await answer_callback_safe(call, localize("payments.not_configured"), show_alert=True)
                 return
 
             try:
@@ -209,18 +213,19 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
                 )
             except Exception as e:
                 await log_audit("fiat_invoice_fail", level="ERROR", user_id=call.from_user.id, resource_type="Payment", details=str(e))
-                await call.answer(localize("payments.fiat.create_fail", error=str(e)), show_alert=True)
+                await answer_callback_safe(call, localize("payments.fiat.create_fail", error=str(e)), show_alert=True)
                 return
             await state.clear()
 
     except Exception as e:
         logger.error(f"Payment processing error: {e}")
         await state.clear()
-        await call.answer(localize("errors.something_wrong"), show_alert=True)
+        await answer_callback_safe(call, localize("errors.something_wrong"), show_alert=True)
 
 
 @router.callback_query(F.data == "check")
 async def checking_payment(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Check CryptoPay invoice status and credit balance if paid.
     """
@@ -229,13 +234,13 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
     payment_type = data.get("payment_type")
 
     if not payment_type:
-        await call.answer(localize("payments.no_active_invoice"), show_alert=True)
+        await answer_callback_safe(call, localize("payments.no_active_invoice"), show_alert=True)
         return
 
     if payment_type == "cryptopay":
         invoice_id = data.get("invoice_id")
         if not invoice_id:
-            await call.answer(localize("payments.invoice_not_found"), show_alert=True)
+            await answer_callback_safe(call, localize("payments.invoice_not_found"), show_alert=True)
             await state.clear()
             return
 
@@ -244,11 +249,11 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
             info = await crypto.get_invoice(invoice_id)
         except CryptoPayAPIError as e:
             await log_audit("cryptopay_check_error", level="ERROR", user_id=user_id, resource_type="Payment", details=f"[{e.code}] {e.name}")
-            await call.answer(localize("payments.crypto.api_error", error=e.name), show_alert=True)
+            await answer_callback_safe(call, localize("payments.crypto.api_error", error=e.name), show_alert=True)
             return
         except Exception as e:
             await log_audit("cryptopay_get_fail", level="ERROR", user_id=user_id, resource_type="Payment", details=str(e))
-            await call.answer(localize("payments.crypto.check_fail", error=str(e)), show_alert=True)
+            await answer_callback_safe(call, localize("payments.crypto.check_fail", error=str(e)), show_alert=True)
             return
 
         status = info.get("status")
@@ -266,9 +271,9 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
 
             if not success:
                 if error_msg == "already_processed":
-                    await call.answer(localize("payments.already_processed"), show_alert=True)
+                    await answer_callback_safe(call, localize("payments.already_processed"), show_alert=True)
                 else:
-                    await call.answer(localize("errors.general_error", e=error_msg), show_alert=True)
+                    await answer_callback_safe(call, localize("errors.general_error", e=error_msg), show_alert=True)
                 return
 
             metrics = get_metrics()
@@ -278,7 +283,7 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
             # Send a notification to the referrer
             await _notify_referrer_bonus(call.bot, user_id, balance_amount, call.from_user.first_name, call.from_user.id)
 
-            await call.message.edit_text(
+            await safe_edit_or_send(call, 
                 localize("payments.topped_simple",
                          amount=balance_amount,
                          currency=EnvKeys.PAY_CURRENCY),
@@ -299,9 +304,9 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
                 await log_audit("balance_replenish", level="ERROR", user_id=user_id, resource_type="Payment", details=f"log_failed: {e}")
 
         elif status == "active":
-            await call.answer(localize("payments.not_paid_yet"))
+            await answer_callback_safe(call, localize("payments.not_paid_yet"))
         else:
-            await call.answer(localize("payments.expired"), show_alert=True)
+            await answer_callback_safe(call, localize("payments.expired"), show_alert=True)
 
 
 @router.pre_checkout_query()
@@ -411,6 +416,7 @@ async def successful_payment_handler(message: Message):
 
 @router.callback_query(F.data == "buy")
 async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """Processing the purchase of goods with full transactional security."""
     try:
         # Get item name from state (stored when viewing item info)
@@ -418,7 +424,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         raw_item_name = data.get('csrf_item')
 
         if not raw_item_name:
-            await call.answer(localize("middleware.security.invalid_csrf"), show_alert=True)
+            await answer_callback_safe(call, localize("middleware.security.invalid_csrf"), show_alert=True)
             return
 
         metrics = get_metrics()
@@ -445,11 +451,11 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         try:
             user_id = validate_telegram_id(call.from_user.id)
         except ValueError as e:
-            await call.answer(localize("errors.invalid_user"), show_alert=True)
+            await answer_callback_safe(call, localize("errors.invalid_user"), show_alert=True)
             return
 
         # Show the processing indicator
-        await call.answer(localize("shop.purchase.processing"))
+        await answer_callback_safe(call, localize("shop.purchase.processing"))
 
         # Get promo code from state if applied
         promo_code = data.get('applied_promo')
@@ -476,7 +482,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
                 message=message
             )
 
-            await call.message.edit_text(
+            await safe_edit_or_send(call, 
                 error_text,
                 reply_markup=back('back_to_item')
             )
@@ -542,7 +548,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             
         receipt_text = receipt_text.replace("📦 Кол-во:", "📦 Qty:")
 
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             receipt_text,
             parse_mode='HTML',
             reply_markup=simple_buttons(buttons),

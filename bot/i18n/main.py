@@ -1,17 +1,18 @@
 from __future__ import annotations
-from functools import lru_cache
 from typing import Any
+import contextvars
 
 from bot.misc import EnvKeys
 from .strings import TRANSLATIONS, DEFAULT_LOCALE
 from bot.logger_mesh import logger
 
+current_locale = contextvars.ContextVar("current_locale", default=None)
 
-@lru_cache(maxsize=1)
 def get_locale() -> str:
-    loc = EnvKeys.BOT_LOCALE.lower().strip()
+    loc = current_locale.get()
+    if not loc:
+        loc = EnvKeys.BOT_LOCALE.lower().strip()
     return loc if loc in TRANSLATIONS else DEFAULT_LOCALE
-
 
 def localize(key: str, /, **kwargs: Any) -> str:
     """

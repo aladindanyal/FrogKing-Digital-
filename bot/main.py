@@ -16,6 +16,7 @@ from bot.database.models import register_models
 from bot.logger_mesh import configure_logging
 from bot.middleware import setup_rate_limiting, RateLimitConfig
 from bot.middleware.security import SecurityMiddleware, AuthenticationMiddleware
+from bot.middleware.i18n import I18nMiddleware
 from bot.misc.caching import init_cache_manager, get_cache_manager
 from bot.misc.caching import CacheScheduler
 from bot.misc.caching import get_redis_storage
@@ -75,6 +76,9 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     dp.message.middleware(analytics_middleware)
     dp.callback_query.middleware(analytics_middleware)
 
+    i18n_middleware = I18nMiddleware()
+    dp.message.middleware(i18n_middleware)
+    dp.callback_query.middleware(i18n_middleware)
     dp.message.middleware(auth_middleware)
     dp.callback_query.middleware(auth_middleware)
 
@@ -124,6 +128,16 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     )
     admin_server = uvicorn.Server(config)
     asyncio.create_task(admin_server.serve())
+
+    from aiogram.types import BotCommand
+    commands = [
+        BotCommand(command="start", description="Open main menu"),
+        BotCommand(command="wallet", description="Balance and top up"),
+    ]
+    try:
+        await bot.set_my_commands(commands)
+    except Exception as e:
+        logging.warning(f"Failed to set bot commands: {e}")
 
     logging.info(f"Recovery and admin panel initialized on {EnvKeys.ADMIN_HOST}:{EnvKeys.ADMIN_PORT}")
 

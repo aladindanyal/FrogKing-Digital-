@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
+from bot.misc.utils import answer_callback_safe
 from aiogram.fsm.context import FSMContext
 
 from bot.database.methods.create import add_to_cart
@@ -31,12 +32,13 @@ async def _resolve_promo_price(price: Decimal, promo_code: str | None) -> Decima
 
 
 async def _show_cart(call: CallbackQuery):
+    await answer_callback_safe(call)
     """Shared logic: render cart view."""
     user_id = call.from_user.id
     items = await get_cart_items(user_id)
 
     if not items:
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("cart.title") + "\n\n" + localize("cart.empty"),
             reply_markup=back("profile"),
         )
@@ -71,7 +73,7 @@ async def _show_cart(call: CallbackQuery):
     buttons.append((localize("btn.cart_clear"), "cart_clear"))
     buttons.append((localize("btn.back"), "profile"))
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         "\n".join(lines),
         reply_markup=simple_buttons(buttons),
         parse_mode="HTML",
@@ -80,45 +82,49 @@ async def _show_cart(call: CallbackQuery):
 
 @router.callback_query(F.data == "add_to_cart")
 async def add_to_cart_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     data = await state.get_data()
     item_name = data.get('csrf_item')
     if not item_name:
-        await call.answer(localize("cart.item_not_found"), show_alert=True)
+        await answer_callback_safe(call, localize("cart.item_not_found"), show_alert=True)
         return
 
     promo_code = data.get('applied_promo')
 
     success, msg = await add_to_cart(call.from_user.id, item_name, promo_code=promo_code)
     if success:
-        await call.answer(localize("cart.added", name=item_name))
+        await answer_callback_safe(call, localize("cart.added", name=item_name))
     else:
         error_map = {
             "cart_full": localize("cart.full"),
             "item_not_found": localize("cart.item_not_found"),
         }
-        await call.answer(error_map.get(msg, msg), show_alert=True)
+        await answer_callback_safe(call, error_map.get(msg, msg), show_alert=True)
 
 
 @router.callback_query(F.data == "cart")
 async def view_cart_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     await _show_cart(call)
 
 
 @router.callback_query(F.data.startswith("cart_remove:"))
 async def remove_cart_item_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     cart_item_id = int(call.data.split(":")[1])
     removed = await remove_from_cart(cart_item_id, user_id=call.from_user.id)
     if removed:
-        await call.answer(localize("cart.removed"))
+        await answer_callback_safe(call, localize("cart.removed"))
     else:
-        await call.answer(localize("cart.item_not_found"), show_alert=True)
+        await answer_callback_safe(call, localize("cart.item_not_found"), show_alert=True)
     await _show_cart(call)
 
 
 @router.callback_query(F.data == "cart_clear")
 async def clear_cart_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     await clear_cart(call.from_user.id)
-    await call.answer(localize("cart.cleared"))
+    await answer_callback_safe(call, localize("cart.cleared"))
     await _show_cart(call)
 
 
@@ -139,6 +145,7 @@ async def _calc_cart_total_with_promos(user_id: int) -> Decimal:
 
 @router.callback_query(F.data == "cart_checkout")
 async def cart_checkout_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     user_id = call.from_user.id
     count = await get_cart_count(user_id)
     total = await _calc_cart_total_with_promos(user_id)
@@ -147,7 +154,7 @@ async def cart_checkout_handler(call: CallbackQuery, state: FSMContext):
         (localize("btn.yes"), "cart_checkout_confirm"),
         (localize("btn.no"), "cart"),
     ]
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("cart.checkout_confirm", count=count, total=total, currency=EnvKeys.PAY_CURRENCY),
         reply_markup=simple_buttons(buttons),
     )
@@ -155,8 +162,9 @@ async def cart_checkout_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "cart_checkout_confirm")
 async def cart_checkout_confirm_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     user_id = call.from_user.id
-    await call.answer(localize("shop.purchase.processing"))
+    await answer_callback_safe(call, localize("shop.purchase.processing"))
 
     success, msg, results = await checkout_cart_transaction(user_id)
 
@@ -169,7 +177,7 @@ async def cart_checkout_confirm_handler(call: CallbackQuery, state: FSMContext):
             "transaction_error": localize("errors.something_wrong"),
             "promo_expired_during_checkout": localize("cart.promo_expired"),
         }
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("cart.checkout_fail", reason=reason_map.get(msg, msg)),
             reply_markup=back("cart"),
         )
@@ -187,7 +195,7 @@ async def cart_checkout_confirm_handler(call: CallbackQuery, state: FSMContext):
         buttons.append((f"📦 {r['item_name']}", f"bought-item:{r['bought_id']}:cart_receipt"))
     buttons.append((localize("btn.back"), "profile"))
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize(
             "cart.checkout_receipt",
             count=len(results),
@@ -212,13 +220,14 @@ async def cart_checkout_confirm_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "cart_receipt")
 async def cart_receipt_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """Re-render the cart checkout receipt (back from bought-item detail)."""
     data = await state.get_data()
     results = data.get("cart_receipt_results")
     total = data.get("cart_receipt_total", 0)
 
     if not results:
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("cart.empty"),
             reply_markup=back("profile"),
         )
@@ -232,7 +241,7 @@ async def cart_receipt_handler(call: CallbackQuery, state: FSMContext):
         buttons.append((f"📦 {r['item_name']}", f"bought-item:{r['bought_id']}:cart_receipt"))
     buttons.append((localize("btn.back"), "profile"))
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize(
             "cart.checkout_receipt",
             count=len(results),
