@@ -9,6 +9,7 @@ from bot.database.methods import (
     query_referral_earnings_from_user, query_all_referral_earnings,
 )
 from bot.handlers.other import get_bot_info
+from bot.misc.utils import safe_edit_or_send
 from bot.keyboards import back, referral_system_keyboard, lazy_paginated_keyboard
 from bot.misc import EnvKeys, LazyPaginator
 from bot.i18n import localize
@@ -48,7 +49,7 @@ async def referral_callback_handler(call: CallbackQuery, state: FSMContext):
                                   )
 
     markup = referral_system_keyboard(has_referrals, has_earnings)
-    await call.message.edit_text(text, reply_markup=markup)
+    await safe_edit_or_send(call, text, reply_markup=markup)
     await state.clear()
 
 
@@ -66,7 +67,7 @@ async def view_referrals_handler(call: CallbackQuery, state: FSMContext):
     # Check if there are any referrals
     total = await paginator.get_total_count()
     if total == 0:
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("referrals.list.empty"),
             reply_markup=back("referral_system")
         )
@@ -84,7 +85,7 @@ async def view_referrals_handler(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix="referrals_page_"
     )
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("referrals.list.title"),
         reply_markup=markup
     )
@@ -126,7 +127,7 @@ async def referrals_pagination_handler(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix="referrals_page_"
     )
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("referrals.list.title"),
         reply_markup=markup
     )
@@ -156,7 +157,7 @@ async def referral_earnings_handler(call: CallbackQuery, state: FSMContext):
     total = await paginator.get_total_count()
     if total == 0:
         referral_info = await call.message.bot.get_chat(referral_id)
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("referral.earnings.empty", id=referral_id, name=referral_info.first_name),
             reply_markup=back("view_referrals")
         )
@@ -177,7 +178,7 @@ async def referral_earnings_handler(call: CallbackQuery, state: FSMContext):
 
     referral_info = await call.message.bot.get_chat(referral_id)
     title_text = localize("referral.earnings.title", telegram_id=referral_id, name=referral_info.first_name)
-    await call.message.edit_text(title_text, reply_markup=markup)
+    await safe_edit_or_send(call, title_text, reply_markup=markup)
 
     # Save state
     await state.update_data(ref_earnings_paginator=paginator.get_state())
@@ -197,7 +198,7 @@ async def view_all_earnings_handler(call: CallbackQuery, state: FSMContext):
     # Check if there are any earnings
     total = await paginator.get_total_count()
     if total == 0:
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("all.earnings.empty"),
             reply_markup=back("referral_system")
         )
@@ -216,7 +217,7 @@ async def view_all_earnings_handler(call: CallbackQuery, state: FSMContext):
         nav_cb_prefix="all_earnings_page_"
     )
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("all.earnings.title"),
         reply_markup=markup
     )
@@ -259,7 +260,7 @@ async def all_earnings_pagination_handler(call: CallbackQuery, state: FSMContext
         nav_cb_prefix="all_earnings_page_"
     )
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("all.earnings.title"),
         reply_markup=markup
     )
@@ -277,7 +278,7 @@ async def referral_callback_handler(call: CallbackQuery, state: FSMContext):
     earning_info = await get_one_referral_earning(int(earning_id))
     user_info = await call.message.bot.get_chat(earning_info['referral_id'])
 
-    await call.message.edit_text(localize('referral.item.info',
+    await safe_edit_or_send(call, localize('referral.item.info',
                                           id=earning_id,
                                           telegram_id=earning_info['referral_id'],
                                           name=user_info.first_name,

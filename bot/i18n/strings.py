@@ -3,16 +3,20 @@ DEFAULT_LOCALE = "ru"
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "ru": {
         # === Common Buttons ===
-        "btn.shop": "🏪 Магазин",
-        "btn.rules": "📜 Правила",
-        "btn.profile": "👤 Профиль",
-        "btn.support": "🆘 Поддержка",
-        "btn.channel": "ℹ Новостной канал",
-        "btn.admin_menu": "🎛 Панель администратора",
-        "btn.back": "⬅️ Назад",
-        "btn.to_menu": "🏠 В меню",
-        "btn.close": "✖ Закрыть",
-        "btn.buy": "🛒 Купить",
+        "btn.shop": "🛒 Shop",
+        "btn.rules": "📜 Terms",
+        "btn.profile": "👤 Profile",
+        "btn.support": "🆘 Support",
+        "btn.channel": "ℹ News channel",
+        "btn.admin_menu": "🎛 Admin panel",
+        "btn.back": "⬅️ Back",
+        "btn.to_menu": "🏠 Home",
+        "btn.close": "✖ Close",
+        "btn.wallet": "💳 Wallet",
+        "btn.language": "🌐 Language",
+        "btn.redeem_promo": "🔥 Promo Code",
+        "btn.purchased": "🎁 My Orders",
+        "btn.buy": "🛒 Buy",
         "btn.yes": "✅ Да",
         "btn.no": "❌ Нет",
         "btn.check": "🔄 Проверить",
@@ -35,7 +39,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # === Titles / Generic Texts ===
         "menu.title": "⛩️ Основное меню",
         "profile.caption": "👤 <b>Профиль</b> — <a href='tg://user?id={id}'>{name}</a>",
-        "rules.not_set": "❌ Правила не были добавлены",
+        "rules.not_set": "❌ Правила не установлены",
+        "support.not_set": "❌ Поддержка не настроена",
 
         # === Subscription Flow ===
         "subscribe.prompt": "Для начала подпишитесь на новостной канал",
@@ -427,7 +432,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.promo.prompt.item_name": "Введите название товара:",
         "admin.promo.category_not_found": "❌ Категория не найдена.",
         "admin.promo.item_not_found": "❌ Товар не найден.",
-        "btn.redeem_promo": "🏷 Активировать промокод",
+        "btn.redeem_promo": "🔥 Promo Code",
         "review.disabled": "Отзывы отключены.",
 
         # === Cart ===
@@ -489,15 +494,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     "en": {
         # === Common Buttons ===
-        "btn.shop": "🏪 Shop",
-        "btn.rules": "📜 Rules",
+        "btn.shop": "🛒 Shop",
+        "btn.rules": "📜 Terms",
         "btn.profile": "👤 Profile",
         "btn.support": "🆘 Support",
         "btn.channel": "ℹ News channel",
         "btn.admin_menu": "🎛 Admin panel",
         "btn.back": "⬅️ Back",
-        "btn.to_menu": "🏠 Menu",
+        "btn.to_menu": "🏠 Home",
         "btn.close": "✖ Close",
+        "btn.wallet": "💳 Wallet",
+        "btn.language": "🌐 Language",
+        "btn.redeem_promo": "🔥 Promo Code",
+        "btn.purchased": "🎁 My Orders",
         "btn.buy": "🛒 Buy",
         "btn.yes": "✅ Yes",
         "btn.no": "❌ No",
@@ -522,6 +531,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "menu.title": "⛩️ Main menu",
         "profile.caption": "👤 <b>Profile</b> — <a href='tg://user?id={id}'>{name}</a>",
         "rules.not_set": "❌ Rules have not been added",
+        "support.not_set": "❌ Support is not configured",
 
         # === Profile ===
         "btn.replenish": "💳 Top up your balance",
@@ -913,7 +923,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.promo.prompt.item_name": "Enter item name:",
         "admin.promo.category_not_found": "❌ Category not found.",
         "admin.promo.item_not_found": "❌ Item not found.",
-        "btn.redeem_promo": "🏷 Redeem promo code",
+        "btn.redeem_promo": "🔥 Promo Code",
         "review.disabled": "Reviews are disabled.",
 
         # === Cart ===

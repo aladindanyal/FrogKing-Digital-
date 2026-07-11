@@ -209,13 +209,28 @@ class CategoryAdmin(AuditModelView, model=Categories):
 
 
 class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
-    column_list = [StoreSettings.id, StoreSettings.shop_root_title]
+    column_list = [StoreSettings.id, StoreSettings.shop_root_title, StoreSettings.main_menu_title]
     name = "Store Setting"
     name_plural = "Store Settings"
     icon = "fa-solid fa-gear"
     can_create = False
     can_delete = False
-    form_columns = [StoreSettings.shop_root_title, StoreSettings.shop_root_description]
+    
+    from sqladmin.fields import FileField
+    from starlette.datastructures import UploadFile
+    import os
+    import shutil
+    import uuid
+    
+    form_columns = [
+        StoreSettings.shop_root_title, 
+        StoreSettings.shop_root_description,
+        StoreSettings.main_menu_title,
+        StoreSettings.main_menu_description,
+        StoreSettings.main_menu_footer,
+        StoreSettings.main_menu_image_path,
+        StoreSettings.main_menu_image_url
+    ]
 
 
 class GoodsAdmin(AuditModelView, model=Goods):

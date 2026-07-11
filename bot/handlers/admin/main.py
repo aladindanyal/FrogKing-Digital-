@@ -3,6 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from bot.i18n import localize
+from bot.misc.utils import safe_edit_or_send
 from bot.keyboards import admin_console_keyboard
 from bot.database.methods import check_role_cached
 from bot.filters import HasPermissionFilter
@@ -25,12 +26,19 @@ async def console_callback_handler(call: CallbackQuery, state: FSMContext):
     user_id = call.from_user.id
     role = await check_role_cached(user_id)
     if Permission.has_any_admin_perm(role):
+        await call.answer()
         mw = _get_auth_middleware()
         maintenance = mw.maintenance_mode if mw else False
-        await call.message.edit_text(
-            localize("admin.menu.main"),
-            reply_markup=admin_console_keyboard(maintenance_mode=maintenance, role=role),
-        )
+        text = localize("admin.menu.main")
+        markup = admin_console_keyboard(maintenance_mode=maintenance, role=role)
+        try:
+            await safe_edit_or_send(call, text, reply_markup=markup)
+        except Exception:
+            try:
+                await call.message.delete()
+            except:
+                pass
+            await call.message.answer(text, reply_markup=markup)
     else:
         await call.answer(localize("admin.menu.rights"))
 
@@ -60,7 +68,7 @@ async def toggle_maintenance_handler(call: CallbackQuery):
         await call.answer(localize("admin.maintenance.disabled"), show_alert=True)
 
     role = await check_role_cached(call.from_user.id)
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("admin.menu.main"),
         reply_markup=admin_console_keyboard(maintenance_mode=mw.maintenance_mode, role=role),
     )

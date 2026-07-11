@@ -36,7 +36,7 @@ async def _show_cart(call: CallbackQuery):
     items = await get_cart_items(user_id)
 
     if not items:
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("cart.title") + "\n\n" + localize("cart.empty"),
             reply_markup=back("profile"),
         )
@@ -71,7 +71,7 @@ async def _show_cart(call: CallbackQuery):
     buttons.append((localize("btn.cart_clear"), "cart_clear"))
     buttons.append((localize("btn.back"), "profile"))
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         "\n".join(lines),
         reply_markup=simple_buttons(buttons),
         parse_mode="HTML",
@@ -147,7 +147,7 @@ async def cart_checkout_handler(call: CallbackQuery, state: FSMContext):
         (localize("btn.yes"), "cart_checkout_confirm"),
         (localize("btn.no"), "cart"),
     ]
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("cart.checkout_confirm", count=count, total=total, currency=EnvKeys.PAY_CURRENCY),
         reply_markup=simple_buttons(buttons),
     )
@@ -169,7 +169,7 @@ async def cart_checkout_confirm_handler(call: CallbackQuery, state: FSMContext):
             "transaction_error": localize("errors.something_wrong"),
             "promo_expired_during_checkout": localize("cart.promo_expired"),
         }
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("cart.checkout_fail", reason=reason_map.get(msg, msg)),
             reply_markup=back("cart"),
         )
@@ -187,7 +187,7 @@ async def cart_checkout_confirm_handler(call: CallbackQuery, state: FSMContext):
         buttons.append((f"📦 {r['item_name']}", f"bought-item:{r['bought_id']}:cart_receipt"))
     buttons.append((localize("btn.back"), "profile"))
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize(
             "cart.checkout_receipt",
             count=len(results),
@@ -218,7 +218,7 @@ async def cart_receipt_handler(call: CallbackQuery, state: FSMContext):
     total = data.get("cart_receipt_total", 0)
 
     if not results:
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             localize("cart.empty"),
             reply_markup=back("profile"),
         )
@@ -232,7 +232,7 @@ async def cart_receipt_handler(call: CallbackQuery, state: FSMContext):
         buttons.append((f"📦 {r['item_name']}", f"bought-item:{r['bought_id']}:cart_receipt"))
     buttons.append((localize("btn.back"), "profile"))
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize(
             "cart.checkout_receipt",
             count=len(results),

@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from bot.database.methods import get_user_referral, buy_item_transaction, process_payment_with_referral, create_pending_payment
+from bot.misc.utils import safe_edit_or_send
 from bot.keyboards import back, payment_menu, close, get_payment_choice
 from bot.logger_mesh import logger
 from bot.database.methods.audit import log_audit
@@ -50,7 +51,7 @@ async def replenish_balance_callback_handler(call: CallbackQuery, state: FSMCont
         await call.answer(localize("payments.not_configured"), show_alert=True)
         return
 
-    await call.message.edit_text(
+    await safe_edit_or_send(call, 
         localize("payments.replenish_prompt", currency=EnvKeys.PAY_CURRENCY),
         reply_markup=back('profile')
     )
@@ -111,7 +112,7 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
 
     if amount is None:
         await call.answer(localize("payments.session_expired"), show_alert=True)
-        await call.message.edit_text(localize("menu.title"), reply_markup=back('back_to_menu'))
+        await safe_edit_or_send(call, localize("menu.title"), reply_markup=back('back_to_menu'))
         await state.clear()
         return
 
@@ -170,7 +171,7 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
 
             await state.update_data(invoice_id=invoice_id, payment_type="cryptopay")
 
-            await call.message.edit_text(
+            await safe_edit_or_send(call, 
                 localize("payments.invoice.summary",
                          amount=int(amount_dec),
                          minutes=int(ttl_seconds / 60),
@@ -278,7 +279,7 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
             # Send a notification to the referrer
             await _notify_referrer_bonus(call.bot, user_id, balance_amount, call.from_user.first_name, call.from_user.id)
 
-            await call.message.edit_text(
+            await safe_edit_or_send(call, 
                 localize("payments.topped_simple",
                          amount=balance_amount,
                          currency=EnvKeys.PAY_CURRENCY),
@@ -476,7 +477,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
                 message=message
             )
 
-            await call.message.edit_text(
+            await safe_edit_or_send(call, 
                 error_text,
                 reply_markup=back('back_to_item')
             )
@@ -542,7 +543,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             
         receipt_text = receipt_text.replace("📦 Кол-во:", "📦 Qty:")
 
-        await call.message.edit_text(
+        await safe_edit_or_send(call, 
             receipt_text,
             parse_mode='HTML',
             reply_markup=simple_buttons(buttons),

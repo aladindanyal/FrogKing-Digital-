@@ -147,6 +147,11 @@ class StoreSettings(Database.BASE):
     id = Column(Integer, primary_key=True)
     shop_root_title = Column(String(255), nullable=True)
     shop_root_description = Column(Text, nullable=True)
+    main_menu_title = Column(String(255), nullable=True)
+    main_menu_description = Column(Text, nullable=True)
+    main_menu_image_path = Column(String(500), nullable=True)
+    main_menu_image_url = Column(String(500), nullable=True)
+    main_menu_footer = Column(String(255), nullable=True)
 
 
 class Categories(Database.BASE):

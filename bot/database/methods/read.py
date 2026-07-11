@@ -226,8 +226,8 @@ async def get_category_by_id(category_id: int) -> dict | None:
         return _obj_to_dict(obj, Categories) if obj else None
 
 
-async def get_store_settings() -> dict | None:
-    """Return StoreSettings row 1 as dict. Seed if missing."""
+async def get_store_settings() -> StoreSettings | None:
+    """Return StoreSettings row 1 as ORM object. Seed if missing."""
     async with Database().session() as s:
         result = await s.execute(select(StoreSettings).where(StoreSettings.id == 1))
         obj = result.scalars().first()
@@ -235,7 +235,12 @@ async def get_store_settings() -> dict | None:
             obj = StoreSettings(id=1, shop_root_title=None, shop_root_description=None)
             s.add(obj)
             await s.commit()
-        return {"shop_root_title": obj.shop_root_title, "shop_root_description": obj.shop_root_description}
+            
+            # Re-fetch to ensure we return a clean attached/detached state depending on usage
+            result = await s.execute(select(StoreSettings).where(StoreSettings.id == 1))
+            obj = result.scalars().first()
+            
+        return obj
 
 
 async def select_item_values_amount(item_name: str) -> int:

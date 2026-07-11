@@ -8,37 +8,55 @@ from bot.misc import LazyPaginator # noqa: F401
 
 def main_menu(role: int, channel: str | None = None, helper: str | None = None) -> InlineKeyboardMarkup:
     """
-    Main menu.
+    Main menu premium layout.
     """
     kb = InlineKeyboardBuilder()
     kb.button(text=localize("btn.shop"), callback_data="shop")
-    kb.button(text=localize("btn.rules"), callback_data="rules")
+    
+    kb.button(text=localize("btn.wallet"), callback_data="wallet")
     kb.button(text=localize("btn.profile"), callback_data="profile")
+    
     if helper:
         kb.button(text=localize("btn.support"), url=f"tg://user?id={helper}")
-    if channel:
-        kb.button(text=localize("btn.channel"), url=f"https://t.me/{channel.lstrip('@')}")
+    else:
+        kb.button(text=localize("btn.support"), callback_data="support_none")
+    kb.button(text=localize("btn.language"), callback_data="language")
+    
+    kb.button(text=localize("btn.rules"), callback_data="rules")
+    kb.button(text=localize("btn.redeem_promo"), callback_data="redeem_promo")
+    
     if Permission.has_any_admin_perm(role):
         kb.button(text=localize("btn.admin_menu"), callback_data="console")
-    kb.adjust(2)
+        kb.adjust(1, 2, 2, 2, 1)
+    else:
+        kb.adjust(1, 2, 2, 2)
     return kb.as_markup()
 
 
-def profile_keyboard(referral_percent: int, user_items: int = 0, cart_count: int = 0) -> InlineKeyboardMarkup:
+def wallet_keyboard(referral_percent: int) -> InlineKeyboardMarkup:
     """
-    Profile keyboard with cart, history, subscriptions.
+    Wallet keyboard (balance, top up, history).
     """
     kb = InlineKeyboardBuilder()
     kb.button(text=localize("btn.replenish"), callback_data="replenish_balance")
+    kb.button(text=localize("btn.redeem_promo"), callback_data="redeem_promo")
+    kb.button(text=localize("btn.operation_history"), callback_data="operation_history")
     if referral_percent != 0:
         kb.button(text=localize("btn.referral"), callback_data="referral_system")
+    kb.button(text="🏠 Home", callback_data="back_to_menu")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def profile_keyboard(user_items: int = 0) -> InlineKeyboardMarkup:
+    """
+    My Account keyboard.
+    """
+    kb = InlineKeyboardBuilder()
     if user_items != 0:
         kb.button(text=localize("btn.purchased"), callback_data="bought_items")
-    cart_text = localize("btn.cart", count=cart_count) if cart_count > 0 else localize("btn.cart_empty")
-    kb.button(text=cart_text, callback_data="cart")
     kb.button(text=localize("btn.operation_history"), callback_data="operation_history")
-    kb.button(text=localize("btn.redeem_promo"), callback_data="redeem_promo")
-    kb.button(text=localize("btn.back"), callback_data="back_to_menu")
+    kb.button(text="🏠 Home", callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -63,7 +81,7 @@ def admin_console_keyboard(maintenance_mode: bool = False, role: int = 127) -> I
     if role & Permission.SETTINGS_MANAGE:
         maintenance_key = "admin.menu.maintenance_on" if maintenance_mode else "admin.menu.maintenance_off"
         kb.button(text=localize(maintenance_key), callback_data="toggle_maintenance")
-    kb.button(text=localize("btn.back"), callback_data="back_to_menu")
+    kb.button(text="🏠 Home", callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -80,10 +98,14 @@ def simple_buttons(buttons: Iterable[Tuple[str, str]], per_row: int = 1) -> Inli
 
 
 def back(cb: str = "menu", text: str | None = None) -> InlineKeyboardMarkup:
-    """
-    One 'Back' button.
-    """
-    return simple_buttons([(text or localize("btn.back"), cb)])
+    if not text and cb == "back_to_menu":
+        text = "🏠 Home"
+        return simple_buttons([(text, cb)])
+    
+    return simple_buttons([
+        (text or localize("btn.back"), cb),
+        ("🏠 Home", "back_to_menu")
+    ], per_row=1)
 
 
 def close() -> InlineKeyboardMarkup:
@@ -99,6 +121,7 @@ async def lazy_paginated_keyboard(
         item_callback: Callable[[object], str],
         page: int = 0,
         back_cb: str | None = None,
+        home_cb: str | None = None,
         nav_cb_prefix: str = "",
         back_text: str | None = None,
         row_width: int = 1,
@@ -126,8 +149,15 @@ async def lazy_paginated_keyboard(
             nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"{nav_cb_prefix}{page + 1}"))
         kb.row(*nav_buttons)
 
-    if back_cb:
+    if back_cb and home_cb:
+        kb.row(
+            InlineKeyboardButton(text=back_text or localize("btn.back"), callback_data=back_cb),
+            InlineKeyboardButton(text="🏠 Home", callback_data=home_cb)
+        )
+    elif back_cb:
         kb.row(InlineKeyboardButton(text=back_text or localize("btn.back"), callback_data=back_cb))
+    elif home_cb:
+        kb.row(InlineKeyboardButton(text="🏠 Home", callback_data=home_cb))
 
     return kb.as_markup()
 
@@ -163,6 +193,7 @@ def item_info(
             kb.button(text=localize("btn.leave_review"), callback_data=f"review:{item_name}")
             
     kb.button(text=localize("btn.back"), callback_data=back_data)
+    kb.button(text="🏠 Home", callback_data="back_to_menu")
     
     sizes = [3, 1]  # Quantity row (3 buttons), Buy button (1 button)
     sizes.append(1) # Promo button
@@ -171,7 +202,7 @@ def item_info(
             sizes.append(1)
         if has_purchased:
             sizes.append(1)
-    sizes.append(1) # Back button
+    sizes.append(2) # Back and Home button
     
     kb.adjust(*sizes)
     return kb.as_markup()
@@ -232,8 +263,8 @@ def rating_keyboard(item_name: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for i in range(1, 6):
         kb.button(text="⭐" * i, callback_data=f"rating:{i}")
-    kb.button(text=localize("btn.back"), callback_data="back_to_menu")
-    kb.adjust(5)
+    kb.button(text="🏠 Home", callback_data="back_to_menu")
+    kb.adjust(5, 1)
     return kb.as_markup()
 
 
