@@ -2,6 +2,7 @@ from functools import partial
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
+from bot.misc.utils import answer_callback_safe
 from aiogram.fsm.context import FSMContext
 
 from bot.database.methods import (
@@ -19,6 +20,7 @@ router = Router()
 
 @router.callback_query(F.data == "referral_system")
 async def referral_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Show referral info, personal invite link, and additional buttons.
     """
@@ -55,6 +57,7 @@ async def referral_callback_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "view_referrals")
 async def view_referrals_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Show a list of all user referrals with lazy loading.
     """
@@ -96,13 +99,14 @@ async def view_referrals_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("referrals_page_"))
 async def referrals_pagination_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Pagination processing for the referral list with lazy loading.
     """
     try:
         page = int(call.data.split("_")[-1])
     except (ValueError, IndexError):
-        await call.answer(localize("errors.pagination_invalid"))
+        await answer_callback_safe(call, localize("errors.pagination_invalid"))
         return
 
     user_id = call.from_user.id
@@ -138,13 +142,14 @@ async def referrals_pagination_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("referral_earnings_"))
 async def referral_earnings_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Show all earnings from a specific referral with lazy loading.
     """
     try:
         referral_id = int(call.data.split("_")[-1])
     except (ValueError, IndexError):
-        await call.answer(localize("errors.invalid_data"))
+        await answer_callback_safe(call, localize("errors.invalid_data"))
         return
 
     user_id = call.from_user.id
@@ -186,6 +191,7 @@ async def referral_earnings_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "view_all_earnings")
 async def view_all_earnings_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Show all user referral earnings with lazy loading.
     """
@@ -228,13 +234,14 @@ async def view_all_earnings_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("all_earnings_page_"))
 async def all_earnings_pagination_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Pagination processing for all referral earnings with lazy loading.
     """
     try:
         page = int(call.data.split("_")[-1])
     except (ValueError, IndexError):
-        await call.answer(localize("errors.pagination_invalid"))
+        await answer_callback_safe(call, localize("errors.pagination_invalid"))
         return
 
     user_id = call.from_user.id
@@ -271,6 +278,7 @@ async def all_earnings_pagination_handler(call: CallbackQuery, state: FSMContext
 
 @router.callback_query(F.data.startswith("earning_detail:"))
 async def referral_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Show referral info, personal invite link, and additional buttons.
     """

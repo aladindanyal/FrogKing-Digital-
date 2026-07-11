@@ -1,5 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile
+from bot.misc.utils import answer_callback_safe
 from aiogram.enums.chat_type import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -144,10 +145,10 @@ async def start(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Return user to the main menu.
     """
-    await call.answer()
     user_id = call.from_user.id
     user = await check_user_cached(user_id)
     if not user:
@@ -169,7 +170,7 @@ async def back_to_menu_callback_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "rules")
 async def rules_callback_handler(call: CallbackQuery, state: FSMContext):
-    await call.answer()
+    await answer_callback_safe(call)
     """
     Show rules text if provided in ENV.
     """
@@ -177,13 +178,13 @@ async def rules_callback_handler(call: CallbackQuery, state: FSMContext):
     if rules_data:
         await safe_edit_or_send(call, rules_data, reply_markup=back("back_to_menu"))
     else:
-        await call.answer(localize("rules.not_set"))
+        await answer_callback_safe(call, localize("rules.not_set"))
     await state.clear()
 
 
 @router.callback_query(F.data == "profile")
 async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
-    await call.answer()
+    await answer_callback_safe(call)
     """
     Send profile info (balance, purchases count, id, etc.).
     """
@@ -210,6 +211,7 @@ async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "sub_channel_done")
 async def check_sub_to_channel(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     """
     Re-check channel subscription after user clicks "Check".
     """
@@ -228,25 +230,27 @@ async def check_sub_to_channel(call: CallbackQuery, state: FSMContext):
             await state.clear()
             return
 
-    await call.answer(localize("errors.not_subscribed"))
+    await answer_callback_safe(call, localize("errors.not_subscribed"))
 
 
 # --- Operation History ---
 
 @router.callback_query(F.data == "operation_history")
 async def operation_history_handler(call: CallbackQuery, state: FSMContext):
-    await call.answer()
+    await answer_callback_safe(call)
     user_id = call.from_user.id
     await _show_operations_page(call, state, user_id, 0)
 
 
 @router.callback_query(F.data.startswith("ops-page_"))
 async def navigate_operations(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     page = int(call.data.split("_")[1])
     await _show_operations_page(call, state, call.from_user.id, page)
 
 
 async def _show_operations_page(call: CallbackQuery, state: FSMContext, user_id: int, page: int):
+    await answer_callback_safe(call)
     from functools import partial
     from bot.misc import LazyPaginator
 
@@ -322,7 +326,7 @@ from bot.keyboards.inline import wallet_keyboard
 
 @router.callback_query(F.data == "wallet")
 async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
-    await call.answer()
+    await answer_callback_safe(call)
     user_id = call.from_user.id
     user_info = await check_user_cached(user_id)
     
@@ -345,12 +349,13 @@ async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "support_none")
 async def support_none_callback(call: CallbackQuery):
-    await call.answer(localize("support.not_set", default="Support not configured"), show_alert=True)
+    await answer_callback_safe(call)
+    await answer_callback_safe(call, localize("support.not_set", default="Support not configured"), show_alert=True)
 
 
 @router.callback_query(F.data == "language")
 async def language_callback(call: CallbackQuery):
-    await call.answer()
+    await answer_callback_safe(call)
     from bot.keyboards.inline import simple_buttons
     markup = simple_buttons([
         ("🇺🇸 English", "set_lang_en"),
@@ -374,6 +379,7 @@ async def language_callback(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("set_lang_"))
 async def set_lang_callback(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
     lang = call.data.split("_")[2]
     await state.update_data(lang=lang)
     
@@ -396,7 +402,7 @@ async def set_lang_callback(call: CallbackQuery, state: FSMContext):
     }
     lang_name = lang_names.get(lang, lang.upper())
     
-    await call.answer(f"Language updated: {lang_name}")
+    await answer_callback_safe(call, f"Language updated: {lang_name}")
     
     user_id = call.from_user.id
     user = await check_user_cached(user_id)

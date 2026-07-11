@@ -153,9 +153,13 @@ class StoreSettings(Database.BASE):
     main_menu_image_url = Column(String(500), nullable=True)
     main_menu_footer = Column(String(255), nullable=True)
     root_category_columns = Column(Integer, nullable=False, default=1, server_default="1")
+    subcategory_columns = Column(Integer, nullable=False, default=2, server_default="2")
+    product_columns = Column(Integer, nullable=False, default=1, server_default="1")
     
     __table_args__ = (
         CheckConstraint('root_category_columns IN (1, 2)', name='ck_store_settings_root_cols'),
+        CheckConstraint('subcategory_columns IN (1, 2)', name='ck_store_settings_subcat_cols'),
+        CheckConstraint('product_columns IN (1, 2)', name='ck_store_settings_product_cols'),
     )
 
 

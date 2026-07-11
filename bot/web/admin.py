@@ -232,11 +232,15 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
         StoreSettings.main_menu_footer,
         StoreSettings.main_menu_image_path,
         StoreSettings.main_menu_image_url,
-        StoreSettings.root_category_columns
+        StoreSettings.root_category_columns,
+        StoreSettings.subcategory_columns,
+        StoreSettings.product_columns
     ]
     
     form_overrides = {
         "root_category_columns": SelectField,
+        "subcategory_columns": SelectField,
+        "product_columns": SelectField,
     }
     
     form_args = {
@@ -244,6 +248,16 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
             "choices": [(1, "1 — One button per row"), (2, "2 — Two buttons per row")],
             "coerce": int,
             "description": "Number of buttons per row for top-level categories."
+        },
+        "subcategory_columns": {
+            "choices": [(1, "1 — One button per row"), (2, "2 — Two buttons per row")],
+            "coerce": int,
+            "description": "Number of buttons per row for child/subcategories."
+        },
+        "product_columns": {
+            "choices": [(1, "1 — One button per row"), (2, "2 — Two buttons per row")],
+            "coerce": int,
+            "description": "Number of buttons per row for product listings."
         }
     }
 
