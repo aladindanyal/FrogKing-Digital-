@@ -6,30 +6,80 @@ from bot.database.models import Permission
 from bot.misc import LazyPaginator # noqa: F401
 
 
-def main_menu(role: int, channel: str | None = None, helper: str | None = None) -> InlineKeyboardMarkup:
+def main_menu(role: int, buttons_config: list, locale: str, helper: str | None = None) -> InlineKeyboardMarkup:
     """
     Main menu premium layout.
     """
     kb = InlineKeyboardBuilder()
-    kb.button(text=localize("btn.shop"), callback_data="shop")
     
-    kb.button(text=localize("btn.wallet"), callback_data="wallet")
-    kb.button(text=localize("btn.profile"), callback_data="profile")
+    action_map = {
+        "shop": "shop",
+        "wallet": "wallet",
+        "profile": "profile",
+        "support": f"tg://user?id={helper}" if helper else "support_none",
+        "language": "language",
+        "terms": "rules",
+        "promo": "redeem_promo",
+        "admin": "console"
+    }
+
+    fallback_en = {
+        "shop": "🛒 Shop",
+        "wallet": "💳 Wallet",
+        "profile": "👤 Profile",
+        "support": "🆘 Support",
+        "language": "🌐 Language",
+        "terms": "📜 Terms",
+        "promo": "🔥 Promo Code",
+        "admin": "🎛 Admin Panel"
+    }
     
-    if helper:
-        kb.button(text=localize("btn.support"), url=f"tg://user?id={helper}")
-    else:
-        kb.button(text=localize("btn.support"), callback_data="support_none")
-    kb.button(text=localize("btn.language"), callback_data="language")
-    
-    kb.button(text=localize("btn.rules"), callback_data="rules")
-    kb.button(text=localize("btn.redeem_promo"), callback_data="redeem_promo")
-    
-    if Permission.has_any_admin_perm(role):
-        kb.button(text=localize("btn.admin_menu"), callback_data="console")
-        kb.adjust(1, 2, 2, 2, 1)
-    else:
-        kb.adjust(1, 2, 2, 2)
+    fallback_ar = {
+        "shop": "🛒 المتجر",
+        "wallet": "💳 المحفظة",
+        "profile": "👤 حسابي",
+        "support": "🆘 الدعم",
+        "language": "🌐 اللغة",
+        "terms": "📜 الشروط",
+        "promo": "🔥 كود الخصم",
+        "admin": "🎛 لوحة الإدارة"
+    }
+
+    sorted_buttons = sorted(buttons_config, key=lambda b: (b.row_order, b.column_order, b.id))
+
+    rows = {}
+    for btn in sorted_buttons:
+        if not btn.is_enabled:
+            continue
+            
+        if btn.owner_only and not Permission.has_any_admin_perm(role):
+            continue
+            
+        if btn.action_key == "admin" and not Permission.has_any_admin_perm(role):
+            continue
+
+        label = None
+        if locale == "ar":
+            label = btn.label_ar or btn.label_en or fallback_ar.get(btn.action_key) or fallback_en.get(btn.action_key)
+        else:
+            label = btn.label_en or fallback_en.get(btn.action_key)
+            
+        if not label:
+            label = "Unknown"
+
+        cb_data = action_map.get(btn.action_key, btn.action_key)
+        
+        button = None
+        if btn.action_key == "support" and helper:
+            button = InlineKeyboardButton(text=label, url=cb_data)
+        else:
+            button = InlineKeyboardButton(text=label, callback_data=cb_data)
+            
+        rows.setdefault(btn.row_order, []).append(button)
+
+    for row_order in sorted(rows.keys()):
+        kb.row(*rows[row_order])
+
     return kb.as_markup()
 
 

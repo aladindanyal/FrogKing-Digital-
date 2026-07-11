@@ -152,6 +152,23 @@ class StoreSettings(Database.BASE):
     main_menu_image_path = Column(String(500), nullable=True)
     main_menu_image_url = Column(String(500), nullable=True)
     main_menu_footer = Column(String(255), nullable=True)
+    root_category_columns = Column(Integer, nullable=False, default=1, server_default="1")
+    
+    __table_args__ = (
+        CheckConstraint('root_category_columns IN (1, 2)', name='ck_store_settings_root_cols'),
+    )
+
+
+class MainMenuButtonSettings(Database.BASE):
+    __tablename__ = 'main_menu_button_settings'
+    id = Column(Integer, primary_key=True)
+    action_key = Column(String(50), unique=True, nullable=False, index=True)
+    label_en = Column(String(255), nullable=True)
+    label_ar = Column(String(255), nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True, server_default='true')
+    row_order = Column(Integer, nullable=False, default=0, server_default='0')
+    column_order = Column(Integer, nullable=False, default=0, server_default='0')
+    owner_only = Column(Boolean, nullable=False, default=False, server_default='false')
 
 
 class Categories(Database.BASE):

@@ -12,6 +12,7 @@ from starlette.routing import Route
 from sqlalchemy import text
 
 from markupsafe import Markup
+from wtforms import SelectField
 
 from bot.misc import EnvKeys
 from bot.database.methods.audit import log_audit
@@ -58,6 +59,7 @@ from bot.database.models.main import (
     User, Role, Categories, Goods, ItemValues,
     BoughtGoods, Operations, Payments, ReferralEarnings,
     AuditLog, PromoCodes, CartItems, Reviews, StoreSettings,
+    MainMenuButtonSettings,
 )
 from bot.misc.metrics import get_metrics
 from bot.misc.caching import get_cache_manager
@@ -229,8 +231,35 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
         StoreSettings.main_menu_description,
         StoreSettings.main_menu_footer,
         StoreSettings.main_menu_image_path,
-        StoreSettings.main_menu_image_url
+        StoreSettings.main_menu_image_url,
+        StoreSettings.root_category_columns
     ]
+    
+    form_overrides = {
+        "root_category_columns": SelectField,
+    }
+    
+    form_args = {
+        "root_category_columns": {
+            "choices": [(1, "1 — One button per row"), (2, "2 — Two buttons per row")],
+            "coerce": int,
+            "description": "Number of buttons per row for top-level categories."
+        }
+    }
+
+
+class MainMenuButtonSettingsAdmin(AuditModelView, model=MainMenuButtonSettings):
+    column_list = [MainMenuButtonSettings.action_key, MainMenuButtonSettings.label_en, MainMenuButtonSettings.label_ar,
+                   MainMenuButtonSettings.row_order, MainMenuButtonSettings.column_order,
+                   MainMenuButtonSettings.is_enabled, MainMenuButtonSettings.owner_only]
+    form_columns = [MainMenuButtonSettings.label_en, MainMenuButtonSettings.label_ar,
+                    MainMenuButtonSettings.row_order, MainMenuButtonSettings.column_order,
+                    MainMenuButtonSettings.is_enabled]
+    can_create = False
+    can_delete = False
+    name = "Menu Button"
+    name_plural = "Menu Buttons"
+    icon = "fa-solid fa-bars"
 
 
 class GoodsAdmin(AuditModelView, model=Goods):
@@ -445,6 +474,7 @@ def create_admin_app() -> Starlette:
     admin.add_view(PromoCodeAdmin)
     admin.add_view(CartItemsAdmin)
     admin.add_view(StoreSettingsAdmin)
+    admin.add_view(MainMenuButtonSettingsAdmin)
     if EnvKeys.REVIEWS_ENABLED == "1":
         admin.add_view(ReviewsAdmin)
 

@@ -36,7 +36,11 @@ async def _send_or_edit_main_menu(message_or_call, role_data: int, channel_usern
     if footer:
         text += f"<i>{footer}</i>"
         
-    markup = main_menu(role=role_data, channel=channel_username, helper=EnvKeys.HELPER_ID)
+    from bot.database.methods.read import get_main_menu_buttons
+    from bot.i18n.main import current_locale
+    
+    buttons = await get_main_menu_buttons()
+    markup = main_menu(role=role_data, buttons_config=buttons, locale=current_locale.get(), helper=EnvKeys.HELPER_ID)
     image_path = settings.main_menu_image_path if settings else None
     
     msg = message_or_call if isinstance(message_or_call, Message) else message_or_call.message

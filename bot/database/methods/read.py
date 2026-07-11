@@ -657,3 +657,14 @@ async def invalidate_rating_cache(item_name: str):
     cache = get_cache_manager()
     if cache:
         await cache.delete(f"avg_rating:{item_name}")
+
+async def get_main_menu_buttons() -> list:
+    from bot.database.models.main import MainMenuButtonSettings
+    async with Database().session() as session:
+        stmt = select(MainMenuButtonSettings).order_by(
+            MainMenuButtonSettings.row_order.asc(),
+            MainMenuButtonSettings.column_order.asc(),
+            MainMenuButtonSettings.id.asc()
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
