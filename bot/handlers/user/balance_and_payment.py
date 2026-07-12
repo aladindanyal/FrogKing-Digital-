@@ -53,7 +53,7 @@ async def replenish_balance_callback_handler(call: CallbackQuery, state: FSMCont
         await answer_callback_safe(call, localize("payments.not_configured"), show_alert=True)
         return
 
-    await safe_edit_or_send(call, 
+    await safe_edit_or_send(call,
         localize("payments.replenish_prompt", currency=EnvKeys.PAY_CURRENCY),
         reply_markup=back('profile')
     )
@@ -174,7 +174,7 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
 
             await state.update_data(invoice_id=invoice_id, payment_type="cryptopay")
 
-            await safe_edit_or_send(call, 
+            await safe_edit_or_send(call,
                 localize("payments.invoice.summary",
                          amount=int(amount_dec),
                          minutes=int(ttl_seconds / 60),
@@ -283,7 +283,7 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
             # Send a notification to the referrer
             await _notify_referrer_bonus(call.bot, user_id, balance_amount, call.from_user.first_name, call.from_user.id)
 
-            await safe_edit_or_send(call, 
+            await safe_edit_or_send(call,
                 localize("payments.topped_simple",
                          amount=balance_amount,
                          currency=EnvKeys.PAY_CURRENCY),
@@ -415,16 +415,22 @@ async def successful_payment_handler(message: Message):
 
 
 @router.callback_query(F.data == "buy")
+async def legacy_buy_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call, "This menu is outdated. Please return to the shop and try again.", show_alert=True)
+
+@router.callback_query(F.data.startswith("confirm_purchase:"))
 async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
     """Processing the purchase of goods with full transactional security."""
     try:
+        item_id_str = call.data.split(':')[1]
+
         # Get item name from state (stored when viewing item info)
         data = await state.get_data()
         raw_item_name = data.get('csrf_item')
 
-        if not raw_item_name:
-            await answer_callback_safe(call, localize("middleware.security.invalid_csrf"), show_alert=True)
+        if not raw_item_name or str(data.get('item_id')) != item_id_str:
+            await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
             return
 
         metrics = get_metrics()
@@ -482,7 +488,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
                 message=message
             )
 
-            await safe_edit_or_send(call, 
+            await safe_edit_or_send(call,
                 error_text,
                 reply_markup=back('back_to_item')
             )
@@ -513,7 +519,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
 
         from bot.keyboards.inline import simple_buttons
         buttons = []
-        
+
         bought_id = purchase_data.get('bought_id')
         if isinstance(bought_id, list):
             bought_id = bought_id[0] if bought_id else 0
@@ -525,7 +531,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         # Since we pass `price=total_price` to `localize`, both are showing total_price right now.
         # Let's fix that text properly.
         unit_price = (Decimal(str(purchase_data['price'])) / purchase_request.quantity).quantize(Decimal("0.01"))
-        
+
         receipt_text = localize(
             'shop.purchase.receipt',
             item_name=purchase_data['item_name'],
@@ -537,7 +543,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             value=safe_value,
             currency=EnvKeys.PAY_CURRENCY,
         )
-        
+
         if purchase_request.quantity > 1:
             receipt_text = receipt_text.replace("1 шт.", f"{purchase_request.quantity} pcs")
             receipt_text = receipt_text.replace("Qty: 1", f"Qty: {purchase_request.quantity}")
@@ -545,10 +551,10 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             receipt_text = receipt_text.replace(f"💰 Price: {purchase_data['price']}", f"💰 Price: {unit_price}")
         else:
             receipt_text = receipt_text.replace("1 шт.", "1 pc")
-            
+
         receipt_text = receipt_text.replace("📦 Кол-во:", "📦 Qty:")
 
-        await safe_edit_or_send(call, 
+        await safe_edit_or_send(call,
             receipt_text,
             parse_mode='HTML',
             reply_markup=simple_buttons(buttons),

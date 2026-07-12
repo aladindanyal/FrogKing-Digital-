@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bot.i18n import localize
 from bot.database.models import Permission
 from bot.misc import LazyPaginator # noqa: F401
+from bot.misc.utils import get_quick_quantities
 
 
 def main_menu(role: int, buttons_config: list, locale: str, helper: str | None = None) -> InlineKeyboardMarkup:
@@ -11,7 +12,7 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
     Main menu premium layout.
     """
     kb = InlineKeyboardBuilder()
-    
+
     action_map = {
         "shop": "shop",
         "wallet": "wallet",
@@ -33,7 +34,7 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
         "promo": "🔥 Promo Code",
         "admin": "🎛 Admin Panel"
     }
-    
+
     fallback_ar = {
         "shop": "🛒 المتجر",
         "wallet": "💳 المحفظة",
@@ -51,10 +52,10 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
     for btn in sorted_buttons:
         if not btn.is_enabled:
             continue
-            
+
         if btn.owner_only and not Permission.has_any_admin_perm(role):
             continue
-            
+
         if btn.action_key == "admin" and not Permission.has_any_admin_perm(role):
             continue
 
@@ -63,18 +64,18 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
             label = btn.label_ar or btn.label_en or fallback_ar.get(btn.action_key) or fallback_en.get(btn.action_key)
         else:
             label = btn.label_en or fallback_en.get(btn.action_key)
-            
+
         if not label:
             label = "Unknown"
 
         cb_data = action_map.get(btn.action_key, btn.action_key)
-        
+
         button = None
         if btn.action_key == "support" and helper:
             button = InlineKeyboardButton(text=label, url=cb_data)
         else:
             button = InlineKeyboardButton(text=label, callback_data=cb_data)
-            
+
         rows.setdefault(btn.row_order, []).append(button)
 
     for row_order in sorted(rows.keys()):
@@ -151,7 +152,7 @@ def back(cb: str = "menu", text: str | None = None) -> InlineKeyboardMarkup:
     if not text and cb == "back_to_menu":
         text = "🏠 Home"
         return simple_buttons([(text, cb)])
-    
+
     return simple_buttons([
         (text or localize("btn.back"), cb),
         ("🏠 Home", "back_to_menu")
@@ -216,45 +217,96 @@ def item_info(
         item_name: str, back_data: str, avg_rating: float = None,
         review_count: int = 0, has_purchased: bool = False,
         applied_promo: str = None, reviews_enabled: bool = True,
-        quantity: int = 1,
+        quantity: int = 1, stock: int = -1, item_id: int = None,
 ) -> InlineKeyboardMarkup:
     """
-    Product card with buy, promo, review buttons, and quantity controls.
+    Product card for quantity selection.
     """
     kb = InlineKeyboardBuilder()
-    
-    # Quantity controls
-    qty_label = f"{quantity} pc" if quantity == 1 else f"{quantity} pcs"
-    kb.button(text="➖", callback_data="qty_dec")
-    kb.button(text=qty_label, callback_data="noop")
-    kb.button(text="➕", callback_data="qty_inc")
-    
-    kb.button(text=localize("btn.buy"), callback_data="buy")
-    
-    if applied_promo:
-        kb.button(text=localize("btn.remove_promo"), callback_data="remove_promo")
+
+    if stock == 0:
+        # Out of stock layout
+        pass # No quantity or buy buttons
     else:
-        kb.button(text=localize("btn.apply_promo"), callback_data="apply_promo")
-    
-    if reviews_enabled:
-        if review_count > 0:
-            kb.button(text=localize("btn.view_reviews", count=review_count), callback_data=f"reviews:{item_name}:0")
-        if has_purchased:
-            kb.button(text=localize("btn.leave_review"), callback_data=f"review:{item_name}")
-            
-    kb.button(text=localize("btn.back"), callback_data=back_data)
-    kb.button(text="🏠 Home", callback_data="back_to_menu")
-    
-    sizes = [3, 1]  # Quantity row (3 buttons), Buy button (1 button)
-    sizes.append(1) # Promo button
-    if reviews_enabled:
-        if review_count > 0:
-            sizes.append(1)
-        if has_purchased:
-            sizes.append(1)
-    sizes.append(2) # Back and Home button
-    
-    kb.adjust(*sizes)
+        # Quick Quantity buttons
+        is_infinity = stock == -1
+        quick_qtys = get_quick_quantities(stock if not is_infinity else -1, is_infinity)
+
+        row = []
+        for label, val in quick_qtys:
+            row.append(InlineKeyboardButton(text=label, callback_data=f"qty:quick:{item_id}:{val}"))
+            if len(row) == 4:
+                kb.row(*row)
+                row = []
+        if row:
+            kb.row(*row)
+
+        # Custom Amount & Continue
+        kb.row(InlineKeyboardButton(text="✏️ Custom Quantity", callback_data=f"qty:keypad:{item_id}"))
+        kb.row(InlineKeyboardButton(text="🛒 Continue", callback_data=f"checkout:{item_id}"))
+
+    kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data=back_data),
+           InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu"))
+
+    return kb.as_markup()
+
+def numeric_keypad(item_id: int) -> InlineKeyboardMarkup:
+    """
+    Callback-only numeric keypad for custom quantity.
+    """
+    kb = InlineKeyboardBuilder()
+
+    kb.row(
+        InlineKeyboardButton(text="1", callback_data=f"qty:digit:{item_id}:1"),
+        InlineKeyboardButton(text="2", callback_data=f"qty:digit:{item_id}:2"),
+        InlineKeyboardButton(text="3", callback_data=f"qty:digit:{item_id}:3")
+    )
+    kb.row(
+        InlineKeyboardButton(text="4", callback_data=f"qty:digit:{item_id}:4"),
+        InlineKeyboardButton(text="5", callback_data=f"qty:digit:{item_id}:5"),
+        InlineKeyboardButton(text="6", callback_data=f"qty:digit:{item_id}:6")
+    )
+    kb.row(
+        InlineKeyboardButton(text="7", callback_data=f"qty:digit:{item_id}:7"),
+        InlineKeyboardButton(text="8", callback_data=f"qty:digit:{item_id}:8"),
+        InlineKeyboardButton(text="9", callback_data=f"qty:digit:{item_id}:9")
+    )
+    kb.row(
+        InlineKeyboardButton(text="⌫", callback_data=f"qty:backspace:{item_id}"),
+        InlineKeyboardButton(text="0", callback_data=f"qty:digit:{item_id}:0"),
+        InlineKeyboardButton(text="↺ Clear", callback_data=f"qty:clear:{item_id}")
+    )
+    kb.row(InlineKeyboardButton(text="✅ Continue", callback_data=f"qty:keypad_continue:{item_id}"))
+    kb.row(
+        InlineKeyboardButton(text="⬅️ Back", callback_data=f"qty:keypad_back:{item_id}"),
+        InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
+    )
+
+    return kb.as_markup()
+
+def checkout_confirmation_keyboard(item_id: int, can_purchase: bool, applied_promo: str = None) -> InlineKeyboardMarkup:
+    """
+    Keyboard for the two-step checkout confirmation screen.
+    """
+    kb = InlineKeyboardBuilder()
+
+    if can_purchase:
+        kb.row(InlineKeyboardButton(text="✅ Confirm Purchase", callback_data=f"confirm_purchase:{item_id}"))
+    else:
+        kb.row(InlineKeyboardButton(text=localize("btn.replenish"), callback_data="replenish_balance"))
+
+    kb.row(InlineKeyboardButton(text="✏️ Change Quantity", callback_data=f"checkout_change_qty:{item_id}"))
+
+    if applied_promo:
+        kb.row(InlineKeyboardButton(text=localize("btn.remove_promo"), callback_data=f"remove_promo:{item_id}"))
+    else:
+        kb.row(InlineKeyboardButton(text=localize("btn.apply_promo"), callback_data=f"apply_promo:{item_id}"))
+
+    kb.row(
+        InlineKeyboardButton(text="⬅️ Back", callback_data=f"checkout_change_qty:{item_id}"),
+        InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
+    )
+
     return kb.as_markup()
 
 

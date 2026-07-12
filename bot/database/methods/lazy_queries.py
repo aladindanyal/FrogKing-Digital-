@@ -44,16 +44,16 @@ async def get_category_parent_id(category_id: int) -> int | None:
 
 
 async def query_items_in_category(category_id: int, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:
-    """Query items in category with pagination"""
+    """Query items in category with pagination, returning (id, name) tuples"""
     async with Database().session() as s:
-        query = select(Goods.name).where(Goods.category_id == category_id)
+        query = select(Goods.id, Goods.name).where(Goods.category_id == category_id)
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))
             return count_result.scalar() or 0
         result = await s.execute(
             query.order_by(Goods.name.asc()).offset(offset).limit(limit)
         )
-        return [row[0] for row in result.all()]
+        return [(row.id, row.name) for row in result.all()]
 
 
 async def query_user_bought_items(user_id: int, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:

@@ -50,3 +50,28 @@ async def answer_callback_safe(
         await call.answer(text=text, show_alert=show_alert)
     except Exception:
         pass
+
+def get_quick_quantities(stock: int, is_infinity: bool) -> list[tuple[str, int]]:
+    """
+    Generate quick quantity labels and values.
+    Returns a list of (label, value) tuples.
+    """
+    bases = [1, 2, 3, 5, 10, 20, 50]
+    result = []
+
+    if is_infinity:
+        for b in bases:
+            result.append((f"📦 {b}", b))
+        return result
+
+    # Finite stock
+    seen = set()
+    for b in bases:
+        if b <= stock:
+            result.append((f"📦 {b}", b))
+            seen.add(b)
+
+    if stock not in seen and stock > 0:
+        result.append((f"📦 All {stock}", stock))
+
+    return result
