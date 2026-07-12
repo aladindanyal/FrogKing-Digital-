@@ -248,7 +248,7 @@ async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
     overall_balance = sum(operations) if operations else 0
     items = await select_user_items(user_id)
     referral = EnvKeys.REFERRAL_PERCENT
-    markup = profile_keyboard(user_items=items)
+    markup = profile_keyboard()
     text = (
         f"{localize('profile.caption', name=tg_user.first_name, id=user_id)}\n"
         f"{localize('profile.id', id=user_id)}\n"

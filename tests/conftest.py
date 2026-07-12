@@ -296,6 +296,9 @@ def make_callback_query(mock_bot):
         call.from_user.first_name = first_name
         call.from_user.is_bot = False
         call.message = AsyncMock()
+        call.message.photo = None
+        call.message.video = None
+        call.message.document = None
         call.message.bot = mock_bot
         call.message.edit_text = AsyncMock()
         call.message.date = MagicMock()

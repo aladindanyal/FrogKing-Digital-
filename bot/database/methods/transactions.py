@@ -141,35 +141,90 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                 # 6. Write off the balance
                 user.balance -= total_final_price
 
-                # 7. Create a purchase record
-                bought_item = BoughtGoods(
-                    name=item_name,
-                    value=combined_value,
-                    price=total_final_price,
-                    buyer_id=telegram_id,
-                    bought_datetime=datetime.now(timezone.utc),
-                    unique_id=uuid4().int >> 65
+                # 7. Create Orders
+                from bot.database.methods.orders import create_order_with_item
+                
+                subtotal = price * quantity
+                discount_total = (price - final_price) * quantity if discount_info else Decimal("0.00")
+                total = total_final_price
+                
+                order, order_item = await create_order_with_item(
+                    session=s,
+                    user_id=telegram_id,
+                    item_id=goods.id,
+                    product_name=item_name,
+                    quantity=quantity,
+                    unit_price=float(price),
+                    subtotal=float(subtotal),
+                    discount_total=float(discount_total),
+                    total=float(total),
+                    currency=EnvKeys.PAY_CURRENCY,
+                    promo_code=promo_code,
+                    product_description=goods.description
                 )
-                s.add(bought_item)
+                
+                order.status = "completed"
+                order.paid_at = datetime.now(timezone.utc)
+                order.completed_at = datetime.now(timezone.utc)
+                order_item.fulfillment_status = "delivered"
+                order_item.completed_at = datetime.now(timezone.utc)
                 await s.flush()
 
-                # 8. Commit the transaction
+                # Create bought goods delivery rows (one per quantity)
+                bought_goods_ids = []
+                # Use a base unique UUID, increment for multiple items to ensure uniqueness
+                base_uuid = uuid4().int >> 65
+                
+                for idx, val in enumerate(purchased_values):
+                    bg = BoughtGoods(
+                        name=item_name,
+                        value=val,
+                        price=final_price,
+                        buyer_id=telegram_id,
+                        bought_datetime=datetime.now(timezone.utc),
+                        unique_id=base_uuid + idx,
+                        order_id=order.id,
+                        order_item_id=order_item.id
+                    )
+                    s.add(bg)
+                    await s.flush()
+                    bought_goods_ids.append(bg.id)
+
+                # 8. Record Operation History
+                s.add(Operations(
+                    user_id=telegram_id,
+                    operation_value=-float(total_final_price),
+                    operation_time=datetime.now(timezone.utc)
+                ))
+
+                # 9. Commit the transaction
                 await s.commit()
 
                 safe_create_task(invalidate_user_cache(telegram_id))
                 safe_create_task(invalidate_stats_cache())
                 safe_create_task(invalidate_item_cache(item_name))
 
+                # Refactored structured transaction result
                 result_data = {
-                    "item_name": item_name,
-                    "value": combined_value,
+                    "public_order_id": order.public_id,
+                    "order_id": order.id,
+                    "order_item_id": order_item.id,
                     "delivered_values": purchased_values,
-                    "price": float(total_final_price),
                     "quantity": quantity,
+                    "unit_price": float(price),
+                    "subtotal": float(subtotal),
+                    "discount_total": float(discount_total),
+                    "total": float(total),
+                    "currency": order.currency,
+                    "purchase_timestamp": order.completed_at.isoformat(),
+                    
+                    # Legacy fallback fields
+                    "item_name": item_name,
+                    "value": purchased_values[0] if purchased_values else "",
+                    "price": float(total_final_price),
                     "new_balance": float(user.balance),
-                    "unique_id": bought_item.unique_id,
-                    "bought_id": bought_item.id,
-                    "bought_datetime": bought_item.bought_datetime.isoformat(),
+                    "unique_id": base_uuid, # base unique ID for legacy support
+                    "bought_datetime": order.completed_at.isoformat(),
                 }
                 if discount_info:
                     result_data["discount"] = discount_info

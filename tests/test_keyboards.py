@@ -1,8 +1,31 @@
 from bot.keyboards.inline import (
-    main_menu, profile_keyboard, simple_buttons, back, close, item_info, payment_menu,
+    main_menu, profile_keyboard, wallet_keyboard, simple_buttons, back, close, item_info, payment_menu,
     get_payment_choice, question_buttons, check_sub, referral_system_keyboard,
     admin_console_keyboard,
 )
+from dataclasses import dataclass
+
+
+@dataclass
+class MockBtn:
+    row_order: int
+    column_order: int
+    id: int
+    is_enabled: bool
+    owner_only: bool
+    action_key: str
+    label_en: str
+    label_ar: str
+
+
+def get_mock_config():
+    return [
+        MockBtn(1, 1, 1, True, False, "shop", "Shop", ""),
+        MockBtn(1, 2, 2, True, False, "profile", "Profile", ""),
+        MockBtn(2, 1, 3, True, False, "rules", "Rules", ""),
+        MockBtn(3, 1, 4, True, True, "admin", "Admin", ""),
+        MockBtn(4, 1, 5, True, False, "support", "Support", "")
+    ]
 
 
 def _all_callback_data(markup):
@@ -36,64 +59,59 @@ def _has_url_button(markup):
 class TestMainMenu:
 
     def test_basic_buttons_present(self):
-        markup = main_menu(role=1)
+        markup = main_menu(role=1, buttons_config=get_mock_config(), locale="en")
         cbs = _all_callback_data(markup)
         assert "shop" in cbs
         assert "rules" in cbs
         assert "profile" in cbs
 
     def test_no_admin_for_regular_user(self):
-        markup = main_menu(role=1)
+        markup = main_menu(role=1, buttons_config=get_mock_config(), locale="en")
         cbs = _all_callback_data(markup)
         assert "console" not in cbs
 
     def test_admin_button_for_admin(self):
-        markup = main_menu(role=2)
+        # 127 gives owner permissions
+        markup = main_menu(role=127, buttons_config=get_mock_config(), locale="en")
         cbs = _all_callback_data(markup)
         assert "console" in cbs
 
-    def test_channel_button(self):
-        markup = main_menu(role=1, channel="test_channel")
-        assert _has_url_button(markup)
-
     def test_helper_button(self):
-        markup = main_menu(role=1, helper="12345")
+        markup = main_menu(role=1, buttons_config=get_mock_config(), locale="en", helper="12345")
         assert _has_url_button(markup)
 
-    def test_no_channel_no_helper(self):
-        markup = main_menu(role=1)
+    def test_no_helper(self):
+        markup = main_menu(role=1, buttons_config=get_mock_config(), locale="en")
         assert not _has_url_button(markup)
 
 
 class TestProfileKeyboard:
+    def test_buttons_present(self):
+        markup = profile_keyboard()
+        cbs = _all_callback_data(markup)
+        assert "orders:list:0" in cbs
+        assert "operation_history" in cbs
+        assert "back_to_menu" in cbs
 
+
+class TestWalletKeyboard:
     def test_replenish_always_present(self):
-        markup = profile_keyboard(referral_percent=0, user_items=0)
+        markup = wallet_keyboard(referral_percent=0)
         cbs = _all_callback_data(markup)
         assert "replenish_balance" in cbs
 
     def test_referral_button_when_percent_nonzero(self):
-        markup = profile_keyboard(referral_percent=10)
+        markup = wallet_keyboard(referral_percent=10)
         cbs = _all_callback_data(markup)
         assert "referral_system" in cbs
 
     def test_no_referral_button_when_zero(self):
-        markup = profile_keyboard(referral_percent=0)
+        markup = wallet_keyboard(referral_percent=0)
         cbs = _all_callback_data(markup)
         assert "referral_system" not in cbs
 
-    def test_bought_items_when_user_has_items(self):
-        markup = profile_keyboard(referral_percent=0, user_items=5)
-        cbs = _all_callback_data(markup)
-        assert "bought_items" in cbs
-
-    def test_no_bought_items_when_zero(self):
-        markup = profile_keyboard(referral_percent=0, user_items=0)
-        cbs = _all_callback_data(markup)
-        assert "bought_items" not in cbs
-
     def test_back_button_present(self):
-        markup = profile_keyboard(referral_percent=0)
+        markup = wallet_keyboard(referral_percent=0)
         cbs = _all_callback_data(markup)
         assert "back_to_menu" in cbs
 
@@ -117,11 +135,12 @@ class TestPaymentMenu:
 
 class TestItemInfoKeyboard:
 
-    def test_has_buy_and_back(self):
-        markup = item_info("Widget", "gp_0")
+    def test_has_quick_buy_and_no_back(self):
+        # New design uses quick quantities instead of generic "buy"
+        markup = item_info("Widget", "gp_0", stock=10, item_id=1)
         cbs = _all_callback_data(markup)
-        assert "buy" in cbs
-        assert "gp_0" in cbs
+        # Should have quick quantities (qty:quick:1:1 etc)
+        assert "qty:quick:1:1" in cbs
 
 
 class TestSimpleButtons:

@@ -245,6 +245,84 @@ class ItemValues(Database.BASE):
     def __str__(self):
         return f"#{self.id} ({self.item_id})"
 
+class Order(Database.BASE):
+    __tablename__ = 'orders'
+    id = Column(Integer, primary_key=True)
+    public_id = Column(String(32), unique=True, nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(String(20), nullable=False, default="pending")
+    currency = Column(String(8), nullable=False, default="USD")
+    subtotal = Column(Numeric(12, 2), nullable=False, default=0)
+    discount_total = Column(Numeric(12, 2), nullable=False, default=0)
+    total = Column(Numeric(12, 2), nullable=False, default=0)
+    promo_code_snapshot = Column(String(50), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    processing_started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    failed_at = Column(DateTime(timezone=True), nullable=True)
+    failure_code = Column(String(64), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'paid', 'processing', 'completed', 'cancelled', 'failed', 'refunded')", name='ck_order_status'),
+        CheckConstraint('subtotal >= 0', name='ck_order_subtotal_pos'),
+        CheckConstraint('discount_total >= 0', name='ck_order_discount_pos'),
+        CheckConstraint('total >= 0', name='ck_order_total_pos'),
+        CheckConstraint('discount_total <= subtotal', name='ck_order_discount_max'),
+        Index('ix_order_user_created', 'user_id', 'created_at'),
+        Index('ix_order_user_status', 'user_id', 'status'),
+        Index('ix_order_status_created', 'status', 'created_at'),
+    )
+
+    user = relationship("User", backref="orders", lazy='raise')
+    items = relationship("OrderItem", back_populates="order", lazy='raise', cascade="all, delete-orphan")
+
+    def __str__(self):
+        return self.public_id or ""
+
+
+class OrderItem(Database.BASE):
+    __tablename__ = 'order_items'
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey('goods.id', ondelete="SET NULL"), nullable=True, index=True)
+    
+    product_name_snapshot = Column(String(255), nullable=False)
+    product_description_snapshot = Column(Text, nullable=True)
+    quantity = Column(Integer, nullable=False, default=1)
+    
+    unit_price = Column(Numeric(12, 2), nullable=False)
+    subtotal = Column(Numeric(12, 2), nullable=False)
+    discount_total = Column(Numeric(12, 2), nullable=False, default=0)
+    total = Column(Numeric(12, 2), nullable=False)
+    
+    fulfillment_status = Column(String(20), nullable=False, default="pending")
+    
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint('quantity > 0', name='ck_order_item_qty_positive'),
+        CheckConstraint("fulfillment_status IN ('pending', 'processing', 'delivered', 'failed', 'cancelled', 'refunded')", name='ck_order_item_fstatus'),
+        CheckConstraint('subtotal >= 0', name='ck_order_item_subtotal_pos'),
+        CheckConstraint('discount_total >= 0', name='ck_order_item_discount_pos'),
+        CheckConstraint('total >= 0', name='ck_order_item_total_pos'),
+        CheckConstraint('discount_total <= subtotal', name='ck_order_item_discount_max'),
+        Index('ix_order_item_order_fstatus', 'order_id', 'fulfillment_status'),
+        Index('ix_order_item_fstatus', 'fulfillment_status'),
+    )
+
+    order = relationship("Order", back_populates="items", lazy='raise')
+    item = relationship("Goods", backref="order_items", lazy='raise')
+    bought_goods = relationship("BoughtGoods", back_populates="order_item", lazy='raise')
+
+    def __str__(self):
+        return f"{self.product_name_snapshot} x{self.quantity}"
+
 
 class BoughtGoods(Database.BASE):
     __tablename__ = 'bought_goods'
@@ -255,7 +333,13 @@ class BoughtGoods(Database.BASE):
     buyer_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
     bought_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     unique_id = Column(BigInteger, nullable=False, unique=True)
+    
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="SET NULL"), nullable=True, index=True)
+    order_item_id = Column(Integer, ForeignKey('order_items.id', ondelete="SET NULL"), nullable=True, index=True)
+    
     user_telegram_id = relationship("User", back_populates="user_goods", lazy='raise')
+    order = relationship("Order", backref="bought_goods", lazy='raise')
+    order_item = relationship("OrderItem", back_populates="bought_goods", lazy='raise')
 
     __table_args__ = (
         Index('ix_bought_goods_datetime', 'bought_datetime'),
@@ -263,7 +347,7 @@ class BoughtGoods(Database.BASE):
     )
 
     def __init__(self, name: str = None, value: str = None, price=None, bought_datetime=None,
-                 unique_id=None, buyer_id: int = None, **kw: Any):
+                 unique_id=None, buyer_id: int = None, order_id: int = None, order_item_id: int = None, **kw: Any):
         super().__init__(**kw)
         if name is not None:
             self.item_name = name
@@ -277,6 +361,10 @@ class BoughtGoods(Database.BASE):
             self.bought_datetime = bought_datetime
         if unique_id is not None:
             self.unique_id = unique_id
+        if order_id is not None:
+            self.order_id = order_id
+        if order_item_id is not None:
+            self.order_item_id = order_item_id
 
     def __str__(self):
         return self.item_name or ""

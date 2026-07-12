@@ -5,38 +5,53 @@ async def safe_edit_or_send(call: CallbackQuery, text: str, reply_markup: Inline
     """
     Safely edit a message or send a new one if editing fails (e.g. if the original message was a photo or is inaccessible).
     """
-    if isinstance(call.message, Message):
+    if call.message and type(call.message).__name__ != 'InaccessibleMessage':
         if getattr(call.message, 'photo', None) or getattr(call.message, 'video', None) or getattr(call.message, 'document', None):
             try:
                 await call.message.delete()
             except Exception:
                 pass
             await call.bot.send_message(
-                chat_id=call.from_user.id,
-                text=text,
+                call.from_user.id,
+                text,
                 reply_markup=reply_markup,
-                parse_mode=parse_mode
+                parse_mode=parse_mode,
+                disable_web_page_preview=True
             )
         else:
             try:
-                await call.message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
+                await call.message.edit_text(
+                    text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode,
+                    disable_web_page_preview=True
+                )
+                return call.message
             except TelegramBadRequest as e:
-                if "message is not modified" not in str(e):
-                    try:
-                        await call.message.delete()
-                    except Exception:
-                        pass
-                    await call.bot.send_message(
-                        chat_id=call.from_user.id,
-                        text=text,
-                        reply_markup=reply_markup,
-                        parse_mode=parse_mode
-                    )
+                if "message is not modified" in str(e):
+                    return call.message
+                try:
+                    await call.message.delete()
+                except Exception:
+                    pass
+                await call.bot.send_message(
+                    call.from_user.id,
+                    text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode
+                )
+            except Exception:
+                await call.bot.send_message(
+                    call.from_user.id,
+                    text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode
+                )
     else:
         # call.message is InaccessibleMessage or None
         await call.bot.send_message(
-            chat_id=call.from_user.id,
-            text=text,
+            call.from_user.id,
+            text,
             reply_markup=reply_markup,
             parse_mode=parse_mode
         )

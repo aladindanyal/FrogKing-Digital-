@@ -99,14 +99,13 @@ def wallet_keyboard(referral_percent: int) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def profile_keyboard(user_items: int = 0) -> InlineKeyboardMarkup:
+def profile_keyboard() -> InlineKeyboardMarkup:
     """
     My Account keyboard.
     """
     kb = InlineKeyboardBuilder()
-    if user_items != 0:
-        kb.button(text=localize("btn.purchased"), callback_data="bought_items")
-    kb.button(text=localize("btn.operation_history"), callback_data="operation_history")
+    kb.button(text=localize("orders.my_orders", default="📦 My Orders"), callback_data="orders:list:0")
+    kb.button(text=localize("btn.wallet_history", default="💳 Wallet History"), callback_data="operation_history")
     kb.button(text="🏠 Home", callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()

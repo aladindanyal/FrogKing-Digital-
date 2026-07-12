@@ -35,7 +35,7 @@ router = Router()
 
 # --- Shared helper: render item page ---
 
-async def _render_item_page(target, state: FSMContext, item_name: str, back_data: str = None, user_id: int = None):
+async def _render_item_page(target, state: FSMContext, item_name: str, back_data: str = None, user_id: int = None, send_new: bool = False):
     """
     Render the item detail page for quantity selection.
     """
@@ -116,7 +116,12 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     text = "\n".join(text_lines)
 
     try:
-        if hasattr(target, 'message') and hasattr(target.message, 'edit_text'):
+        if send_new:
+            if hasattr(target, 'message'):
+                await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
+            else:
+                await target.answer(text, reply_markup=markup, parse_mode="HTML")
+        elif hasattr(target, 'message') and hasattr(target.message, 'edit_text'):
             await safe_edit_or_send(target, text, reply_markup=markup)
         else:
             await target.answer(text, reply_markup=markup)
@@ -266,20 +271,24 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
         display_text = localize("shop.goods.choose")
 
     settings = await get_store_settings()
-    product_columns = (
-        settings.product_columns
-        if settings and settings.product_columns in (1, 2)
-        else 1
-    )
+
+    def _format_goods_button_text(item_name: str, stock: int) -> str:
+        name = item_name if len(item_name) <= 40 else item_name[:37] + "..."
+        if stock == 0:
+            return f"{name} · ⛔ {localize('shop.goods.sold_out')}"
+        elif stock == -1:
+            return f"{name} · ♾️ {localize('shop.goods.available')}"
+        else:
+            return f"{name} · 📦 {stock}"
 
     markup = await lazy_paginated_keyboard(
         paginator=paginator,
-        item_text=lambda item: f"❌ {item[1]} — OUT OF STOCK" if stock_by_item_id.get(item[0], 0) == 0 else item[1],
+        item_text=lambda item: _format_goods_button_text(item[1], stock_by_item_id.get(item[0], 0)),
         item_callback=lambda item: f"itm:{items_index[item[0]]}:{page}",
         page=page,
         back_cb=back_cb,
         nav_cb_prefix="gp_",
-        row_width=product_columns
+        row_width=1
     )
 
     await _edit_message_safe(call, call.message, display_text, markup)
@@ -802,105 +811,21 @@ async def view_reviews_handler(call: CallbackQuery, state: FSMContext):
     await safe_edit_or_send(call, "\n".join(lines), reply_markup=kb.as_markup())
 
 
-# --- Bought items ---
+# --- Legacy Purchases Fallback ---
 
 @router.callback_query(F.data == "bought_items")
-async def bought_items_callback_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    """
-    Show list of user's purchased items with lazy loading.
-    """
-    user_id = call.from_user.id
-
-    # Create paginator for user's bought items
-    query_func = partial(query_user_bought_items, user_id)
-    paginator = LazyPaginator(query_func, per_page=10)
-
-    markup = await lazy_paginated_keyboard(
-        paginator=paginator,
-        item_text=lambda item: item.item_name,
-        item_callback=lambda item: f"bought-item:{item.id}:bought-goods-page_user_0",
-        page=0,
-        back_cb="profile",
-        nav_cb_prefix="bought-goods-page_user_"
-    )
-
-    await safe_edit_or_send(call, localize("purchases.title"), reply_markup=markup)
-
-    # Save paginator state
-    await state.update_data(bought_items_paginator=paginator.get_state())
-
-
 @router.callback_query(F.data.startswith('bought-goods-page_'))
-async def navigate_bought_items(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    """
-    Pagination for user's purchased items with lazy loading.
-    Format: 'bought-goods-page_{data}_{page}', where data = 'user' or user_id.
-    """
-    parts = call.data.split('_')
-    if len(parts) < 3:
-        await answer_callback_safe(call, localize("purchases.pagination.invalid"))
-        return
-
-    data_type = parts[1]
-    try:
-        current_index = int(parts[2])
-    except ValueError:
-        current_index = 0
-
-    if data_type == 'user':
-        user_id = call.from_user.id
-        back_cb = 'profile'
-        pre_back = f'bought-goods-page_user_{current_index}'
-    else:
-        user_id = int(data_type)
-        back_cb = f'check-user_{data_type}'
-        pre_back = f'bought-goods-page_{data_type}_{current_index}'
-
-    # Get saved state
-    data = await state.get_data()
-    paginator_state = data.get('bought_items_paginator')
-
-    # Create paginator with cached state
-    query_func = partial(query_user_bought_items, user_id)
-    paginator = LazyPaginator(query_func, per_page=10, state=paginator_state)
-
-    markup = await lazy_paginated_keyboard(
-        paginator=paginator,
-        item_text=lambda item: item.item_name,
-        item_callback=lambda item: f"bought-item:{item.id}:{pre_back}",
-        page=current_index,
-        back_cb=back_cb,
-        nav_cb_prefix=f"bought-goods-page_{data_type}_"
-    )
-
-    await safe_edit_or_send(call, localize("purchases.title"), reply_markup=markup)
-
-    # Update state
-    await state.update_data(bought_items_paginator=paginator.get_state())
-
-
 @router.callback_query(F.data.startswith('bought-item:'))
-async def bought_item_info_callback_handler(call: CallbackQuery):
-    await answer_callback_safe(call)
-    """
-    Show details for a purchased item.
-    """
-    trash, item_id, back_data = call.data.split(':', 2)
-    item = await get_bought_item_info(int(item_id))
-    if not item:
-        await answer_callback_safe(call, localize("purchases.item.not_found"), show_alert=True)
-        return
-
-    text = "\n".join([
-        localize("purchases.item.name", name=item["item_name"]),
-        localize("purchases.item.price", amount=item["price"], currency=EnvKeys.PAY_CURRENCY),
-        localize("purchases.item.datetime", dt=item["bought_datetime"]),
-        localize("purchases.item.unique_id", uid=item["unique_id"]),
-        localize("purchases.item.value", value=item["value"]),
-    ])
-    await safe_edit_or_send(call, text, parse_mode='HTML', reply_markup=back(back_data))
+@router.callback_query(F.data == "orders:legacy")
+async def legacy_bought_items_redirect(call: CallbackQuery):
+    from bot.misc.utils import localize
+    from bot.handlers.user.orders import orders_list_handler
+    await call.answer(
+        localize("orders.legacy_redirect", default="This legacy purchase history is no longer available. Please use My Orders."),
+        show_alert=True
+    )
+    call.data = "orders:list:0"
+    await orders_list_handler(call)
 
 
 # --- Stock Refresh Handlers ---
@@ -1068,22 +993,25 @@ async def promo_code_text_handler(message: Message, state: FSMContext):
 
     # Re-render checkout page with discounted price
     await _render_checkout_page(message, state, item_name, str(item_id), user_id=message.from_user.id)
-async def _render_item_page_by_id(event, state: FSMContext, item_id: int, *, back_data: str = "shop", user_id: int):
+async def _render_item_page_by_id(event, state: FSMContext, item_id: int, *, back_data: str = "shop", user_id: int, send_new: bool = False):
     from bot.database.methods.read import get_item_info_by_id
     item = await get_item_info_by_id(item_id)
     if not item:
         if isinstance(event, CallbackQuery):
-            await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back(back_data))
+            if send_new:
+                await event.message.answer(localize("shop.item.not_found"), reply_markup=back(back_data))
+            else:
+                await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back(back_data))
         else:
-            await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back(back_data))
+            await event.answer(localize("shop.item.not_found"), reply_markup=back(back_data))
         return
         
     await state.update_data(item_quantity=1, keypad_value='0', item_id=item_id, csrf_item=item['name'], item_back_data=back_data)
-    await _render_item_page(event, state, item['name'], back_data=back_data, user_id=user_id)
+    await _render_item_page(event, state, item['name'], back_data=back_data, user_id=user_id, send_new=send_new)
 
 
 @router.callback_query(F.data.startswith("direct_item:"))
 async def direct_item_handler(call: CallbackQuery, state: FSMContext):
     item_id = int(call.data.split(':')[1])
     await answer_callback_safe(call)
-    await _render_item_page_by_id(call, state, item_id, back_data='menu', user_id=call.from_user.id)
+    await _render_item_page_by_id(call, state, item_id, back_data='menu', user_id=call.from_user.id, send_new=True)

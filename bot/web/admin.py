@@ -60,6 +60,7 @@ from bot.database.models.main import (
     BoughtGoods, Operations, Payments, ReferralEarnings,
     AuditLog, PromoCodes, CartItems, Reviews, StoreSettings,
     MainMenuButtonSettings, ProductRestockSubscription,
+    Order, OrderItem,
 )
 from bot.misc.metrics import get_metrics
 from bot.misc.caching import get_cache_manager
@@ -304,8 +305,8 @@ class BoughtGoodsAdmin(ModelView, model=BoughtGoods):
     can_create = False
     can_edit = False
     can_delete = False
-    name = "Purchase"
-    name_plural = "Purchases"
+    name = "Delivered Item"
+    name_plural = "Delivered Items"
     icon = "fa-solid fa-cart-shopping"
 
 
@@ -424,6 +425,28 @@ class ProductRestockSubscriptionAdmin(ModelView, model=ProductRestockSubscriptio
     name_plural = "Restock Alerts"
     icon = "fa-solid fa-bell"
 
+class OrdersAdmin(ModelView, model=Order):
+    column_list = [Order.id, Order.public_id, Order.user_id, Order.status, Order.currency, Order.total, Order.created_at]
+    column_searchable_list = [Order.public_id, Order.user_id]
+    column_sortable_list = [Order.id, Order.created_at]
+    can_create = False
+    can_edit = False
+    can_delete = False
+    name = "Order"
+    name_plural = "Orders"
+    icon = "fa-solid fa-box"
+
+class OrderItemsAdmin(ModelView, model=OrderItem):
+    column_list = [OrderItem.id, OrderItem.order_id, OrderItem.item_id, OrderItem.product_name_snapshot, OrderItem.quantity, OrderItem.total, OrderItem.fulfillment_status]
+    column_searchable_list = [OrderItem.order_id, OrderItem.item_id, OrderItem.product_name_snapshot]
+    column_sortable_list = [OrderItem.id, OrderItem.created_at]
+    can_create = False
+    can_edit = False
+    can_delete = False
+    name = "Order Item"
+    name_plural = "Order Items"
+    icon = "fa-solid fa-boxes-stacked"
+
 
 # Health & Metrics Endpoints
 async def health_check(request: Request) -> JSONResponse:
@@ -511,6 +534,9 @@ def create_admin_app() -> Starlette:
     admin.add_view(StoreSettingsAdmin)
     admin.add_view(MainMenuButtonSettingsAdmin)
     admin.add_view(ProductRestockSubscriptionAdmin)
+    admin.add_view(OrdersAdmin)
+    admin.add_view(OrderItemsAdmin)
+    
     if EnvKeys.REVIEWS_ENABLED == "1":
         admin.add_view(ReviewsAdmin)
 
