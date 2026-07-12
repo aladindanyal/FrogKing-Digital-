@@ -85,12 +85,22 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     )
 
     item_id = data.get('item_id')
+    user_identifier = user_id
+    if not user_identifier and hasattr(target, 'from_user'):
+        user_identifier = target.from_user.id
+        
+    has_active_sub = False
+    if stock == 0 and user_identifier and item_id:
+        from bot.database.methods.restock_subscriptions import is_restock_subscription_active
+        has_active_sub = await is_restock_subscription_active(user_identifier, item_id)
+
     markup = item_info(
         item_name, back_data,
         avg_rating=avg_rating, review_count=review_count_val,
         has_purchased=False, applied_promo=None,
         reviews_enabled=reviews_enabled, quantity=current_quantity,
         stock=stock, item_id=item_id,
+        has_active_restock_sub=has_active_sub
     )
 
     text_lines = [
@@ -939,6 +949,52 @@ async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
     await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
 
+@router.callback_query(F.data.startswith('restock:subscribe:'))
+async def restock_subscribe_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    item_id = int(item_id_str)
+    
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    from bot.database.methods.restock_subscriptions import subscribe_to_restock
+    result = await subscribe_to_restock(call.from_user.id, item_id)
+    
+    if result == "available_now":
+        await answer_callback_safe(call, localize("shop.restock.available_now", default="This product is available now."), show_alert=True)
+    elif result in ("subscribed", "already_active"):
+        await answer_callback_safe(call, localize("shop.restock.subscribed", default="You’ll be notified when this product is available again."), show_alert=True)
+    elif result == "item_missing":
+        await answer_callback_safe(call, localize("shop.restock.missing", default="Product no longer exists."), show_alert=True)
+    elif result == "unlimited":
+        await answer_callback_safe(call, localize("shop.restock.available_now", default="This product is available now."), show_alert=True)
+    else:
+        await answer_callback_safe(call, localize("shop.restock.error", default="Unable to update the alert right now."), show_alert=True)
+        
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+
+@router.callback_query(F.data.startswith('restock:cancel:'))
+async def restock_cancel_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    item_id = int(item_id_str)
+    
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    from bot.database.methods.restock_subscriptions import cancel_restock_subscription
+    await cancel_restock_subscription(call.from_user.id, item_id)
+    
+    await answer_callback_safe(call, localize("shop.restock.cancelled", default="Restock alert cancelled."), show_alert=True)
+    
+    if item_name and str(data.get('item_id')) == item_id_str:
+        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+
 # --- Post-Purchase Action Panel Handlers ---
 
 @router.callback_query(F.data.startswith("buy_again:"))
@@ -1012,3 +1068,22 @@ async def promo_code_text_handler(message: Message, state: FSMContext):
 
     # Re-render checkout page with discounted price
     await _render_checkout_page(message, state, item_name, str(item_id), user_id=message.from_user.id)
+async def _render_item_page_by_id(event, state: FSMContext, item_id: int, *, back_data: str = "shop", user_id: int):
+    from bot.database.methods.read import get_item_info_by_id
+    item = await get_item_info_by_id(item_id)
+    if not item:
+        if isinstance(event, CallbackQuery):
+            await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back(back_data))
+        else:
+            await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back(back_data))
+        return
+        
+    await state.update_data(item_quantity=1, keypad_value='0', item_id=item_id, csrf_item=item['name'], item_back_data=back_data)
+    await _render_item_page(event, state, item['name'], back_data=back_data, user_id=user_id)
+
+
+@router.callback_query(F.data.startswith("direct_item:"))
+async def direct_item_handler(call: CallbackQuery, state: FSMContext):
+    item_id = int(call.data.split(':')[1])
+    await answer_callback_safe(call)
+    await _render_item_page_by_id(call, state, item_id, back_data='menu', user_id=call.from_user.id)

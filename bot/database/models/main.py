@@ -183,7 +183,8 @@ class Categories(Database.BASE):
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
     
     items = relationship("Goods", back_populates="category", lazy='raise')
-    subcategories = relationship("Categories", backref=backref('parent', remote_side=[id]), lazy='raise')
+    parent = relationship("Categories", remote_side=[id], back_populates="subcategories")
+    subcategories = relationship("Categories", back_populates="parent", lazy='raise')
 
     def __init__(self, name: str = None, **kw: Any):
         super().__init__(**kw)
@@ -450,6 +451,35 @@ class Reviews(Database.BASE):
 
     def __str__(self):
         return f"{self.item_name} ({self.rating}★)"
+
+
+class ProductRestockSubscription(Database.BASE):
+    __tablename__ = 'product_restock_subscriptions'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey('goods.id', ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="active", index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    notified_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    processing_started_at = Column(DateTime(timezone=True), nullable=True)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'item_id', name='uq_restock_sub_user_item'),
+        Index('ix_restock_sub_status', 'status'),
+        Index('ix_restock_sub_item_status', 'item_id', 'status'),
+    )
+
+    user = relationship("User", backref="restock_subscriptions", lazy='raise')
+    item = relationship("Goods", backref="restock_subscriptions", lazy='raise')
+
+    def __str__(self):
+        return f"Sub #{self.id} (User {self.user_id}, Item {self.item_id})"
 
 
 async def register_models():

@@ -27,7 +27,9 @@ from bot.database.main import Database as _Database
 # Global variables for components
 recovery_manager = None
 cleanup_manager = None
+restock_dispatcher = None
 admin_server = None
+admin_server_task = None
 cache_scheduler = None
 webhook_active = False
 
@@ -116,6 +118,12 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     cleanup_manager = CleanupManager()
     await cleanup_manager.start()
 
+    # Start the restock dispatcher
+    from bot.misc.services.restock_dispatcher import RestockDispatcher
+    global restock_dispatcher
+    restock_dispatcher = RestockDispatcher(bot)
+    await restock_dispatcher.start()
+
     # Start the admin web server
     import uvicorn
     from bot.web import create_admin_app
@@ -128,7 +136,14 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
         log_level="warning",
     )
     admin_server = uvicorn.Server(config)
-    asyncio.create_task(admin_server.serve())
+    
+    async def run_admin_server():
+        try:
+            await admin_server.serve()
+        except asyncio.CancelledError:
+            pass
+            
+    admin_server_task = asyncio.create_task(run_admin_server())
 
     from aiogram.types import BotCommand
     commands = [
@@ -145,7 +160,7 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
 
 async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     """Initialize bot shutdown"""
-    global recovery_manager, cleanup_manager, admin_server, webhook_active
+    global recovery_manager, cleanup_manager, admin_server, webhook_active, admin_server_task
 
     logging.info("Starting shutdown...")
 
@@ -167,6 +182,10 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     if cleanup_manager:
         await cleanup_manager.stop()
 
+    # Restock Dispatcher Stop
+    if restock_dispatcher:
+        await restock_dispatcher.stop()
+
     # Delete webhook if it was active
     if webhook_active:
         try:
@@ -177,6 +196,13 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     # Admin server stop
     if admin_server:
         admin_server.should_exit = True
+        admin_server.force_exit = True
+        if admin_server_task:
+            try:
+                import asyncio
+                await asyncio.wait_for(admin_server_task, timeout=2.0)
+            except Exception:
+                pass
 
     # Close CryptoPay shared HTTP session
     from bot.misc.services.payment import CryptoPayAPI
@@ -236,7 +262,7 @@ async def start_bot() -> None:
     logging.getLogger("aiogram.event").setLevel(logging.WARNING)
     logging.getLogger("aiogram.middlewares").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
-
+    
     # Checking critical environment variables
     if not EnvKeys.TOKEN:
         logging.critical("Bot token not set! Please set TOKEN environment variable.")

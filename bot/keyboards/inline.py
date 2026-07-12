@@ -222,6 +222,7 @@ def item_info(
         review_count: int = 0, has_purchased: bool = False,
         applied_promo: str = None, reviews_enabled: bool = True,
         quantity: int = 1, stock: int = -1, item_id: int = None,
+        has_active_restock_sub: bool = False,
 ) -> InlineKeyboardMarkup:
     """
     Product card for quantity selection.
@@ -231,6 +232,10 @@ def item_info(
     if stock == 0:
         # Out of stock layout
         kb.row(InlineKeyboardButton(text="🔄 Check Availability", callback_data=f"refresh:item:{item_id}"))
+        if has_active_restock_sub:
+            kb.row(InlineKeyboardButton(text=localize("btn.cancel_restock", default="🔕 Cancel Restock Alert"), callback_data=f"restock:cancel:{item_id}"))
+        else:
+            kb.row(InlineKeyboardButton(text=localize("btn.notify_restock", default="🔔 Notify Me When Available"), callback_data=f"restock:subscribe:{item_id}"))
     else:
         # Quick Quantity buttons
         is_infinity = stock == -1

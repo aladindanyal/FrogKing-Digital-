@@ -59,7 +59,7 @@ from bot.database.models.main import (
     User, Role, Categories, Goods, ItemValues,
     BoughtGoods, Operations, Payments, ReferralEarnings,
     AuditLog, PromoCodes, CartItems, Reviews, StoreSettings,
-    MainMenuButtonSettings,
+    MainMenuButtonSettings, ProductRestockSubscription,
 )
 from bot.misc.metrics import get_metrics
 from bot.misc.caching import get_cache_manager
@@ -404,6 +404,27 @@ class ReviewsAdmin(AuditModelView, model=Reviews):
     icon = "fa-solid fa-star"
 
 
+class ProductRestockSubscriptionAdmin(ModelView, model=ProductRestockSubscription):
+    column_list = [
+        ProductRestockSubscription.id, ProductRestockSubscription.item_id,
+        ProductRestockSubscription.user_id, ProductRestockSubscription.status,
+        ProductRestockSubscription.attempts, ProductRestockSubscription.created_at,
+        ProductRestockSubscription.updated_at, ProductRestockSubscription.notified_at,
+        ProductRestockSubscription.cancelled_at
+    ]
+    column_searchable_list = [ProductRestockSubscription.item_id]
+    column_sortable_list = [ProductRestockSubscription.id, ProductRestockSubscription.created_at]
+    
+    # Filterable list
+    column_details_list = column_list
+    can_create = False
+    can_edit = False
+    can_delete = False
+    name = "Restock Alert"
+    name_plural = "Restock Alerts"
+    icon = "fa-solid fa-bell"
+
+
 # Health & Metrics Endpoints
 async def health_check(request: Request) -> JSONResponse:
     health_status = {
@@ -489,6 +510,7 @@ def create_admin_app() -> Starlette:
     admin.add_view(CartItemsAdmin)
     admin.add_view(StoreSettingsAdmin)
     admin.add_view(MainMenuButtonSettingsAdmin)
+    admin.add_view(ProductRestockSubscriptionAdmin)
     if EnvKeys.REVIEWS_ENABLED == "1":
         admin.add_view(ReviewsAdmin)
 

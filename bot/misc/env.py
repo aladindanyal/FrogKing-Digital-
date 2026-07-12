@@ -82,6 +82,15 @@ class EnvKeys(ABC):
     AUDIT_RETENTION_DAYS: Final = int(_get_optional("AUDIT_RETENTION_DAYS", "90"))
     PAYMENTS_RETENTION_DAYS: Final = int(_get_optional("PAYMENTS_RETENTION_DAYS", "90"))
 
+    # Restock Alerts
+    RESTOCK_POLL_INTERVAL: Final = int(_get_optional("RESTOCK_POLL_INTERVAL", "30"))
+    RESTOCK_BATCH_SIZE: Final = int(_get_optional("RESTOCK_BATCH_SIZE", "50"))
+    RESTOCK_MAX_ATTEMPTS: Final = int(_get_optional("RESTOCK_MAX_ATTEMPTS", "5"))
+    RESTOCK_STALE_TIMEOUT: Final = int(_get_optional("RESTOCK_STALE_TIMEOUT", "300"))
+    RESTOCK_MAX_CONCURRENT_SENDS: Final = int(_get_optional("RESTOCK_MAX_CONCURRENT_SENDS", "5"))
+    RESTOCK_MAX_MESSAGES_PER_SECOND: Final = int(_get_optional("RESTOCK_MAX_MESSAGES_PER_SECOND", "20"))
+    RESTOCK_JITTER_MAX: Final = int(_get_optional("RESTOCK_JITTER_MAX", "3"))
+
     DATABASE_URL: Final = f"postgresql+asyncpg://{POSTGRES_USER}:{quote_plus(POSTGRES_PASSWORD)}@{POSTGRES_HOST}:{DB_PORT}/{POSTGRES_DB}"
 
     # Startup validation

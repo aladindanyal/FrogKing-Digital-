@@ -193,6 +193,13 @@ async def get_item_info(item_name: str) -> dict | None:
         obj = result.scalars().first()
         return _obj_to_dict(obj, Goods) if obj else None
 
+async def get_item_info_by_id(item_id: int) -> dict | None:
+    """Return item (position) row as dict by id, or None."""
+    async with Database().session() as s:
+        result = await s.execute(select(Goods).where(Goods.id == item_id))
+        obj = result.scalars().first()
+        return _obj_to_dict(obj, Goods) if obj else None
+
 
 async def get_goods_info(item_id: int) -> dict | None:
     """Return item_value row as dict by id, including item_name from Goods."""

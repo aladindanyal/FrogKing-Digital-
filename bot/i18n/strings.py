@@ -490,6 +490,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "errors.channel.telegram_not_found": "Я не могу писать в канал. Добавьте меня админом канала для заливов @{channel} с правом публиковать сообщения.",
         "errors.channel.telegram_forbidden_error": "Канал не найден. Проверьте username канала для заливов @{channel}.",
         "errors.channel.telegram_bad_request": "Не удалось отправить в канал для заливов: {e}",
+        
+        # === Restock Subscriptions ===
+        "shop.restock.available_now": "Этот товар сейчас в наличии.",
+        "shop.restock.subscribed": "Вы получите уведомление, когда товар снова появится в наличии.",
+        "shop.restock.missing": "Товар больше не существует.",
+        "shop.restock.error": "Не удалось обновить уведомление в данный момент.",
+        "shop.restock.cancelled": "Уведомление о наличии отменено.",
+        "btn.cancel_restock": "🔕 Отменить уведомление",
+        "btn.notify_restock": "🔔 Сообщить о поступлении",
+        "restock_notification_text": "🎉 <b>Снова в наличии!</b>\n\n<b>{item_name}</b> снова доступен.\n\nНажмите ниже, чтобы проверить наличие и продолжить покупку.",
+        "btn.view_product": "🛒 Смотреть товар",
     },
 
     "en": {
@@ -982,5 +993,28 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "errors.channel.telegram_forbidden_error": "Channel not found. Check the channel username for uploads @{channel}.",
         "errors.channel.telegram_bad_request": "Failed to send to the channel for uploads: {e}",
         "errors.general_error": "❌ Error: {e}",
+        
+        # === Restock Subscriptions ===
+        "shop.restock.available_now": "This product is available now.",
+        "shop.restock.subscribed": "You’ll be notified when this product is available again.",
+        "shop.restock.missing": "Product no longer exists.",
+        "shop.restock.error": "Unable to update the alert right now.",
+        "shop.restock.cancelled": "Restock alert cancelled.",
+        "btn.cancel_restock": "🔕 Cancel Restock Alert",
+        "btn.notify_restock": "🔔 Notify Me When Available",
+        "restock_notification_text": "🎉 <b>Back in stock!</b>\n\n<b>{item_name}</b> is available again.\n\nTap below to check the latest stock and continue your purchase.",
+        "btn.view_product": "🛒 View Product",
     },
+    "ar": {
+        # === Restock Subscriptions ===
+        "shop.restock.available_now": "هذا المنتج متاح الآن.",
+        "shop.restock.subscribed": "سيتم إعلامك عندما يتوفر هذا المنتج مرة أخرى.",
+        "shop.restock.missing": "المنتج لم يعد موجودا.",
+        "shop.restock.error": "غير قادر على تحديث التنبيه في الوقت الحالي.",
+        "shop.restock.cancelled": "تم إلغاء تنبيه إعادة التوفر.",
+        "btn.cancel_restock": "🔕 إلغاء تنبيه إعادة التوفر",
+        "btn.notify_restock": "🔔 أعلمني عندما يتوفر",
+        "restock_notification_text": "🎉 <b>المنتج متوفر من جديد!</b>\n\nعاد المنتج <b>{item_name}</b> إلى المخزون.\n\nاضغط بالأسفل للتحقق من الكمية وإكمال عملية الشراء.",
+        "btn.view_product": "🛒 عرض المنتج",
+    }
 }
