@@ -62,6 +62,7 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
             'shop_view': (60, 60),  # 60 times per minute
             'buy_item': (5, 60),  # 5 purchases per minute
             'top_up': (5, 300),  # 5 top-ups in 5 minutes
+            'refresh': (1, 2),  # 1 time per 2 seconds
         }
     )
     global rate_limit_middleware

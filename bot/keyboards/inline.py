@@ -176,6 +176,7 @@ async def lazy_paginated_keyboard(
         nav_cb_prefix: str = "",
         back_text: str | None = None,
         row_width: int = 1,
+        refresh_cb: str | None = None,
 ) -> InlineKeyboardMarkup:
     """
     Lazy pagination keyboard with data loading on demand
@@ -199,6 +200,9 @@ async def lazy_paginated_keyboard(
         if page < total_pages - 1:
             nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"{nav_cb_prefix}{page + 1}"))
         kb.row(*nav_buttons)
+
+    if refresh_cb:
+        kb.row(InlineKeyboardButton(text="🔄 Refresh Stock", callback_data=refresh_cb))
 
     if back_cb and home_cb:
         kb.row(
@@ -226,7 +230,7 @@ def item_info(
 
     if stock == 0:
         # Out of stock layout
-        pass # No quantity or buy buttons
+        kb.row(InlineKeyboardButton(text="🔄 Check Availability", callback_data=f"refresh:item:{item_id}"))
     else:
         # Quick Quantity buttons
         is_infinity = stock == -1
@@ -244,6 +248,7 @@ def item_info(
         # Custom Amount & Continue
         kb.row(InlineKeyboardButton(text="✏️ Custom Quantity", callback_data=f"qty:keypad:{item_id}"))
         kb.row(InlineKeyboardButton(text="🛒 Continue", callback_data=f"checkout:{item_id}"))
+        kb.row(InlineKeyboardButton(text="🔄 Refresh Stock", callback_data=f"refresh:item:{item_id}"))
 
     kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data=back_data),
            InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu"))

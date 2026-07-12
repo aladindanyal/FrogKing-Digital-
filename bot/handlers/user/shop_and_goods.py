@@ -122,6 +122,8 @@ from bot.database.methods.lazy_queries import check_category_has_subcategories, 
 @router.callback_query(F.data == "shop")
 async def shop_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    from bot.handlers.user.main import delete_main_menu_hero_safe
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     """
     Show list of shop top-level categories.
     """
@@ -634,6 +636,8 @@ async def remove_promo_handler(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "redeem_promo")
 async def redeem_promo_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    from bot.handlers.user.main import delete_main_menu_hero_safe
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     await safe_edit_or_send(call, localize("promo.enter_redeem_code"), reply_markup=back("profile"))
     await state.set_state(PromoFSM.waiting_redeem_code)
 
@@ -887,6 +891,52 @@ async def bought_item_info_callback_handler(call: CallbackQuery):
         localize("purchases.item.value", value=item["value"]),
     ])
     await safe_edit_or_send(call, text, parse_mode='HTML', reply_markup=back(back_data))
+
+
+# --- Stock Refresh Handlers ---
+
+@router.callback_query(F.data.startswith('refresh:goods:'))
+async def refresh_goods_handler(call: CallbackQuery, state: FSMContext):
+    parts = call.data.split(':')
+    category_id = int(parts[2])
+    page = int(parts[3])
+    
+    await _render_goods_page(call, state, category_id, page)
+
+@router.callback_query(F.data.startswith('refresh:item:'))
+async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+        
+    from bot.database.methods.read import invalidate_item_cache, select_item_values_amount, check_value
+    await invalidate_item_cache(item_name)
+    
+    quantity = await select_item_values_amount(item_name)
+    has_infinite = await check_value(item_name)
+    stock = -1 if has_infinite else quantity
+    
+    current_quantity = data.get('item_quantity', 1)
+    
+    alert_text = None
+    if stock == 0:
+        await state.update_data(item_quantity=1, keypad_value='0')
+        if current_quantity > 0:
+            alert_text = "Stock changed. The item is now out of stock."
+    elif stock != -1 and current_quantity > stock:
+        await state.update_data(item_quantity=stock, keypad_value=str(stock))
+        alert_text = f"Stock changed. Selected quantity was adjusted to {stock}."
+        
+    if alert_text:
+        await answer_callback_safe(call, alert_text, show_alert=True)
+    else:
+        await answer_callback_safe(call)
+        
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
 
 # --- Post-Purchase Action Panel Handlers ---

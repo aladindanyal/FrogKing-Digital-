@@ -23,6 +23,8 @@ async def console_callback_handler(call: CallbackQuery, state: FSMContext):
     """
     Admin menu (only for admins and above).
     """
+    from bot.handlers.user.main import delete_main_menu_hero_safe
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     user_id = call.from_user.id
     role = await check_role_cached(user_id)
     if Permission.has_any_admin_perm(role):
