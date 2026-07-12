@@ -889,6 +889,41 @@ async def bought_item_info_callback_handler(call: CallbackQuery):
     await safe_edit_or_send(call, text, parse_mode='HTML', reply_markup=back(back_data))
 
 
+# --- Post-Purchase Action Panel Handlers ---
+
+@router.callback_query(F.data.startswith("buy_again:"))
+async def buy_again_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[1]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+        
+    await answer_callback_safe(call)
+    await state.update_data(item_quantity=1, keypad_value='0')
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+@router.callback_query(F.data.startswith("support_order:"))
+async def support_order_handler(call: CallbackQuery):
+    unique_id = call.data.split(':')[1]
+    helper = EnvKeys.HELPER_ID
+    if helper:
+        text = (
+            f"🆘 <b>Support for Order:</b> <code>{unique_id}</code>\n\n"
+            f"Please tap the order reference above to copy it, then forward it to our support team using the button below."
+        )
+        from bot.keyboards.inline import simple_buttons
+        markup = simple_buttons([
+            ("Contact Support", f"tg://user?id={helper}"),
+            ("⬅️ Home", "back_to_menu")
+        ])
+        await safe_edit_or_send(call, text, reply_markup=markup, parse_mode='HTML')
+    else:
+        await answer_callback_safe(call, localize("support.not_set", default="Support not configured"), show_alert=True)
+
+
 
 
 

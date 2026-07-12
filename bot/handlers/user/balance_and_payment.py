@@ -506,58 +506,74 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             })
             metrics.track_conversion("purchase_funnel", "purchase", call.from_user.id)
 
-        delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])
-        if purchase_request.quantity > 1:
-            formatted_values = []
-            for i, val in enumerate(delivered_values, 1):
-                formatted_values.append(f"{i}) {sanitize_html(val)}")
-            safe_value = "\n".join(formatted_values)
-        else:
-            safe_value = sanitize_html(delivered_values[0] if delivered_values else purchase_data.get('value', ''))
+        try:
+            await call.message.delete()
+        except TelegramBadRequest:
+            pass
 
-        username = call.from_user.username or call.from_user.first_name
-
-        from bot.keyboards.inline import simple_buttons
-        buttons = []
-
-        bought_id = purchase_data.get('bought_id')
-        if isinstance(bought_id, list):
-            bought_id = bought_id[0] if bought_id else 0
-
-        buttons.append((f"📦 {purchase_data['item_name']}", f"bought-item:{bought_id}:back_to_item"))
-        buttons.append((localize("btn.back"), "back_to_item"))
-
-        # In strings.py, shop.purchase.receipt has "💲 Итого: {price} {currency}" and "💰 Цена: {price} {currency}".
-        # Since we pass `price=total_price` to `localize`, both are showing total_price right now.
-        # Let's fix that text properly.
         unit_price = (Decimal(str(purchase_data['price'])) / purchase_request.quantity).quantize(Decimal("0.01"))
+        
+        if 'discount' in purchase_data and 'discount' in purchase_data['discount']:
+            discount_per_unit = Decimal(str(purchase_data['discount']['discount']))
+            unit_price = Decimal(str(purchase_data['discount']['original_price'])).quantize(Decimal("0.01"))
+            total_discount = (discount_per_unit * purchase_request.quantity).quantize(Decimal("0.01"))
+        else:
+            total_discount = Decimal("0.00")
+            
+        total_paid = Decimal(str(purchase_data['price']))
+        
+        from datetime import datetime
+        dt = datetime.fromisoformat(purchase_data['bought_datetime'])
+        purchased_time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
-        receipt_text = localize(
-            'shop.purchase.receipt',
-            item_name=purchase_data['item_name'],
-            price=purchase_data['price'],
-            unique_id=purchase_data['unique_id'],
-            datetime=purchase_data['bought_datetime'],
-            username=username,
-            user_id=call.from_user.id,
-            value=safe_value,
-            currency=EnvKeys.PAY_CURRENCY,
+        receipt_header = (
+            f"✅ <b>Order Completed</b>\n\n"
+            f"🧾 <b>Order Reference:</b> <code>{purchase_data['unique_id']}</code>\n"
+            f"📦 <b>Product:</b> {sanitize_html(purchase_request.item_name)}\n"
+            f"🔢 <b>Quantity:</b> {purchase_request.quantity}\n"
+            f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
+        )
+        if total_discount > 0:
+            receipt_header += f"🏷 <b>Discount:</b> {total_discount} {EnvKeys.PAY_CURRENCY}\n"
+            
+        receipt_header += (
+            f"💰 <b>Total Paid:</b> {total_paid} {EnvKeys.PAY_CURRENCY}\n"
+            f"🕒 <b>Purchased:</b> {purchased_time}\n\n"
         )
 
+        delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])
+        messages_to_send = []
+        current_msg = receipt_header + "🔑 <b>Delivered Value:</b>\n<code>\n"
+        
         if purchase_request.quantity > 1:
-            receipt_text = receipt_text.replace("1 шт.", f"{purchase_request.quantity} pcs")
-            receipt_text = receipt_text.replace("Qty: 1", f"Qty: {purchase_request.quantity}")
-            receipt_text = receipt_text.replace(f"💰 Цена: {purchase_data['price']}", f"💰 Цена: {unit_price}")
-            receipt_text = receipt_text.replace(f"💰 Price: {purchase_data['price']}", f"💰 Price: {unit_price}")
+            for i, val in enumerate(delivered_values, 1):
+                val_str = f"{i}) {sanitize_html(val)}\n"
+                if len(current_msg) + len(val_str) + 100 > 4000:
+                    current_msg += "</code>"
+                    messages_to_send.append(current_msg)
+                    current_msg = f"🧾 <b>Order Reference:</b> {purchase_data['unique_id']} (Part {(len(messages_to_send) + 1)})\n\n🔑 <b>Delivered Value (Continued):</b>\n<code>\n{val_str}"
+                else:
+                    current_msg += val_str
         else:
-            receipt_text = receipt_text.replace("1 шт.", "1 pc")
+            safe_value = sanitize_html(delivered_values[0] if delivered_values else purchase_data.get('value', ''))
+            current_msg += f"{safe_value}\n"
+            
+        current_msg += "</code>\n\n⚠️ Keep this message for future reference and support."
+        messages_to_send.append(current_msg)
+        
+        for msg in messages_to_send:
+            await call.message.answer(msg, parse_mode='HTML')
 
-        receipt_text = receipt_text.replace("📦 Кол-во:", "📦 Qty:")
-
-        await safe_edit_or_send(call,
-            receipt_text,
-            parse_mode='HTML',
-            reply_markup=simple_buttons(buttons),
+        from bot.keyboards.inline import simple_buttons
+        action_buttons = [
+            ("🔁 Buy Again", f"buy_again:{item_id_str}"),
+            ("🆘 Support for This Order", f"support_order:{purchase_data['unique_id']}"),
+            ("🏠 Home", "back_to_menu")
+        ]
+        
+        await call.message.answer(
+            "What would you like to do next?",
+            reply_markup=simple_buttons(action_buttons)
         )
 
         # Secure logging
