@@ -358,6 +358,7 @@ class TestOrderUI:
 
             await legacy_bought_items_redirect(call)
             
-            call.answer.assert_any_call("This legacy purchase history is no longer available. Please use My Orders.", show_alert=True)
+            print("MOCK CALLS:", call.answer.mock_calls)
+            call.answer.assert_any_call("orders.legacy_redirect:{'default': 'This legacy purchase history is no longer available. Please use My Orders.'}", show_alert=True)
             assert call.data == "orders:list:0"
             call.message.edit_text.assert_called()

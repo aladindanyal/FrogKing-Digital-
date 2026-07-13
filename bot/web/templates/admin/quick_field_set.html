@@ -1,0 +1,199 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Quick Field Set</h3>
+    </div>
+    <div class="card-body border-bottom py-3">
+      <form action="{{ url_for('admin:quick_field_set_post') }}" method="POST" id="quick-field-set-form">
+        <div class="row">
+          {% if error %}
+          <div class="alert alert-danger" role="alert">{{ error }}</div>
+          {% endif %}
+          {% if success_messages %}
+          <div class="alert alert-success" role="alert">
+            {% for msg in success_messages %}
+            <div>{{ msg }}</div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <fieldset class="form-fieldset">
+          
+          <div class="mb-3 form-group row">
+            <label class="form-label col-sm-2 col-form-label">Product</label>
+            <div class="col-sm-10">
+              <select name="product_id" id="product_id" class="form-control" required>
+                <option value="">Select a manual product...</option>
+                {% for product in products %}
+                <option value="{{ product.id }}">{{ product.name }} (ID: {{ product.id }})</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3 form-group row">
+            <label class="form-label col-sm-2 col-form-label">Field Set Template</label>
+            <div class="col-sm-10">
+              <select name="template" id="template" class="form-control" required>
+                <option value="Email Only">Email Only</option>
+                <option value="Email + Password">Email + Password</option>
+                <option value="Username + Password">Username + Password</option>
+                <option value="Account URL">Account URL</option>
+                <option value="Phone Number">Phone Number</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3 form-group row">
+            <label class="form-label col-sm-2 col-form-label">Scope</label>
+            <div class="col-sm-10">
+              <select name="scope" id="scope" class="form-control" required>
+                <option value="per_unit">Per Unit (Ask once for every purchased unit)</option>
+                <option value="per_order">Per Order (Ask once for the entire order)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3 form-group row">
+            <label class="form-label col-sm-2 col-form-label">Duplicate Handling</label>
+            <div class="col-sm-10">
+              <select name="duplicate_handling" id="duplicate_handling" class="form-control" required>
+                <option value="strict">Strict (Fail if any field exists)</option>
+                <option value="missing_only">Create Missing Fields Only</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3 form-group row">
+            <label class="form-label col-sm-2 col-form-label">Starting Sort Order</label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <input type="number" name="sort_order" id="sort_order" class="form-control" min="0" value="0" required>
+                <button class="btn btn-outline-secondary" type="button" id="refresh_sort_order">Fetch Next</button>
+              </div>
+              <small class="form-text text-muted">The starting sort order for the new fields.</small>
+            </div>
+          </div>
+
+          <div class="mb-3 form-group row">
+            <label class="form-label col-sm-2 col-form-label">Preview</label>
+            <div class="col-sm-10">
+              <div class="card">
+                <div class="card-body" id="preview-container">
+                  <p class="text-muted mb-0">Select a template to view the fields that will be created.</p>
+                </div>
+                <div class="card-footer bg-light">
+                  <small class="text-danger">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Security notice: Never request OTP codes, recovery codes, payment-card data or temporary verification codes.
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </fieldset>
+        <div class="row">
+          <div class="col-md-2">
+            <a href="{{ url_for('admin:list', identity='productcustomerfield') }}" class="btn">
+              Cancel
+            </a>
+          </div>
+          <div class="col-md-6">
+            <input type="submit" value="Create Fields" class="btn btn-primary">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Field templates injected from backend for preview only. 
+  // MUST NOT BE TRUSTED OR SENT BACK. Real templates are loaded server-side.
+  const TEMPLATES = {{ templates_json | safe }};
+  
+  const productSelect = document.getElementById('product_id');
+  const templateSelect = document.getElementById('template');
+  const scopeSelect = document.getElementById('scope');
+  const sortOrderInput = document.getElementById('sort_order');
+  const refreshSortOrderBtn = document.getElementById('refresh_sort_order');
+  const previewContainer = document.getElementById('preview-container');
+
+  function updatePreview() {
+    const templateName = templateSelect.value;
+    const scope = scopeSelect.options[scopeSelect.selectedIndex].text.split(' ')[0] + ' ' + scopeSelect.options[scopeSelect.selectedIndex].text.split(' ')[1];
+    const fields = TEMPLATES[templateName];
+    
+    if (!fields) {
+      previewContainer.textContent = "No template selected.";
+      return;
+    }
+
+    previewContainer.innerHTML = '';
+    
+    fields.forEach((field, index) => {
+      const div = document.createElement('div');
+      div.className = 'mb-3 pb-2 border-bottom';
+      
+      const title = document.createElement('strong');
+      title.textContent = field.label_i18n.en;
+      div.appendChild(title);
+      
+      const ul = document.createElement('ul');
+      ul.className = 'list-unstyled ms-3 mt-1 mb-0 small text-muted';
+      
+      const liKey = document.createElement('li');
+      liKey.textContent = `Key: ${field.field_key}`;
+      
+      const liType = document.createElement('li');
+      liType.textContent = `Type: ${field.field_type}`;
+      
+      const liScope = document.createElement('li');
+      liScope.textContent = `Scope: ${scope}`;
+      
+      const liReq = document.createElement('li');
+      liReq.textContent = `Required: ${field.required ? 'Yes' : 'No'}`;
+      
+      const liSens = document.createElement('li');
+      liSens.textContent = `Sensitive: ${field.is_sensitive ? 'Yes' : 'No'}`;
+      
+      ul.appendChild(liKey);
+      ul.appendChild(liType);
+      ul.appendChild(liScope);
+      ul.appendChild(liReq);
+      ul.appendChild(liSens);
+      
+      div.appendChild(ul);
+      previewContainer.appendChild(div);
+    });
+  }
+
+  async function fetchSortOrder() {
+    const productId = productSelect.value;
+    if (!productId) return;
+    
+    refreshSortOrderBtn.disabled = true;
+    try {
+      const response = await fetch(`{{ url_for('admin:quick_field_set_next_sort_order') }}?product_id=${productId}`);
+      if (response.ok) {
+        const data = await response.json();
+        sortOrderInput.value = data.next_sort_order;
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      refreshSortOrderBtn.disabled = false;
+    }
+  }
+
+  productSelect.addEventListener('change', fetchSortOrder);
+  templateSelect.addEventListener('change', updatePreview);
+  scopeSelect.addEventListener('change', updatePreview);
+  refreshSortOrderBtn.addEventListener('click', fetchSortOrder);
+  
+  // Initial preview render
+  updatePreview();
+</script>
+{% endblock %}

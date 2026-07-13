@@ -533,16 +533,30 @@ async def qty_keypad_back_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("checkout:"))
 async def checkout_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
     item_id_str = call.data.split(':')[1]
 
     data = await state.get_data()
     item_name = data.get('csrf_item')
 
     if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call)
         await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
         return
 
+    from bot.database.methods import get_item_info_cached
+    item_info_data = await get_item_info_cached(item_name)
+    if not item_info_data:
+        await answer_callback_safe(call)
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+
+    if item_info_data.get("fulfillment_mode") == "manual":
+        # Stage 4C-3A Readiness Guard
+        msg = localize("shop.item.manual_unavailable_guard", default="This product requires manual fulfillment and is temporarily unavailable while configuration is being completed.")
+        await answer_callback_safe(call, msg, show_alert=True)
+        return
+
+    await answer_callback_safe(call)
     await _render_checkout_page(call, state, item_name, item_id_str, user_id=call.from_user.id)
 
 async def _render_checkout_page(call: CallbackQuery, state: FSMContext, item_name: str, item_id_str: str, user_id: int):
@@ -818,7 +832,7 @@ async def view_reviews_handler(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith('bought-item:'))
 @router.callback_query(F.data == "orders:legacy")
 async def legacy_bought_items_redirect(call: CallbackQuery):
-    from bot.misc.utils import localize
+    from bot.i18n import localize
     from bot.handlers.user.orders import orders_list_handler
     await call.answer(
         localize("orders.legacy_redirect", default="This legacy purchase history is no longer available. Please use My Orders."),

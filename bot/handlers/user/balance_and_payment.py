@@ -433,6 +433,18 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
             return
 
+        from bot.database.methods import get_item_info_cached
+        item_info_data = await get_item_info_cached(raw_item_name)
+        if not item_info_data:
+            await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+            return
+
+        if item_info_data.get("fulfillment_mode") == "manual":
+            # Stage 4C-3A Readiness Guard
+            msg = localize("shop.item.manual_unavailable_guard", default="This product requires manual fulfillment and is temporarily unavailable while configuration is being completed.")
+            await answer_callback_safe(call, msg, show_alert=True)
+            return
+
         metrics = get_metrics()
 
         current_qty = data.get('item_quantity', 1)

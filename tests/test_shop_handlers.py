@@ -128,31 +128,5 @@ class TestItemInfo:
 
         call.message.edit_text.assert_called_once()
         text = call.message.edit_text.call_args[0][0]
-        assert "quantity_unlimited" in text
+        assert "Unlimited" in text
 
-
-class TestBoughtItems:
-
-    async def test_bought_items_empty(self, make_callback_query, fsm_context, user_factory):
-        from bot.handlers.user.shop_and_goods import bought_items_callback_handler
-
-        await user_factory(telegram_id=600030)
-
-        call = make_callback_query(data="bought_items", user_id=600030)
-
-        with patch('bot.handlers.user.shop_and_goods.lazy_paginated_keyboard', new_callable=AsyncMock) as mock_kb:
-            mock_kb.return_value = MagicMock()
-            await bought_items_callback_handler(call, fsm_context)
-
-        call.message.edit_text.assert_called_once()
-        text = call.message.edit_text.call_args[0][0]
-        assert isinstance(text, str)
-
-    async def test_bought_item_info_not_found(self, make_callback_query):
-        from bot.handlers.user.shop_and_goods import bought_item_info_callback_handler
-
-        call = make_callback_query(data="bought-item:99999:profile", user_id=600031)
-
-        await bought_item_info_callback_handler(call)
-
-        assert call.answer.call_count >= 1

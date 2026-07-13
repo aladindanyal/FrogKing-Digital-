@@ -3,8 +3,9 @@ from typing import Any
 
 from sqlalchemy import (
     Column, Integer, String, BigInteger, ForeignKey, Text, Boolean,
-    DateTime, Numeric, Index, UniqueConstraint, CheckConstraint, func, select
+    DateTime, Numeric, Index, UniqueConstraint, CheckConstraint, func, select, JSON, text
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from bot.database.main import Database
 from sqlalchemy.orm import relationship, backref
 
@@ -202,8 +203,19 @@ class Goods(Database.BASE):
     price = Column(Numeric(12, 2), nullable=False)
     description = Column(Text, nullable=False)
     category_id = Column(Integer, ForeignKey('categories.id', ondelete="CASCADE"), nullable=False, index=True)
+    fulfillment_mode = Column(String(20), nullable=False, default="instant", server_default="instant")
+    fulfillment_eta_minutes = Column(Integer, nullable=True)
+    manual_instructions_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
+    customer_input_intro_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("fulfillment_mode IN ('instant', 'manual')", name='ck_goods_fulfillment_mode'),
+        CheckConstraint('fulfillment_eta_minutes IS NULL OR fulfillment_eta_minutes > 0', name='ck_goods_fulfillment_eta_positive'),
+    )
+
     category = relationship("Categories", back_populates="items", lazy='raise')
     values = relationship("ItemValues", back_populates="item", lazy='raise')
+    customer_fields = relationship("ProductCustomerField", back_populates="goods", cascade="all, delete-orphan", lazy='raise')
 
     def __init__(self, name: str = None, price=None, description: str = None, category_id: int = None, **kw: Any):
         super().__init__(**kw)
@@ -218,6 +230,42 @@ class Goods(Database.BASE):
 
     def __str__(self):
         return self.name or ""
+
+
+class ProductCustomerField(Database.BASE):
+    __tablename__ = 'product_customer_fields'
+    id = Column(Integer, primary_key=True)
+    goods_id = Column(Integer, ForeignKey('goods.id', ondelete="CASCADE"), nullable=False, index=True)
+    field_key = Column(String(64), nullable=False)
+    field_type = Column(String(20), nullable=False)
+    label_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=False)
+    placeholder_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
+    help_text_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
+    required = Column(Boolean, default=True, server_default=text("true"), nullable=False)
+    is_sensitive = Column(Boolean, default=False, server_default=text("false"), nullable=False)
+    scope = Column(String(20), default="per_order", server_default="per_order", nullable=False)
+    sort_order = Column(Integer, default=0, server_default=text("0"), nullable=False)
+    is_active = Column(Boolean, default=True, server_default=text("true"), nullable=False)
+    min_length = Column(Integer, nullable=True)
+    max_length = Column(Integer, nullable=True)
+    select_options_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('goods_id', 'field_key', name='uq_product_customer_field_key'),
+        CheckConstraint("field_type IN ('text', 'textarea', 'email', 'phone', 'username', 'url', 'select', 'secret')", name='ck_prod_cust_field_type'),
+        CheckConstraint("scope IN ('per_order', 'per_unit')", name='ck_prod_cust_field_scope'),
+        CheckConstraint('sort_order >= 0', name='ck_prod_cust_field_sort_pos'),
+        CheckConstraint('min_length IS NULL OR min_length >= 0', name='ck_prod_cust_field_min_len'),
+        CheckConstraint('max_length IS NULL OR max_length > 0', name='ck_prod_cust_field_max_len'),
+        Index('ix_prod_cust_field_goods_active_sort', 'goods_id', 'is_active', 'sort_order'),
+    )
+
+    goods = relationship("Goods", back_populates="customer_fields", lazy='raise')
+
+    def __str__(self):
+        return f"{self.goods_id}:{self.field_key}"
 
 
 class ItemValues(Database.BASE):

@@ -125,7 +125,7 @@ async def db_cleanup(setup_test_database):
     from bot.database.main import Database
     from bot.database.models.main import (
         ReferralEarnings, BoughtGoods, Operations, Payments,
-        ItemValues, Goods, Categories, User, Role
+        ItemValues, Goods, Categories, User, Role, ProductCustomerField
     )
 
     db = Database()
@@ -136,6 +136,7 @@ async def db_cleanup(setup_test_database):
         await s.execute(delete(Operations))
         await s.execute(delete(Payments))
         await s.execute(delete(ItemValues))
+        await s.execute(delete(ProductCustomerField))
         await s.execute(delete(Goods))
         await s.execute(delete(Categories))
         await s.execute(delete(User))

@@ -17,10 +17,9 @@ async def test_direct_item_handler_missing_id():
     
     with patch('bot.database.methods.read.get_item_info_by_id', new_callable=AsyncMock) as mock_get:
         mock_get.return_value = None
-        with patch('bot.handlers.user.shop_and_goods.safe_edit_or_send', new_callable=AsyncMock) as mock_edit:
-            await direct_item_handler(call, state)
-            mock_get.assert_called_once_with(999)
-            mock_edit.assert_called_once()
+        await direct_item_handler(call, state)
+        mock_get.assert_called_once_with(999)
+        call.message.answer.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_direct_item_handler_valid_id_and_special_names():
@@ -39,4 +38,4 @@ async def test_direct_item_handler_valid_id_and_special_names():
             await direct_item_handler(call, state)
             mock_get.assert_called_once_with(42)
             state.update_data.assert_called_with(item_quantity=1, keypad_value='0', item_id=42, csrf_item=special_name, item_back_data='menu')
-            mock_render.assert_called_once_with(call, state, special_name, back_data='menu', user_id=123)
+            mock_render.assert_called_once_with(call, state, special_name, back_data='menu', user_id=123, send_new=True)

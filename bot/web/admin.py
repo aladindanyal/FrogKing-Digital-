@@ -60,7 +60,7 @@ from bot.database.models.main import (
     BoughtGoods, Operations, Payments, ReferralEarnings,
     AuditLog, PromoCodes, CartItems, Reviews, StoreSettings,
     MainMenuButtonSettings, ProductRestockSubscription,
-    Order, OrderItem,
+    Order, OrderItem, ProductCustomerField
 )
 from bot.misc.metrics import get_metrics
 from bot.misc.caching import get_cache_manager
@@ -101,7 +101,9 @@ class AdminAuth(AuthenticationBackend):
         return True
 
     async def authenticate(self, request: Request) -> bool:
-        return request.session.get("authenticated", False)
+        auth_val = request.session.get("authenticated", False)
+        print("AUTHENTICATE CALLED! Returning:", auth_val)
+        return auth_val
 
 
 def _safe_model_repr(model: Any, max_len: int = 500) -> str:
@@ -277,13 +279,342 @@ class MainMenuButtonSettingsAdmin(AuditModelView, model=MainMenuButtonSettings):
     icon = "fa-solid fa-bars"
 
 
+from wtforms import Form, StringField, TextAreaField, SelectField, HiddenField
+import json
+
+class GoodsBaseForm(Form):
+    manual_instr_en = TextAreaField("Manual Instructions - English", render_kw={"class": "form-control"})
+    manual_instr_ar = TextAreaField("Manual Instructions - Arabic", render_kw={"class": "form-control"})
+    input_intro_en = TextAreaField("Customer Input Intro - English", render_kw={"class": "form-control"})
+    input_intro_ar = TextAreaField("Customer Input Intro - Arabic", render_kw={"class": "form-control"})
+    eta_preset = SelectField("Fulfillment ETA", choices=[
+        ("", "Not specified"),
+        ("60", "1 hour"),
+        ("180", "3 hours"),
+        ("360", "6 hours"),
+        ("720", "12 hours"),
+        ("1440", "24 hours"),
+        ("2880", "48 hours"),
+        ("custom", "Custom")
+    ], render_kw={"class": "form-select", "id": "eta_preset"})
+
+    def process(self, formdata=None, obj=None, data=None, **kwargs):
+        if obj and not formdata:
+            if obj.manual_instructions_i18n:
+                kwargs['manual_instr_en'] = obj.manual_instructions_i18n.get('en', '')
+                kwargs['manual_instr_ar'] = obj.manual_instructions_i18n.get('ar', '')
+            if obj.customer_input_intro_i18n:
+                kwargs['input_intro_en'] = obj.customer_input_intro_i18n.get('en', '')
+                kwargs['input_intro_ar'] = obj.customer_input_intro_i18n.get('ar', '')
+            if obj.fulfillment_eta_minutes is not None:
+                preset = str(obj.fulfillment_eta_minutes)
+                if preset in ["60", "180", "360", "720", "1440", "2880"]:
+                    kwargs['eta_preset'] = preset
+                else:
+                    kwargs['eta_preset'] = "custom"
+        super().process(formdata, obj, data, **kwargs)
+
 class GoodsAdmin(AuditModelView, model=Goods):
-    column_list = [Goods.id, Goods.name, Goods.price, Goods.description, Goods.category_id]
+    column_list = [Goods.id, Goods.name, Goods.price, Goods.category_id, Goods.fulfillment_mode]
     column_searchable_list = [Goods.name]
-    column_sortable_list = [Goods.id, Goods.name, Goods.price]
+    column_sortable_list = [Goods.id, Goods.name, Goods.price, Goods.fulfillment_mode]
+    form_columns = [
+        Goods.name, Goods.price, Goods.description, Goods.category,
+        Goods.fulfillment_mode, Goods.fulfillment_eta_minutes
+    ]
+    form_base_class = GoodsBaseForm
+    create_template = "admin/goods_create.html"
+    edit_template = "admin/goods_edit.html"
+    
     name = "Product"
     name_plural = "Products"
     icon = "fa-solid fa-box"
+
+    form_overrides = {
+        "fulfillment_mode": SelectField
+    }
+    form_args = {
+        "fulfillment_mode": {
+            "choices": [("instant", "Instant (Digital)"), ("manual", "Manual (Human)")]
+        }
+    }
+    
+    async def on_model_change(self, data, model, is_created, request):
+        existing_manual = dict(getattr(model, "manual_instructions_i18n", {}) or {})
+        en_instr = data.pop("manual_instr_en", None)
+        ar_instr = data.pop("manual_instr_ar", None)
+        
+        if en_instr:
+            existing_manual["en"] = en_instr
+        elif "en" in existing_manual and not en_instr:
+            del existing_manual["en"]
+            
+        if ar_instr:
+            existing_manual["ar"] = ar_instr
+        elif "ar" in existing_manual and not ar_instr:
+            del existing_manual["ar"]
+            
+        model.manual_instructions_i18n = existing_manual if existing_manual else None
+
+        existing_intro = dict(getattr(model, "customer_input_intro_i18n", {}) or {})
+        en_intro = data.pop("input_intro_en", None)
+        ar_intro = data.pop("input_intro_ar", None)
+        
+        if en_intro:
+            existing_intro["en"] = en_intro
+        elif "en" in existing_intro and not en_intro:
+            del existing_intro["en"]
+            
+        if ar_intro:
+            existing_intro["ar"] = ar_intro
+        elif "ar" in existing_intro and not ar_intro:
+            del existing_intro["ar"]
+            
+        model.customer_input_intro_i18n = existing_intro if existing_intro else None
+
+        preset = data.pop("eta_preset", None)
+        if preset and preset != "custom":
+            model.fulfillment_eta_minutes = int(preset)
+        elif not preset:
+            model.fulfillment_eta_minutes = None
+
+        if getattr(super(), "on_model_change", None):
+            await super().on_model_change(data, model, is_created, request)
+
+
+class CustomerFieldBaseForm(Form):
+    preset = SelectField("Preset", choices=[
+        ("", "Custom Field"),
+        ("email", "Email Activation"),
+        ("username", "Username Activation"),
+        ("url", "Account URL"),
+        ("phone", "Phone Number"),
+        ("secret", "Secret / Password")
+    ], render_kw={"class": "form-select", "id": "preset"})
+    
+    label_en = StringField("Label - English", render_kw={"class": "form-control"})
+    label_ar = StringField("Label - Arabic", render_kw={"class": "form-control"})
+    placeholder_en = StringField("Placeholder - English", render_kw={"class": "form-control"})
+    placeholder_ar = StringField("Placeholder - Arabic", render_kw={"class": "form-control"})
+    help_text_en = StringField("Help Text - English", render_kw={"class": "form-control"})
+    help_text_ar = StringField("Help Text - Arabic", render_kw={"class": "form-control"})
+    select_options_raw = HiddenField("Select Options JSON", default="[]", render_kw={"id": "select_options_raw"})
+
+    def process(self, formdata=None, obj=None, data=None, **kwargs):
+        if obj and not formdata:
+            if obj.label_i18n:
+                kwargs['label_en'] = obj.label_i18n.get('en', '')
+                kwargs['label_ar'] = obj.label_i18n.get('ar', '')
+            if obj.placeholder_i18n:
+                kwargs['placeholder_en'] = obj.placeholder_i18n.get('en', '')
+                kwargs['placeholder_ar'] = obj.placeholder_i18n.get('ar', '')
+            if obj.help_text_i18n:
+                kwargs['help_text_en'] = obj.help_text_i18n.get('en', '')
+                kwargs['help_text_ar'] = obj.help_text_i18n.get('ar', '')
+            if obj.select_options_i18n:
+                arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
+                kwargs['select_options_raw'] = json.dumps(arr)
+        
+        if not obj and not formdata:
+            if 'required' not in kwargs:
+                kwargs['required'] = True
+            if 'is_active' not in kwargs:
+                kwargs['is_active'] = True
+                
+        super().process(formdata, obj, data, **kwargs)
+        
+        if formdata:
+            preset = self.preset.data if hasattr(self, 'preset') else None
+            fk = self.field_key.data if hasattr(self, 'field_key') else None
+            if preset and not fk:
+                presets = {
+                    "email": "email",
+                    "username": "username",
+                    "url": "account_url",
+                    "phone": "phone",
+                    "secret": "password"
+                }
+                if preset in presets:
+                    self.field_key.data = presets[preset]
+                    if hasattr(self.field_key, 'raw_data'):
+                        self.field_key.raw_data = [presets[preset]]
+            if obj.label_i18n:
+                kwargs['label_en'] = obj.label_i18n.get('en', '')
+                kwargs['label_ar'] = obj.label_i18n.get('ar', '')
+            if obj.placeholder_i18n:
+                kwargs['placeholder_en'] = obj.placeholder_i18n.get('en', '')
+                kwargs['placeholder_ar'] = obj.placeholder_i18n.get('ar', '')
+            if obj.help_text_i18n:
+                kwargs['help_text_en'] = obj.help_text_i18n.get('en', '')
+                kwargs['help_text_ar'] = obj.help_text_i18n.get('ar', '')
+            if obj.select_options_i18n:
+                arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
+                kwargs['select_options_raw'] = json.dumps(arr)
+        
+        if not obj and not formdata:
+            if 'required' not in kwargs:
+                kwargs['required'] = True
+            if 'is_active' not in kwargs:
+                kwargs['is_active'] = True
+                
+        super().process(formdata, obj, data, **kwargs)
+        
+    def validate_select_options_raw(form, field):
+        if form.field_type.data != 'select':
+            return
+        
+        try:
+            options = json.loads(field.data)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON format for select options.")
+            
+        if not isinstance(options, list):
+            raise ValueError("Select options must be a list of objects.")
+            
+        if not options:
+            raise ValueError("Select fields require at least one valid option.")
+            
+        if len(options) > 100:
+            raise ValueError("Too many options.")
+            
+        seen_keys = set()
+        for opt in options:
+            if not isinstance(opt, dict):
+                raise ValueError("Each option must be an object.")
+            key = opt.get('key')
+            en = opt.get('en')
+            if not key or not isinstance(key, str) or len(key) > 64:
+                raise ValueError("Invalid or missing option key.")
+            if not key.isalnum() and not all(c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in key):
+                raise ValueError("Option key contains invalid characters.")
+            if key in seen_keys:
+                raise ValueError(f"Duplicate option key: {key}")
+            seen_keys.add(key)
+            if not en or not isinstance(en, str) or len(en) > 128:
+                raise ValueError("English label is required and must be under 128 characters.")
+            if 'ar' in opt and opt['ar'] and (not isinstance(opt['ar'], str) or len(opt['ar']) > 128):
+                raise ValueError("Arabic label must be a string under 128 characters.")
+
+
+class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
+    column_list = [
+        ProductCustomerField.id,
+        ProductCustomerField.goods,
+        ProductCustomerField.field_key,
+        ProductCustomerField.field_type,
+        ProductCustomerField.required,
+        ProductCustomerField.is_sensitive,
+        ProductCustomerField.scope,
+        ProductCustomerField.sort_order,
+        ProductCustomerField.is_active
+    ]
+    column_searchable_list = [ProductCustomerField.field_key]
+    column_sortable_list = [ProductCustomerField.id, ProductCustomerField.sort_order, ProductCustomerField.is_active]
+    form_columns = [
+        ProductCustomerField.goods,
+        ProductCustomerField.field_key,
+        ProductCustomerField.field_type,
+        ProductCustomerField.scope,
+        ProductCustomerField.required,
+        ProductCustomerField.is_sensitive,
+        ProductCustomerField.is_active,
+        ProductCustomerField.sort_order,
+        ProductCustomerField.min_length,
+        ProductCustomerField.max_length
+    ]
+    form_base_class = CustomerFieldBaseForm
+    create_template = "admin/customer_field_create.html"
+    edit_template = "admin/customer_field_edit.html"
+    
+    name = "Customer Field"
+    name_plural = "Customer Fields"
+    icon = "fa-solid fa-keyboard"
+    can_export = False
+    
+    form_overrides = {
+        "field_type": SelectField,
+        "scope": SelectField
+    }
+    form_args = {
+        "field_type": {
+            "choices": [
+                ("text", "Text (Single line)"),
+                ("textarea", "Text Area (Multi line)"),
+                ("email", "Email Address"),
+                ("phone", "Phone Number"),
+                ("username", "Username"),
+                ("url", "URL/Link"),
+                ("select", "Choice List"),
+                ("secret", "Secret/Password")
+            ]
+        },
+        "scope": {
+            "choices": [
+                ("per_order", "Per Order (Once)"),
+                ("per_unit", "Per Unit (Multiplier)")
+            ]
+        }
+    }
+
+    async def on_model_change(self, data, model, is_created, request):
+        data.pop("preset", None)
+        field_type = data.get("field_type")
+        
+        if field_type == "secret":
+            model.is_sensitive = True
+            
+        if field_type == "select":
+            raw_options = data.pop("select_options_raw", None)
+            if not raw_options or raw_options == "[]":
+                raise ValueError("Choice List fields require at least one option.")
+            
+            options_list = json.loads(raw_options)
+            if not options_list:
+                raise ValueError("Choice List fields require at least one option.")
+                
+            final_options = {}
+            for opt in options_list:
+                key = opt.get("key", "").strip()
+                en_label = opt.get("en", "").strip()
+                if not key or not en_label:
+                    raise ValueError("Each option must have a stable option key and an English label.")
+                translations = {"en": en_label}
+                if opt.get("ar", "").strip():
+                    translations["ar"] = opt.get("ar").strip()
+                final_options[key] = translations
+                
+            model.select_options_i18n = final_options
+        else:
+            model.select_options_i18n = None
+            data.pop("select_options_raw", None)
+
+        if is_created and model.sort_order is None and model.goods_id:
+            from sqlalchemy import select, func
+            async with Database().session() as session:
+                max_val = await session.scalar(
+                    select(func.max(ProductCustomerField.sort_order)).where(ProductCustomerField.goods_id == model.goods_id)
+                )
+            model.sort_order = (max_val or 0) + 1
+
+        def _update_i18n(attr_name, en_val, ar_val):
+            existing = dict(getattr(model, attr_name, {}) or {})
+            if en_val:
+                existing["en"] = en_val
+            elif "en" in existing and not en_val:
+                del existing["en"]
+            if ar_val:
+                existing["ar"] = ar_val
+            elif "ar" in existing and not ar_val:
+                del existing["ar"]
+            setattr(model, attr_name, existing if existing else None)
+
+        _update_i18n("label_i18n", data.pop("label_en", None), data.pop("label_ar", None))
+        _update_i18n("placeholder_i18n", data.pop("placeholder_en", None), data.pop("placeholder_ar", None))
+        _update_i18n("help_text_i18n", data.pop("help_text_en", None), data.pop("help_text_ar", None))
+
+        if getattr(super(), "on_model_change", None):
+            await super().on_model_change(data, model, is_created, request)
+
 
 
 class ItemValuesAdmin(AuditModelView, model=ItemValues):
@@ -517,12 +848,16 @@ def create_admin_app() -> Starlette:
         engine=Database().engine,
         authentication_backend=auth_backend,
         title="Telegram Shop Admin",
+        templates_dir="bot/web/templates",
     )
 
     admin.add_view(UserAdmin)
     admin.add_view(RoleAdmin)
     admin.add_view(CategoryAdmin)
     admin.add_view(GoodsAdmin)
+    admin.add_view(ProductCustomerFieldAdmin)
+    from bot.web.quick_field_set import QuickFieldSetView
+    admin.add_view(QuickFieldSetView)
     admin.add_view(ItemValuesAdmin)
     admin.add_view(BoughtGoodsAdmin)
     admin.add_view(OperationsAdmin)
