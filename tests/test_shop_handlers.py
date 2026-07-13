@@ -129,4 +129,3 @@ class TestItemInfo:
         call.message.edit_text.assert_called_once()
         text = call.message.edit_text.call_args[0][0]
         assert "Unlimited" in text
-

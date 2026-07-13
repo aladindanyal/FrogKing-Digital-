@@ -220,15 +220,15 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
     icon = "fa-solid fa-gear"
     can_create = False
     can_delete = False
-    
+
     from sqladmin.fields import FileField
     from starlette.datastructures import UploadFile
     import os
     import shutil
     import uuid
-    
+
     form_columns = [
-        StoreSettings.shop_root_title, 
+        StoreSettings.shop_root_title,
         StoreSettings.shop_root_description,
         StoreSettings.main_menu_title,
         StoreSettings.main_menu_description,
@@ -239,13 +239,13 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
         StoreSettings.subcategory_columns,
         StoreSettings.product_columns
     ]
-    
+
     form_overrides = {
         "root_category_columns": SelectField,
         "subcategory_columns": SelectField,
         "product_columns": SelectField,
     }
-    
+
     form_args = {
         "root_category_columns": {
             "choices": [(1, "1 — One button per row"), (2, "2 — Two buttons per row")],
@@ -325,7 +325,7 @@ class GoodsAdmin(AuditModelView, model=Goods):
     form_base_class = GoodsBaseForm
     create_template = "admin/goods_create.html"
     edit_template = "admin/goods_edit.html"
-    
+
     name = "Product"
     name_plural = "Products"
     icon = "fa-solid fa-box"
@@ -338,38 +338,38 @@ class GoodsAdmin(AuditModelView, model=Goods):
             "choices": [("instant", "Instant (Digital)"), ("manual", "Manual (Human)")]
         }
     }
-    
+
     async def on_model_change(self, data, model, is_created, request):
         existing_manual = dict(getattr(model, "manual_instructions_i18n", {}) or {})
         en_instr = data.pop("manual_instr_en", None)
         ar_instr = data.pop("manual_instr_ar", None)
-        
+
         if en_instr:
             existing_manual["en"] = en_instr
         elif "en" in existing_manual and not en_instr:
             del existing_manual["en"]
-            
+
         if ar_instr:
             existing_manual["ar"] = ar_instr
         elif "ar" in existing_manual and not ar_instr:
             del existing_manual["ar"]
-            
+
         model.manual_instructions_i18n = existing_manual if existing_manual else None
 
         existing_intro = dict(getattr(model, "customer_input_intro_i18n", {}) or {})
         en_intro = data.pop("input_intro_en", None)
         ar_intro = data.pop("input_intro_ar", None)
-        
+
         if en_intro:
             existing_intro["en"] = en_intro
         elif "en" in existing_intro and not en_intro:
             del existing_intro["en"]
-            
+
         if ar_intro:
             existing_intro["ar"] = ar_intro
         elif "ar" in existing_intro and not ar_intro:
             del existing_intro["ar"]
-            
+
         model.customer_input_intro_i18n = existing_intro if existing_intro else None
 
         preset = data.pop("eta_preset", None)
@@ -391,7 +391,7 @@ class CustomerFieldBaseForm(Form):
         ("phone", "Phone Number"),
         ("secret", "Secret / Password")
     ], render_kw={"class": "form-select", "id": "preset"})
-    
+
     label_en = StringField("Label - English", render_kw={"class": "form-control"})
     label_ar = StringField("Label - Arabic", render_kw={"class": "form-control"})
     placeholder_en = StringField("Placeholder - English", render_kw={"class": "form-control"})
@@ -414,15 +414,15 @@ class CustomerFieldBaseForm(Form):
             if obj.select_options_i18n:
                 arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
                 kwargs['select_options_raw'] = json.dumps(arr)
-        
+
         if not obj and not formdata:
             if 'required' not in kwargs:
                 kwargs['required'] = True
             if 'is_active' not in kwargs:
                 kwargs['is_active'] = True
-                
+
         super().process(formdata, obj, data, **kwargs)
-        
+
         if formdata:
             preset = self.preset.data if hasattr(self, 'preset') else None
             fk = self.field_key.data if hasattr(self, 'field_key') else None
@@ -450,33 +450,33 @@ class CustomerFieldBaseForm(Form):
             if obj.select_options_i18n:
                 arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
                 kwargs['select_options_raw'] = json.dumps(arr)
-        
+
         if not obj and not formdata:
             if 'required' not in kwargs:
                 kwargs['required'] = True
             if 'is_active' not in kwargs:
                 kwargs['is_active'] = True
-                
+
         super().process(formdata, obj, data, **kwargs)
-        
+
     def validate_select_options_raw(form, field):
         if form.field_type.data != 'select':
             return
-        
+
         try:
             options = json.loads(field.data)
         except json.JSONDecodeError:
             raise ValueError("Invalid JSON format for select options.")
-            
+
         if not isinstance(options, list):
             raise ValueError("Select options must be a list of objects.")
-            
+
         if not options:
             raise ValueError("Select fields require at least one valid option.")
-            
+
         if len(options) > 100:
             raise ValueError("Too many options.")
-            
+
         seen_keys = set()
         for opt in options:
             if not isinstance(opt, dict):
@@ -525,12 +525,12 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
     form_base_class = CustomerFieldBaseForm
     create_template = "admin/customer_field_create.html"
     edit_template = "admin/customer_field_edit.html"
-    
+
     name = "Customer Field"
     name_plural = "Customer Fields"
     icon = "fa-solid fa-keyboard"
     can_export = False
-    
+
     form_overrides = {
         "field_type": SelectField,
         "scope": SelectField
@@ -559,19 +559,19 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
     async def on_model_change(self, data, model, is_created, request):
         data.pop("preset", None)
         field_type = data.get("field_type")
-        
+
         if field_type == "secret":
             model.is_sensitive = True
-            
+
         if field_type == "select":
             raw_options = data.pop("select_options_raw", None)
             if not raw_options or raw_options == "[]":
                 raise ValueError("Choice List fields require at least one option.")
-            
+
             options_list = json.loads(raw_options)
             if not options_list:
                 raise ValueError("Choice List fields require at least one option.")
-                
+
             final_options = {}
             for opt in options_list:
                 key = opt.get("key", "").strip()
@@ -582,7 +582,7 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
                 if opt.get("ar", "").strip():
                     translations["ar"] = opt.get("ar").strip()
                 final_options[key] = translations
-                
+
             model.select_options_i18n = final_options
         else:
             model.select_options_i18n = None
@@ -746,7 +746,7 @@ class ProductRestockSubscriptionAdmin(ModelView, model=ProductRestockSubscriptio
     ]
     column_searchable_list = [ProductRestockSubscription.item_id]
     column_sortable_list = [ProductRestockSubscription.id, ProductRestockSubscription.created_at]
-    
+
     # Filterable list
     column_details_list = column_list
     can_create = False
@@ -871,7 +871,7 @@ def create_admin_app() -> Starlette:
     admin.add_view(ProductRestockSubscriptionAdmin)
     admin.add_view(OrdersAdmin)
     admin.add_view(OrderItemsAdmin)
-    
+
     if EnvKeys.REVIEWS_ENABLED == "1":
         admin.add_view(ReviewsAdmin)
 
