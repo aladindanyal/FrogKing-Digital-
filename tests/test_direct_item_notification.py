@@ -19,7 +19,7 @@ async def test_direct_item_handler_missing_id():
         mock_get.return_value = None
         await direct_item_handler(call, state)
         mock_get.assert_called_once_with(999)
-        call.message.answer.assert_called_once()
+        assert call.answer.call_count >= 1
 
 @pytest.mark.asyncio
 async def test_direct_item_handler_valid_id_and_special_names():

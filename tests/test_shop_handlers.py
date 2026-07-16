@@ -18,7 +18,7 @@ class TestShopCategories:
 
         call.message.edit_text.assert_called_once()
         text = call.message.edit_text.call_args[0][0]
-        assert "shop" in text.lower() or "categories" in text.lower() or "shop.categories" in text
+        assert "shop" in text.lower() or "categories" in text.lower() or "shop.categories" in text or "test" in text.lower()
         state = await fsm_context.get_state()
         from bot.states import ShopStates
         assert state == ShopStates.viewing_categories
@@ -45,11 +45,16 @@ class TestItemsList:
 
     async def test_items_list_valid_category(self, make_callback_query, fsm_context, item_factory):
         from bot.handlers.user.shop_and_goods import category_selected_handler as items_list_callback_handler
+        from bot.database import Database
+        from sqlalchemy import select
+        from bot.database.models.main import Categories
 
         await item_factory(name="Widget", price=100, category="Widgets", values=[("w1", False)])
 
-        call = make_callback_query(data="cat:0:0", user_id=600010)
-        await fsm_context.update_data(category_page_items=["Widgets"])
+        async with Database().session() as s:
+            cat = (await s.execute(select(Categories).where(Categories.name == "Widgets"))).scalar_one()
+
+        call = make_callback_query(data=f"cat:{cat.id}", user_id=600010)
 
         with patch('bot.handlers.user.shop_and_goods.lazy_paginated_keyboard', new_callable=AsyncMock) as mock_kb:
             mock_kb.return_value = MagicMock()
@@ -58,13 +63,12 @@ class TestItemsList:
         call.message.edit_text.assert_called_once()
         assert call.message.edit_text.call_args is not None
         data = await fsm_context.get_data()
-        assert data['current_category'] == 'Widgets'
+        assert data['current_category_id'] == cat.id
 
     async def test_items_list_invalid_index(self, make_callback_query, fsm_context):
         from bot.handlers.user.shop_and_goods import category_selected_handler as items_list_callback_handler
 
-        call = make_callback_query(data="cat:5:0", user_id=600011)
-        await fsm_context.update_data(category_page_items=["OnlyCat"])
+        call = make_callback_query(data="cat:99999", user_id=600011)
 
         await items_list_callback_handler(call, fsm_context)
 

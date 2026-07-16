@@ -711,3 +711,12 @@ async def get_stock_for_items(item_ids: list[int]) -> dict[int, int]:
             iid: (-1 if iid in infinite_items else counts.get(iid, 0))
             for iid in item_ids
         }
+
+async def get_active_product_fields(session, goods_id: int):
+    from bot.database.models.main import ProductCustomerField
+    from sqlalchemy import select
+    stmt = select(ProductCustomerField).where(
+        ProductCustomerField.goods_id == goods_id,
+        ProductCustomerField.is_active == True
+    ).order_by(ProductCustomerField.sort_order, ProductCustomerField.id)
+    return list((await session.execute(stmt)).scalars().all())

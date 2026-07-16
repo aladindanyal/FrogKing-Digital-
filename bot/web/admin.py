@@ -1,3 +1,4 @@
+from wtforms import ValidationError
 import logging
 import time
 from typing import Any
@@ -55,12 +56,12 @@ class LoginRateLimiter:
 
 _login_limiter = LoginRateLimiter()
 from bot.database.main import Database
+from bot.database.models import User, Role, Categories, Goods, ItemValues, BoughtGoods, Operations, Payments
 from bot.database.models.main import (
-    User, Role, Categories, Goods, ItemValues,
-    BoughtGoods, Operations, Payments, ReferralEarnings,
-    AuditLog, PromoCodes, CartItems, Reviews, StoreSettings,
-    MainMenuButtonSettings, ProductRestockSubscription,
-    Order, OrderItem, ProductCustomerField
+    StoreSettings, MainMenuButtonSettings, ReferralEarnings, AuditLog,
+    PromoCodes, PromoCodeUsages, CartItems, Reviews,
+    ProductCustomerField, ProductRestockSubscription, Order, OrderItem,
+    CheckoutIntakeDraft, OrderCustomerInput, ManualFulfillmentJob
 )
 from bot.misc.metrics import get_metrics
 from bot.misc.caching import get_cache_manager
@@ -113,8 +114,9 @@ def _safe_model_repr(model: Any, max_len: int = 500) -> str:
     for col in getattr(model, "__table__", None).columns if hasattr(model, "__table__") else ():
         if col.name in _sensitive:
             continue
-        val = getattr(model, col.name, None)
-        parts.append(f"{col.name}={val!r}")
+        if col.name in model.__dict__:
+            val = getattr(model, col.name, None)
+            parts.append(f"{col.name}={val!r}")
     result = f"{type(model).__name__}({', '.join(parts)})"
     return result[:max_len]
 
@@ -122,14 +124,19 @@ def _safe_model_repr(model: Any, max_len: int = 500) -> str:
 # Audited base view for mutable models
 class AuditModelView(ModelView):
     async def after_model_change(self, data: dict, model: Any, is_created: bool, request: Request) -> None:
-        action = f"sqladmin_{'create' if is_created else 'update'}"
-        await log_audit(
-            action,
-            resource_type=self.name,
-            resource_id=str(getattr(model, 'id', getattr(model, 'name', None))),
-            details=_safe_model_repr(model),
-            ip_address=request.client.host,
-        )
+        try:
+            action = f"sqladmin_{'create' if is_created else 'update'}"
+            await log_audit(
+                action,
+                resource_type=self.name,
+                resource_id=str(getattr(model, 'id', getattr(model, 'name', None))),
+                details=_safe_model_repr(model),
+                ip_address=request.client.host,
+            )
+        except Exception as e:
+            import traceback
+            open('traceback.txt', 'a').write('\n\n--- after_model_change ---\n' + traceback.format_exc())
+            raise e
 
     async def after_model_delete(self, model: Any, request: Request) -> None:
         await log_audit(
@@ -296,7 +303,7 @@ class GoodsBaseForm(Form):
         ("1440", "24 hours"),
         ("2880", "48 hours"),
         ("custom", "Custom")
-    ], render_kw={"class": "form-select", "id": "eta_preset"})
+    ], validate_choice=False, render_kw={"class": "form-select", "id": "eta_preset"})
 
     def process(self, formdata=None, obj=None, data=None, **kwargs):
         if obj and not formdata:
@@ -381,6 +388,43 @@ class GoodsAdmin(AuditModelView, model=Goods):
         if getattr(super(), "on_model_change", None):
             await super().on_model_change(data, model, is_created, request)
 
+    async def on_model_delete(self, model, request):
+        from bot.database import Database
+        from bot.database.models import OrderItem, BoughtGoods
+        from bot.database.models.main import CartItems, CheckoutIntakeDraft
+        from sqlalchemy import select, delete
+        from starlette.exceptions import HTTPException
+
+        async with Database().session() as session:
+            # 1. Check commercial blockers
+            has_order_item = (await session.execute(
+                select(OrderItem).where(OrderItem.item_id == model.id).limit(1)
+            )).scalar_one_or_none()
+
+            has_bought_goods = (await session.execute(
+                select(BoughtGoods).where(BoughtGoods.item_name == model.name).limit(1)
+            )).scalar_one_or_none()
+
+            has_consumed_draft = (await session.execute(
+                select(CheckoutIntakeDraft).where(
+                    CheckoutIntakeDraft.goods_id == model.id,
+                    CheckoutIntakeDraft.status == 'consumed'
+                ).limit(1)
+            )).scalar_one_or_none()
+
+            # 2. Block if referenced by commercial history
+            if has_order_item or has_bought_goods or has_consumed_draft:
+                raise HTTPException(status_code=400, detail="Cannot delete product: it is referenced by existing commercial history (orders or purchases).")
+
+            # 3. Clean up temporary records that don't cascade natively
+            await session.execute(
+                delete(CartItems).where(CartItems.item_name == model.name)
+            )
+            await session.commit()
+
+        if getattr(super(), "on_model_delete", None):
+            await super().on_model_delete(model, request)
+
 
 class CustomerFieldBaseForm(Form):
     preset = SelectField("Preset", choices=[
@@ -390,7 +434,7 @@ class CustomerFieldBaseForm(Form):
         ("url", "Account URL"),
         ("phone", "Phone Number"),
         ("secret", "Secret / Password")
-    ], render_kw={"class": "form-select", "id": "preset"})
+    ], validate_choice=False, render_kw={"class": "form-select", "id": "preset"})
 
     label_en = StringField("Label - English", render_kw={"class": "form-control"})
     label_ar = StringField("Label - Arabic", render_kw={"class": "form-control"})
@@ -402,16 +446,16 @@ class CustomerFieldBaseForm(Form):
 
     def process(self, formdata=None, obj=None, data=None, **kwargs):
         if obj and not formdata:
-            if obj.label_i18n:
+            if getattr(obj, "label_i18n", None):
                 kwargs['label_en'] = obj.label_i18n.get('en', '')
                 kwargs['label_ar'] = obj.label_i18n.get('ar', '')
-            if obj.placeholder_i18n:
+            if getattr(obj, "placeholder_i18n", None):
                 kwargs['placeholder_en'] = obj.placeholder_i18n.get('en', '')
                 kwargs['placeholder_ar'] = obj.placeholder_i18n.get('ar', '')
-            if obj.help_text_i18n:
+            if getattr(obj, "help_text_i18n", None):
                 kwargs['help_text_en'] = obj.help_text_i18n.get('en', '')
                 kwargs['help_text_ar'] = obj.help_text_i18n.get('ar', '')
-            if obj.select_options_i18n:
+            if getattr(obj, "select_options_i18n", None):
                 arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
                 kwargs['select_options_raw'] = json.dumps(arr)
 
@@ -438,26 +482,6 @@ class CustomerFieldBaseForm(Form):
                     self.field_key.data = presets[preset]
                     if hasattr(self.field_key, 'raw_data'):
                         self.field_key.raw_data = [presets[preset]]
-            if obj.label_i18n:
-                kwargs['label_en'] = obj.label_i18n.get('en', '')
-                kwargs['label_ar'] = obj.label_i18n.get('ar', '')
-            if obj.placeholder_i18n:
-                kwargs['placeholder_en'] = obj.placeholder_i18n.get('en', '')
-                kwargs['placeholder_ar'] = obj.placeholder_i18n.get('ar', '')
-            if obj.help_text_i18n:
-                kwargs['help_text_en'] = obj.help_text_i18n.get('en', '')
-                kwargs['help_text_ar'] = obj.help_text_i18n.get('ar', '')
-            if obj.select_options_i18n:
-                arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
-                kwargs['select_options_raw'] = json.dumps(arr)
-
-        if not obj and not formdata:
-            if 'required' not in kwargs:
-                kwargs['required'] = True
-            if 'is_active' not in kwargs:
-                kwargs['is_active'] = True
-
-        super().process(formdata, obj, data, **kwargs)
 
     def validate_select_options_raw(form, field):
         if form.field_type.data != 'select':
@@ -466,34 +490,34 @@ class CustomerFieldBaseForm(Form):
         try:
             options = json.loads(field.data)
         except json.JSONDecodeError:
-            raise ValueError("Invalid JSON format for select options.")
+            raise ValidationError("Invalid JSON format for select options.")
 
         if not isinstance(options, list):
-            raise ValueError("Select options must be a list of objects.")
+            raise ValidationError("Select options must be a list of objects.")
 
         if not options:
-            raise ValueError("Select fields require at least one valid option.")
+            raise ValidationError("Select fields require at least one valid option.")
 
         if len(options) > 100:
-            raise ValueError("Too many options.")
+            raise ValidationError("Too many options.")
 
         seen_keys = set()
         for opt in options:
             if not isinstance(opt, dict):
-                raise ValueError("Each option must be an object.")
+                raise ValidationError("Each option must be an object.")
             key = opt.get('key')
             en = opt.get('en')
             if not key or not isinstance(key, str) or len(key) > 64:
-                raise ValueError("Invalid or missing option key.")
+                raise ValidationError("Invalid or missing option key.")
             if not key.isalnum() and not all(c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in key):
-                raise ValueError("Option key contains invalid characters.")
+                raise ValidationError("Option key contains invalid characters.")
             if key in seen_keys:
-                raise ValueError(f"Duplicate option key: {key}")
+                raise ValidationError(f"Duplicate option key: {key}")
             seen_keys.add(key)
             if not en or not isinstance(en, str) or len(en) > 128:
-                raise ValueError("English label is required and must be under 128 characters.")
+                raise ValidationError("English label is required and must be under 128 characters.")
             if 'ar' in opt and opt['ar'] and (not isinstance(opt['ar'], str) or len(opt['ar']) > 128):
-                raise ValueError("Arabic label must be a string under 128 characters.")
+                raise ValidationError("Arabic label must be a string under 128 characters.")
 
 
 class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
@@ -566,18 +590,18 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
         if field_type == "select":
             raw_options = data.pop("select_options_raw", None)
             if not raw_options or raw_options == "[]":
-                raise ValueError("Choice List fields require at least one option.")
+                raise ValidationError("Choice List fields require at least one option.")
 
             options_list = json.loads(raw_options)
             if not options_list:
-                raise ValueError("Choice List fields require at least one option.")
+                raise ValidationError("Choice List fields require at least one option.")
 
             final_options = {}
             for opt in options_list:
                 key = opt.get("key", "").strip()
                 en_label = opt.get("en", "").strip()
                 if not key or not en_label:
-                    raise ValueError("Each option must have a stable option key and an English label.")
+                    raise ValidationError("Each option must have a stable option key and an English label.")
                 translations = {"en": en_label}
                 if opt.get("ar", "").strip():
                     translations["ar"] = opt.get("ar").strip()
@@ -588,13 +612,18 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
             model.select_options_i18n = None
             data.pop("select_options_raw", None)
 
-        if is_created and model.sort_order is None and model.goods_id:
-            from sqlalchemy import select, func
-            async with Database().session() as session:
-                max_val = await session.scalar(
-                    select(func.max(ProductCustomerField.sort_order)).where(ProductCustomerField.goods_id == model.goods_id)
-                )
-            model.sort_order = (max_val or 0) + 1
+        try:
+            if is_created and model.sort_order is None and model.goods_id:
+                from sqlalchemy import select, func
+                async with Database().session() as session:
+                    max_val = await session.scalar(
+                        select(func.max(ProductCustomerField.sort_order)).where(ProductCustomerField.goods_id == model.goods_id)
+                    )
+                model.sort_order = (max_val or 0) + 1
+        except Exception as e:
+            import traceback
+            open('traceback.txt', 'w').write(traceback.format_exc())
+            raise e
 
         def _update_i18n(attr_name, en_val, ar_val):
             existing = dict(getattr(model, attr_name, {}) or {})
@@ -778,6 +807,109 @@ class OrderItemsAdmin(ModelView, model=OrderItem):
     name_plural = "Order Items"
     icon = "fa-solid fa-boxes-stacked"
 
+class CheckoutIntakeDraftAdmin(ModelView, model=CheckoutIntakeDraft):
+    column_list = [
+        CheckoutIntakeDraft.id, CheckoutIntakeDraft.user_id, CheckoutIntakeDraft.goods_id,
+        CheckoutIntakeDraft.quantity, CheckoutIntakeDraft.status,
+        CheckoutIntakeDraft.current_step, CheckoutIntakeDraft.created_at, CheckoutIntakeDraft.expires_at
+    ]
+    column_searchable_list = [CheckoutIntakeDraft.user_id, CheckoutIntakeDraft.goods_id]
+    column_sortable_list = [CheckoutIntakeDraft.id, CheckoutIntakeDraft.created_at]
+    can_create = False
+    can_edit = False
+    can_delete = False
+    can_export = False
+    column_details_exclude_list = ["encrypted_payload", "public_token", "schema_fingerprint"]
+    name = "Checkout Draft"
+
+    def _format_status(model, name):
+        val = getattr(model, name)
+        if val == "pending":
+            return Markup('<span style="color:#eab308;font-weight:bold">Pending</span>')
+        elif val == "completed":
+            return Markup('<span style="color:#22c55e;font-weight:bold">Completed</span>')
+        elif val == "expired":
+            return Markup('<span style="color:#ef4444">Expired</span>')
+        elif val == "invalidated":
+            return Markup('<span style="color:#64748b">Invalidated</span>')
+        elif val == "cancelled":
+            return Markup('<span style="color:#94a3b8">Cancelled</span>')
+        return val
+
+    column_formatters = {
+        "status": _format_status,
+    }
+
+    name_plural = "Checkout Drafts"
+    icon = "fa-solid fa-file-pen"
+    category = "System Diagnostic"
+
+def _get_input(model: ManualFulfillmentJob, key: str):
+    if not model.order_item or not model.order_item.customer_inputs:
+        return None
+    for inp in model.order_item.customer_inputs:
+        if inp.field_key_snapshot == key:
+            return inp
+    return None
+
+class ManualFulfillmentJobAdmin(ModelView, model=ManualFulfillmentJob):
+    column_list = [
+        ManualFulfillmentJob.id,
+        "public_order_id",
+        "product_name",
+        "customer",
+        "quantity",
+        ManualFulfillmentJob.status,
+        "submitted_email",
+        "password_status",
+        "paid_at",
+        "estimated_delivery"
+    ]
+    column_labels = {
+        "public_order_id": "Public Order ID",
+        "product_name": "Product Name",
+        "customer": "Customer",
+        "quantity": "Quantity",
+        "submitted_email": "Email",
+        "password_status": "Password Status",
+        "paid_at": "Paid At",
+        "estimated_delivery": "Est. Delivery"
+    }
+    column_formatters = {
+        "public_order_id": lambda m, a: m.order_item.order.public_id if m.order_item and m.order_item.order else "—",
+        "product_name": lambda m, a: m.order_item.product_name_snapshot if m.order_item else "—",
+        "customer": lambda m, a: f"User {m.order_item.order.user.telegram_id}" if m.order_item and m.order_item.order and m.order_item.order.user else "—",
+        "quantity": lambda m, a: str(m.order_item.quantity) if m.order_item else "—",
+        "submitted_email": lambda m, a: (_get_input(m, 'email').masked_preview if _get_input(m, 'email') else "—"),
+        "password_status": lambda m, a: ("Submitted ✅" if _get_input(m, 'password') else "Not Submitted"),
+        "paid_at": lambda m, a: m.order_item.order.created_at.strftime("%Y-%m-%d %H:%M") if m.order_item and m.order_item.order and m.order_item.order.created_at else "—",
+        "estimated_delivery": lambda m, a: "—"  # Not currently stored in DB explicitly
+    }
+    column_formatters_detail = column_formatters
+
+    def list_query(self, request: Request):
+        from sqlalchemy.orm import selectinload
+        return super().list_query(request).options(
+            selectinload(ManualFulfillmentJob.order_item).selectinload(OrderItem.order).selectinload(Order.user),
+            selectinload(ManualFulfillmentJob.order_item).selectinload(OrderItem.customer_inputs)
+        )
+
+    def details_query(self, request: Request):
+        from sqlalchemy.orm import selectinload
+        return super().details_query(request).options(
+            selectinload(ManualFulfillmentJob.order_item).selectinload(OrderItem.order).selectinload(Order.user),
+            selectinload(ManualFulfillmentJob.order_item).selectinload(OrderItem.customer_inputs)
+        )
+
+    column_searchable_list = [ManualFulfillmentJob.order_item_id, ManualFulfillmentJob.status]
+    column_sortable_list = [ManualFulfillmentJob.id, ManualFulfillmentJob.created_at, ManualFulfillmentJob.updated_at]
+    can_create = False
+    can_edit = False
+    can_delete = False
+    name = "Manual Order"
+    name_plural = "Manual Orders"
+    icon = "fa-solid fa-clipboard-list"
+
 
 # Health & Metrics Endpoints
 async def health_check(request: Request) -> JSONResponse:
@@ -871,6 +1003,8 @@ def create_admin_app() -> Starlette:
     admin.add_view(ProductRestockSubscriptionAdmin)
     admin.add_view(OrdersAdmin)
     admin.add_view(OrderItemsAdmin)
+    admin.add_view(CheckoutIntakeDraftAdmin)
+    admin.add_view(ManualFulfillmentJobAdmin)
 
     if EnvKeys.REVIEWS_ENABLED == "1":
         admin.add_view(ReviewsAdmin)

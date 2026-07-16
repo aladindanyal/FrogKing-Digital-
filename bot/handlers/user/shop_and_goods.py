@@ -6,6 +6,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Filter
 
 from bot.database.methods import (
     get_bought_item_info, check_value, query_categories, query_user_bought_items, get_item_info_cached,
@@ -392,10 +393,10 @@ async def qty_keypad_handler(call: CallbackQuery, state: FSMContext):
         await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
         return
 
-    await state.update_data(keypad_value='0')
-    await _render_keypad_page(call, state, item_name, '0', item_id_str)
+    await state.update_data(item_quantity=0)
+    await _render_keypad_page(call, state, item_name, 0, item_id_str)
 
-async def _render_keypad_page(call: CallbackQuery, state: FSMContext, item_name: str, keypad_value: str, item_id_str: str):
+async def _render_keypad_page(call: CallbackQuery, state: FSMContext, item_name: str, qty: int, item_id_str: str):
     from bot.keyboards.inline import numeric_keypad
     from bot.database.methods import get_item_info_cached, check_value, select_item_values_amount_cached
 
@@ -404,7 +405,6 @@ async def _render_keypad_page(call: CallbackQuery, state: FSMContext, item_name:
         return
 
     unit_price = Decimal(str(item_info_data["price"]))
-    qty = int(keypad_value) if keypad_value else 0
     total_price = unit_price * qty
 
     is_infinity = await check_value(item_name)
@@ -434,19 +434,19 @@ async def qty_digit_handler(call: CallbackQuery, state: FSMContext):
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
 
-    keypad_value = data.get('keypad_value', '0')
-    if keypad_value == '0':
-        new_value = digit
+    qty = data.get('item_quantity', 0)
+    if qty == 0:
+        new_qty = int(digit)
     else:
-        new_value = keypad_value + digit
+        new_qty = int(str(qty) + digit)
 
-    if len(new_value) > 4:
+    if len(str(new_qty)) > 4:
         await answer_callback_safe(call, "Maximum 4 digits allowed.", show_alert=True)
         return
 
     await answer_callback_safe(call)
-    await state.update_data(keypad_value=new_value)
-    await _render_keypad_page(call, state, item_name, new_value, item_id_str)
+    await state.update_data(item_quantity=new_qty)
+    await _render_keypad_page(call, state, item_name, new_qty, item_id_str)
 
 @router.callback_query(F.data.startswith("qty:backspace:"))
 async def qty_backspace_handler(call: CallbackQuery, state: FSMContext):
@@ -458,14 +458,13 @@ async def qty_backspace_handler(call: CallbackQuery, state: FSMContext):
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
 
-    keypad_value = data.get('keypad_value', '0')
-    new_value = keypad_value[:-1]
-    if not new_value:
-        new_value = '0'
+    qty_str = str(data.get('item_quantity', 0))
+    new_str = qty_str[:-1]
+    new_qty = int(new_str) if new_str else 0
 
     await answer_callback_safe(call)
-    await state.update_data(keypad_value=new_value)
-    await _render_keypad_page(call, state, item_name, new_value, item_id_str)
+    await state.update_data(item_quantity=new_qty)
+    await _render_keypad_page(call, state, item_name, new_qty, item_id_str)
 
 @router.callback_query(F.data.startswith("qty:clear:"))
 async def qty_clear_handler(call: CallbackQuery, state: FSMContext):
@@ -478,8 +477,8 @@ async def qty_clear_handler(call: CallbackQuery, state: FSMContext):
         return
 
     await answer_callback_safe(call)
-    await state.update_data(keypad_value='0')
-    await _render_keypad_page(call, state, item_name, '0', item_id_str)
+    await state.update_data(item_quantity=0)
+    await _render_keypad_page(call, state, item_name, 0, item_id_str)
 
 @router.callback_query(F.data.startswith("qty:keypad_continue:"))
 async def qty_keypad_continue_handler(call: CallbackQuery, state: FSMContext):
@@ -491,28 +490,13 @@ async def qty_keypad_continue_handler(call: CallbackQuery, state: FSMContext):
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
 
-    qty_str = data.get('keypad_value', '0')
-    qty = int(qty_str) if qty_str else 0
+    qty = data.get('item_quantity', 0)
 
     if qty <= 0:
         await answer_callback_safe(call, "Quantity must be greater than zero.", show_alert=True)
         return
 
-    from bot.database.methods import check_value, select_item_values_amount_cached
-    is_infinity = await check_value(item_name)
-    stock = await select_item_values_amount_cached(item_name)
-
-    if not is_infinity and qty > stock:
-        await answer_callback_safe(call, f"Maximum available quantity is {stock}.", show_alert=True)
-        return
-
-    if is_infinity and qty > 1000:
-        await answer_callback_safe(call, "Maximum 1000 allowed for unlimited products.", show_alert=True)
-        return
-
-    await answer_callback_safe(call)
-    await state.update_data(item_quantity=qty, keypad_value='0')
-    await _render_checkout_page(call, state, item_name, item_id_str, user_id=call.from_user.id)
+    await continue_product_checkout(call, state, int(item_id_str), qty)
 
 @router.callback_query(F.data.startswith("qty:keypad_back:"))
 async def qty_keypad_back_handler(call: CallbackQuery, state: FSMContext):
@@ -525,11 +509,66 @@ async def qty_keypad_back_handler(call: CallbackQuery, state: FSMContext):
         return
 
     await answer_callback_safe(call)
-    await state.update_data(keypad_value='0')
+    await state.update_data(item_quantity=1)
     await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
 
 # --- Checkout & Promo Code Flow ---
+
+async def continue_product_checkout(event: CallbackQuery | Message, state: FSMContext, goods_id: int, quantity: int):
+    from bot.database.methods.read import get_item_info_by_id
+    from bot.database.methods import check_value, select_item_values_amount_cached
+    from bot.misc.env import EnvKeys
+    from bot.i18n import localize
+    from bot.handlers.user.manual_intake import start_manual_intake
+    from bot.keyboards.inline import back
+    from bot.misc.utils import safe_edit_or_send
+
+    item_info_data = await get_item_info_by_id(goods_id)
+    if not item_info_data:
+        if isinstance(event, CallbackQuery):
+            await answer_callback_safe(event)
+        await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+
+    item_name = item_info_data['name']
+    is_infinity = await check_value(item_name)
+    stock = await select_item_values_amount_cached(item_name)
+
+    if not is_infinity and quantity > stock:
+        if isinstance(event, CallbackQuery):
+            await answer_callback_safe(event, f"Only {stock} items are currently available.", show_alert=True)
+        else:
+            await event.answer(f"Only {stock} items are currently available.")
+        return
+
+    if is_infinity and quantity > 1000:
+        if isinstance(event, CallbackQuery):
+            await answer_callback_safe(event, "Maximum 1000 allowed for unlimited products.", show_alert=True)
+        else:
+            await event.answer("Maximum 1000 allowed for unlimited products.")
+        return
+
+    if item_info_data.get("fulfillment_mode") == "manual":
+        if EnvKeys.MANUAL_CHECKOUT_ENABLED:
+            if isinstance(event, CallbackQuery):
+                await answer_callback_safe(event)
+            # Update state with identity for continuity
+            await state.update_data(item_id=goods_id, item_quantity=quantity, csrf_item=item_name)
+            await start_manual_intake(event, state, item_name, str(goods_id), user_id=event.from_user.id)
+            return
+        else:
+            msg = localize("shop.item.manual_unavailable_guard", default="This product requires manual fulfillment and is temporarily unavailable while configuration is being completed.")
+            if isinstance(event, CallbackQuery):
+                await answer_callback_safe(event, msg, show_alert=True)
+            else:
+                await event.answer(msg)
+            return
+
+    if isinstance(event, CallbackQuery):
+        await answer_callback_safe(event)
+    await state.update_data(item_id=goods_id, item_quantity=quantity, csrf_item=item_name)
+    await _render_checkout_page(event, state, item_name, str(goods_id), user_id=event.from_user.id)
 
 @router.callback_query(F.data.startswith("checkout:"))
 async def checkout_handler(call: CallbackQuery, state: FSMContext):
@@ -543,23 +582,10 @@ async def checkout_handler(call: CallbackQuery, state: FSMContext):
         await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
         return
 
-    from bot.database.methods import get_item_info_cached
-    item_info_data = await get_item_info_cached(item_name)
-    if not item_info_data:
-        await answer_callback_safe(call)
-        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
-        return
+    quantity = data.get('item_quantity', 1)
+    await continue_product_checkout(call, state, int(item_id_str), quantity)
 
-    if item_info_data.get("fulfillment_mode") == "manual":
-        # Stage 4C-3A Readiness Guard
-        msg = localize("shop.item.manual_unavailable_guard", default="This product requires manual fulfillment and is temporarily unavailable while configuration is being completed.")
-        await answer_callback_safe(call, msg, show_alert=True)
-        return
-
-    await answer_callback_safe(call)
-    await _render_checkout_page(call, state, item_name, item_id_str, user_id=call.from_user.id)
-
-async def _render_checkout_page(call: CallbackQuery, state: FSMContext, item_name: str, item_id_str: str, user_id: int):
+async def _render_checkout_page(event: CallbackQuery | Message, state: FSMContext, item_name: str, item_id_str: str, user_id: int):
     from bot.keyboards.inline import checkout_confirmation_keyboard
     from bot.database.methods import get_item_info_cached, check_user_cached
     from bot.database.methods import check_value, select_item_values_amount_cached
@@ -620,7 +646,7 @@ async def _render_checkout_page(call: CallbackQuery, state: FSMContext, item_nam
     else:
         text += f"❌ <b>Insufficient Balance</b>"
 
-    await safe_edit_or_send(call, text, reply_markup=checkout_confirmation_keyboard(int(item_id_str), can_purchase, applied_promo))
+    await safe_edit_or_send(event, text, reply_markup=checkout_confirmation_keyboard(int(item_id_str), can_purchase, applied_promo))
 
 @router.callback_query(F.data.startswith("checkout_change_qty:"))
 async def checkout_change_qty_handler(call: CallbackQuery, state: FSMContext):
@@ -839,7 +865,7 @@ async def legacy_bought_items_redirect(call: CallbackQuery):
         show_alert=True
     )
     call.data = "orders:list:0"
-    await orders_list_handler(call)
+    await orders_list_handler(call, answer_callback=False)
 
 
 # --- Stock Refresh Handlers ---
@@ -974,7 +1000,12 @@ async def support_order_handler(call: CallbackQuery):
 
 # --- Promo code text input (catch-all, must be AFTER state-specific message handlers) ---
 
-@router.message(F.text)
+class AwaitingPromoFilter(Filter):
+    async def __call__(self, message: Message, state: FSMContext) -> bool:
+        data = await state.get_data()
+        return bool(data.get('awaiting_promo'))
+
+@router.message(F.text, AwaitingPromoFilter())
 async def promo_code_text_handler(message: Message, state: FSMContext):
     """Handle promo code text input when awaiting_promo is set."""
     data = await state.get_data()

@@ -156,7 +156,7 @@ class StoreSettings(Database.BASE):
     root_category_columns = Column(Integer, nullable=False, default=1, server_default="1")
     subcategory_columns = Column(Integer, nullable=False, default=2, server_default="2")
     product_columns = Column(Integer, nullable=False, default=1, server_default="1")
-    
+
     __table_args__ = (
         CheckConstraint('root_category_columns IN (1, 2)', name='ck_store_settings_root_cols'),
         CheckConstraint('subcategory_columns IN (1, 2)', name='ck_store_settings_subcat_cols'),
@@ -182,7 +182,7 @@ class Categories(Database.BASE):
     name = Column(String(100), unique=True, nullable=False)
     description = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
-    
+
     items = relationship("Goods", back_populates="category", lazy='raise')
     parent = relationship("Categories", remote_side=[id], back_populates="subcategories")
     subcategories = relationship("Categories", back_populates="parent", lazy='raise')
@@ -214,8 +214,8 @@ class Goods(Database.BASE):
     )
 
     category = relationship("Categories", back_populates="items", lazy='raise')
-    values = relationship("ItemValues", back_populates="item", lazy='raise')
-    customer_fields = relationship("ProductCustomerField", back_populates="goods", cascade="all, delete-orphan", lazy='raise')
+    values = relationship("ItemValues", back_populates="item", cascade="all, delete-orphan", passive_deletes=True, lazy='raise')
+    customer_fields = relationship("ProductCustomerField", back_populates="goods", cascade="all, delete-orphan", passive_deletes=True, lazy='raise')
 
     def __init__(self, name: str = None, price=None, description: str = None, category_id: int = None, **kw: Any):
         super().__init__(**kw)
@@ -304,7 +304,7 @@ class Order(Database.BASE):
     discount_total = Column(Numeric(12, 2), nullable=False, default=0)
     total = Column(Numeric(12, 2), nullable=False, default=0)
     promo_code_snapshot = Column(String(50), nullable=True)
-    
+
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     paid_at = Column(DateTime(timezone=True), nullable=True)
@@ -337,18 +337,18 @@ class OrderItem(Database.BASE):
     id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey('orders.id', ondelete="CASCADE"), nullable=False, index=True)
     item_id = Column(Integer, ForeignKey('goods.id', ondelete="SET NULL"), nullable=True, index=True)
-    
+
     product_name_snapshot = Column(String(255), nullable=False)
     product_description_snapshot = Column(Text, nullable=True)
     quantity = Column(Integer, nullable=False, default=1)
-    
+
     unit_price = Column(Numeric(12, 2), nullable=False)
     subtotal = Column(Numeric(12, 2), nullable=False)
     discount_total = Column(Numeric(12, 2), nullable=False, default=0)
     total = Column(Numeric(12, 2), nullable=False)
-    
+
     fulfillment_status = Column(String(20), nullable=False, default="pending")
-    
+
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -381,10 +381,10 @@ class BoughtGoods(Database.BASE):
     buyer_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
     bought_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     unique_id = Column(BigInteger, nullable=False, unique=True)
-    
+
     order_id = Column(Integer, ForeignKey('orders.id', ondelete="SET NULL"), nullable=True, index=True)
     order_item_id = Column(Integer, ForeignKey('order_items.id', ondelete="SET NULL"), nullable=True, index=True)
-    
+
     user_telegram_id = relationship("User", back_populates="user_goods", lazy='raise')
     order = relationship("Order", backref="bought_goods", lazy='raise')
     order_item = relationship("OrderItem", back_populates="bought_goods", lazy='raise')
@@ -612,10 +612,110 @@ class ProductRestockSubscription(Database.BASE):
     )
 
     user = relationship("User", backref="restock_subscriptions", lazy='raise')
-    item = relationship("Goods", backref="restock_subscriptions", lazy='raise')
+    item = relationship("Goods", backref=backref("restock_subscriptions", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
 
     def __str__(self):
         return f"Sub #{self.id} (User {self.user_id}, Item {self.item_id})"
+
+class CheckoutIntakeDraft(Database.BASE):
+    __tablename__ = 'checkout_intake_drafts'
+    id = Column(Integer, primary_key=True)
+    public_token = Column(String(128), unique=True, nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
+    goods_id = Column(Integer, ForeignKey('goods.id', ondelete="CASCADE"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    schema_fingerprint = Column(String(64), nullable=False)
+    encrypted_payload = Column(Text, nullable=False)
+    encryption_version = Column(Integer, nullable=False)
+    current_step = Column(Integer, nullable=False, default=0, server_default=text("0"))
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="SET NULL"), unique=True, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint('quantity > 0', name='ck_draft_quantity_pos'),
+        CheckConstraint('current_step >= 0', name='ck_draft_current_step_pos'),
+        CheckConstraint('encryption_version > 0', name='ck_draft_enc_ver_pos'),
+        CheckConstraint("status IN ('pending', 'consumed', 'expired', 'cancelled', 'invalidated')", name='ck_draft_status'),
+        CheckConstraint('expires_at > created_at', name='ck_draft_expires_after_created'),
+        CheckConstraint("(status != 'consumed') OR (consumed_at IS NOT NULL)", name='ck_draft_consumed_time'),
+        CheckConstraint("(status != 'cancelled') OR (cancelled_at IS NOT NULL)", name='ck_draft_cancelled_time'),
+        CheckConstraint("(status != 'invalidated') OR (invalidated_at IS NOT NULL)", name='ck_draft_invalidated_time'),
+        Index('ix_draft_user_status_updated', 'user_id', 'status', 'updated_at'),
+        Index('ix_draft_user_goods_status', 'user_id', 'goods_id', 'status'),
+        Index('ix_draft_status_expires', 'status', 'expires_at'),
+        Index('ix_draft_goods_status', 'goods_id', 'status'),
+    )
+
+    user = relationship("User", backref=backref("checkout_drafts", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    goods = relationship("Goods", backref=backref("checkout_drafts", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    order = relationship("Order", backref="checkout_draft", lazy='raise')
+
+    def __str__(self):
+        return f"Draft #{self.id} ({self.status})"
+
+
+class OrderCustomerInput(Database.BASE):
+    __tablename__ = 'order_customer_inputs'
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="CASCADE"), nullable=False, index=True)
+    order_item_id = Column(Integer, ForeignKey('order_items.id', ondelete="CASCADE"), nullable=False, index=True)
+    original_field_id = Column(Integer, ForeignKey('product_customer_fields.id', ondelete="SET NULL"), nullable=True, index=True)
+
+    field_key_snapshot = Column(String(64), nullable=False)
+    label_i18n_snapshot = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=False)
+    field_type_snapshot = Column(String(20), nullable=False)
+    scope_snapshot = Column(String(20), nullable=False)
+    unit_index = Column(Integer, nullable=False)
+
+    is_sensitive = Column(Boolean, nullable=False)
+    encrypted_value = Column(Text, nullable=False)
+    masked_preview = Column(String(255), nullable=False)
+    encryption_version = Column(Integer, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "(scope_snapshot = 'per_order' AND unit_index = 0) OR (scope_snapshot = 'per_unit' AND unit_index > 0)",
+            name='ck_oci_scope_unit_index'
+        ),
+        UniqueConstraint('order_item_id', 'field_key_snapshot', 'unit_index', name='uq_oci_item_key_unit'),
+    )
+
+    order = relationship("Order", backref=backref("customer_inputs", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    order_item = relationship("OrderItem", backref=backref("customer_inputs", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+
+    def __str__(self):
+        return f"Input #{self.id} for OrderItem {self.order_item_id}"
+
+
+class ManualFulfillmentJob(Database.BASE):
+    __tablename__ = 'manual_fulfillment_jobs'
+    id = Column(Integer, primary_key=True)
+    order_item_id = Column(Integer, ForeignKey('order_items.id', ondelete="CASCADE"), unique=True, nullable=False)
+    status = Column(String(20), nullable=False, default="queued")
+    version = Column(Integer, nullable=False, default=1, server_default=text("1"))
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('queued', 'processing', 'completed', 'failed', 'cancelled')", name='ck_mfj_status'),
+        CheckConstraint('version > 0', name='ck_mfj_version_pos'),
+    )
+
+    order_item = relationship("OrderItem", backref=backref("fulfillment_job", cascade="all, delete-orphan", passive_deletes=True, uselist=False), lazy='raise')
+
+    def __str__(self):
+        return f"Job #{self.id} ({self.status})"
 
 
 async def register_models():

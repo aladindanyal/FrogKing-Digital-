@@ -39,3 +39,16 @@ def mask_generic(text: str) -> str:
     if len(text) <= 8:
         return f"{text[0]}***{text[-1]}"
     return f"{text[:2]}***{text[-2:]}"
+
+def mask_sensitive_data(text: str, field_type: str) -> str:
+    if not text:
+        return ""
+    if field_type == 'email':
+        return mask_email(text)
+    elif field_type == 'phone':
+        return mask_phone(text)
+    elif field_type == 'username':
+        return mask_username(text)
+    elif field_type == 'secret':
+        return mask_secret(text)
+    return mask_generic(text)

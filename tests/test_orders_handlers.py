@@ -66,7 +66,7 @@ class TestOrderHandlers:
         mock_call.data = f"order_buy_again:{item_id}"
         await order_buy_again_handler(mock_call, mock_state)
         
-        mock_render.assert_called_once_with(mock_call, mock_state, goods_id, back_data='menu', user_id=900005)
+        mock_render.assert_called_once_with(mock_call, mock_state, goods_id, back_data='menu', user_id=900005, send_new=True)
         mock_call.answer.assert_called_once_with()
 
     async def test_support_button_when_configured(self, mock_call, user_factory, item_factory):

@@ -1,5 +1,13 @@
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InaccessibleMessage
 from aiogram.exceptions import TelegramBadRequest
+from datetime import datetime, timezone
+
+def ensure_utc(value: datetime) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 async def safe_edit_or_send(call: CallbackQuery, text: str, reply_markup: InlineKeyboardMarkup = None, parse_mode: str = 'HTML'):
     """

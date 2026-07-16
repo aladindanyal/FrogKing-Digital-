@@ -65,6 +65,10 @@ class EnvKeys(ABC):
     DEBUG: Final = _get_optional("DEBUG", "0")
     REVIEWS_ENABLED: Final = _get_optional("REVIEWS_ENABLED", "1")
 
+    # Manual Fulfillment (Phase 4C-3B)
+    MANUAL_CHECKOUT_ENABLED: Final = _get_optional("MANUAL_CHECKOUT_ENABLED", "0") in ("1", "true", "True")
+    CHECKOUT_INTAKE_DRAFT_TTL_HOURS: Final = int(_get_optional("CHECKOUT_INTAKE_DRAFT_TTL_HOURS", "24"))
+
     # Web admin panel
     ADMIN_HOST: Final = _get_optional("ADMIN_HOST", _get_optional("MONITORING_HOST", "localhost"))
     ADMIN_PORT: Final = int(_get_optional("ADMIN_PORT", _get_optional("MONITORING_PORT", "9090")))

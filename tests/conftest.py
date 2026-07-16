@@ -114,6 +114,14 @@ def setup_test_database():
     Database._instance = None
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def dispose_test_database(setup_test_database):
+    """Dispose of the test database engine at the end of the session to prevent connection leaks."""
+    yield
+    from bot.database.main import Database
+    if Database._instance and hasattr(Database._instance, "engine"):
+        await Database().dispose()
+
 @pytest.fixture(autouse=True)
 async def db_cleanup(setup_test_database):
     """
@@ -257,6 +265,9 @@ def category_factory():
 def item_factory(category_factory):
     """Factory to create items with optional stock values."""
     from bot.database.methods.create import create_item, add_values_to_item
+    from bot.database import Database
+    from bot.database.models.main import Goods
+    from sqlalchemy import select
 
     async def _create(
             name: str = "TestItem",
@@ -270,6 +281,9 @@ def item_factory(category_factory):
         if values:
             for val, is_inf in values:
                 await add_values_to_item(name, val, is_inf)
+
+        async with Database().session() as s:
+            return (await s.execute(select(Goods).where(Goods.name == name))).scalar_one()
 
     return _create
 
