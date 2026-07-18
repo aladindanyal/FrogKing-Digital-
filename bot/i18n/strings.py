@@ -581,7 +581,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "shop.goods.sold_out": "Sold Out",
         "btn.buy": "🛒 Buy",
         "btn.yes": "✅ Yes",
-        "btn.no": "❌ No",
+                "btn.no": "❌ No",
+        "outbox.verify.text": (
+            "🔐 Verification Required\n\n"
+            "We have started processing your Order.\n"
+            "Please send the verification code you received to continue processing your Order.\n\n"
+            "⚠️ IMPORTANT — START HERE:\n"
+            "Tap “Reply to this Order” once before sending the code.\n\n"
+            "After the conversation opens, send the code directly in this chat.\n"
+            "You can then send additional messages without pressing Reply again."
+        ),
+        "outbox.conv_opened.text": (
+            "💬 Order Conversation Opened\n\n"
+            "Order ID:\n"
+            "{public_order_id}\n\n"
+            "✅ The conversation is now active.\n\n"
+            "Send the verification code or any additional messages directly in this chat.\n\n"
+            "You do not need to press Reply to this Order again.\n\n"
+            "When you are finished, press Finish Conversation."
+        ),
         "btn.check": "🔄 Check",
         "btn.check_subscription": "🔄 Check subscription",
         "btn.check_payment": "🔄 Check payment",
@@ -1110,6 +1128,24 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "ar": {
         "transaction_error": "تعذر إكمال طلبك، ولم يتم خصم أي مبلغ من رصيدك. حاول مرة أخرى.",
+        "outbox.verify.text": (
+            "🔐 مطلوب رمز التحقق\n\n"
+            "بدأنا بمعالجة طلبك.\n"
+            "يرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n"
+            "⚠️ مهم — ابدأ من هنا:\n"
+            "اضغط زر «الرد على هذا الطلب» مرة واحدة قبل إرسال الكود.\n\n"
+            "بعد فتح المحادثة، أرسل الكود مباشرة داخل المحادثة.\n"
+            "ويمكنك بعدها إرسال رسائل إضافية دون الضغط على الزر مرة أخرى."
+        ),
+        "outbox.conv_opened.text": (
+            "💬 تم فتح محادثة الطلب\n\n"
+            "رقم الطلب:\n"
+            "{public_order_id}\n\n"
+            "✅ المحادثة أصبحت فعّالة الآن.\n\n"
+            "أرسل رمز التحقق أو أي رسائل إضافية مباشرة داخل هذه المحادثة.\n\n"
+            "لا تحتاج إلى الضغط على زر الرد مرة أخرى.\n\n"
+            "عند الانتهاء اضغط «إنهاء المحادثة»."
+        ),
         "intake.draft_invalidated": "❌ لقد انتهت صلاحية مسودتك أو تغيرت إعدادات المنتج. يرجى البدء من جديد.",
         "intake.btn.resume_draft": "📝 متابعة المسودة",
         "intake.btn.cancel_draft": "❌ إلغاء المسودة",

@@ -197,6 +197,9 @@ async def order_view_handler(call: CallbackQuery):
             back_data = f"orders:receipt:{order.id}"
         elif origin == "a":
             back_data = f"orders:active:{order.id}"
+        elif origin in ("v", "m", "c") and len(parts) > 4:
+            source_id = parts[4]
+            back_data = f"orders:source_back:{order.id}:{origin}:{source_id}"
         else:
             back_data = "orders:list:0"
 

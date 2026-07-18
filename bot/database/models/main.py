@@ -704,11 +704,17 @@ class ManualFulfillmentJob(Database.BASE):
     status = Column(String(20), nullable=False, default="queued")
     version = Column(Integer, nullable=False, default=1, server_default=text("1"))
 
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    waiting_customer_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    started_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True)
+    completed_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     __table_args__ = (
-        CheckConstraint("status IN ('queued', 'processing', 'completed', 'failed', 'cancelled')", name='ck_mfj_status'),
+        CheckConstraint("status IN ('queued', 'in_progress', 'waiting_customer', 'completed', 'failed', 'cancelled')", name='ck_mfj_status'),
         CheckConstraint('version > 0', name='ck_mfj_version_pos'),
     )
 
@@ -716,6 +722,96 @@ class ManualFulfillmentJob(Database.BASE):
 
     def __str__(self):
         return f"Job #{self.id} ({self.status})"
+
+
+class ManualOrderInteraction(Database.BASE):
+    __tablename__ = 'manual_order_interactions'
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="CASCADE"), nullable=False, index=True)
+    fulfillment_job_id = Column(Integer, ForeignKey('manual_fulfillment_jobs.id', ondelete="CASCADE"), nullable=False, index=True)
+
+    direction = Column(String(20), nullable=False) # admin_to_customer, customer_to_admin, system
+    kind = Column(String(30), nullable=False) # message, verification_request, customer_reply, status_change, completion
+
+    encrypted_content = Column(Text, nullable=True)
+    safe_preview = Column(Text, nullable=True)
+    is_sensitive = Column(Boolean, nullable=False, default=False)
+
+    telegram_message_id = Column(BigInteger, nullable=True)
+
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    failed_at = Column(DateTime(timezone=True), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("direction IN ('admin_to_customer', 'customer_to_admin', 'system')", name='ck_moi_direction'),
+        CheckConstraint("kind IN ('message', 'verification_request', 'customer_reply', 'status_change', 'completion')", name='ck_moi_kind'),
+    )
+
+    order = relationship("Order", backref=backref("interactions", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    job = relationship("ManualFulfillmentJob", backref=backref("interactions", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+
+    def __str__(self):
+        return f"Interaction #{self.id} ({self.kind})"
+
+
+class ManualOrderNotification(Database.BASE):
+    __tablename__ = 'manual_order_notifications'
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="CASCADE"), nullable=False, index=True)
+    fulfillment_job_id = Column(Integer, ForeignKey('manual_fulfillment_jobs.id', ondelete="CASCADE"), nullable=False, index=True)
+
+    idempotency_key = Column(String(128), nullable=False, unique=True, index=True)
+    status = Column(String(20), nullable=False, default="pending")
+    attempts = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+
+    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'sent', 'failed')", name='ck_mon_status'),
+    )
+
+    order = relationship("Order", backref=backref("notifications", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    job = relationship("ManualFulfillmentJob", backref=backref("notifications", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+
+    def __str__(self):
+        return f"Notification #{self.id} ({self.status})"
+
+
+class ManualOrderConversationSession(Database.BASE):
+    __tablename__ = 'manual_order_conversation_sessions'
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete="CASCADE"), nullable=False, index=True)
+    fulfillment_job_id = Column(Integer, ForeignKey('manual_fulfillment_jobs.id', ondelete="CASCADE"), nullable=False, index=True)
+
+    status = Column(String(20), nullable=False, default="active")
+
+    opened_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_activity_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'closed', 'expired')", name='ck_mocs_status'),
+        Index('ix_manual_order_conversation_sessions_active_user', 'telegram_id', unique=True, postgresql_where=text("status = 'active'"), sqlite_where=text("status = 'active'")),
+    )
+
+    user = relationship("User", backref=backref("conversation_sessions", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    order = relationship("Order", backref=backref("conversation_sessions", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+    job = relationship("ManualFulfillmentJob", backref=backref("conversation_sessions", cascade="all, delete-orphan", passive_deletes=True), lazy='raise')
+
+    def __str__(self):
+        return f"Session #{self.id} ({self.status})"
 
 
 async def register_models():

@@ -1,0 +1,312 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .fc-console {
+        background-color: #0f1115;
+        color: #e2e8f0;
+        font-family: 'Inter', system-ui, sans-serif;
+        padding: 20px;
+        min-height: calc(100vh - 64px);
+    }
+    .fc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+    .fc-title {
+        font-size: 24px;
+        font-weight: 600;
+        color: #fff;
+        margin: 0;
+    }
+    .fc-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .fc-card {
+        background: #1e2128;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 16px;
+    }
+    .fc-card-title {
+        font-size: 13px;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+    }
+    .fc-card-value {
+        font-size: 32px;
+        font-weight: 700;
+        color: #fff;
+    }
+    .fc-filters {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .fc-filter-btn {
+        background: #1e2128;
+        border: 1px solid #334155;
+        color: #cbd5e1;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .fc-filter-btn.active, .fc-filter-btn:hover {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: #fff;
+    }
+    .fc-search {
+        background: #1e2128;
+        border: 1px solid #334155;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 4px;
+        width: 300px;
+    }
+    .fc-table-container {
+        background: #1e2128;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .fc-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+    }
+    .fc-table th {
+        padding: 12px 16px;
+        font-size: 12px;
+        color: #94a3b8;
+        text-transform: uppercase;
+        border-bottom: 1px solid #334155;
+        background: #16181d;
+    }
+    .fc-table td {
+        padding: 16px;
+        border-bottom: 1px solid #334155;
+        font-size: 14px;
+    }
+    .fc-table tbody tr:hover {
+        background: #252a33;
+    }
+    .fc-badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    .fc-badge.queued { background: #334155; color: #cbd5e1; }
+    .fc-badge.in_progress { background: #1d4ed8; color: #bfdbfe; }
+    .fc-badge.waiting_customer { background: #b45309; color: #fde68a; }
+    .fc-badge.completed { background: #166534; color: #bbf7d0; }
+    .fc-badge.reply { background: #991b1b; color: #fecaca; }
+
+    .fc-btn {
+        background: #3b82f6;
+        color: #fff;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .fc-btn:hover { background: #2563eb; }
+</style>
+
+<div class="fc-console">
+    <div class="fc-header">
+        <h1 class="fc-title">⚡ Fulfillment Console</h1>
+        <input type="text" id="fcSearch" class="fc-search" placeholder="Search orders, products, users...">
+    </div>
+
+    <div class="fc-summary-grid">
+        <div class="fc-card">
+            <div class="fc-card-title">New</div>
+            <div class="fc-card-value" id="valNew">0</div>
+        </div>
+        <div class="fc-card">
+            <div class="fc-card-title">In Progress</div>
+            <div class="fc-card-value" id="valProgress">0</div>
+        </div>
+        <div class="fc-card">
+            <div class="fc-card-title">Waiting for Customer</div>
+            <div class="fc-card-value" id="valWaiting">0</div>
+        </div>
+        <div class="fc-card">
+            <div class="fc-card-title">Completed Today</div>
+            <div class="fc-card-value" id="valCompleted">0</div>
+        </div>
+    </div>
+
+    <div class="fc-filters" id="fcFilters">
+        <button class="fc-filter-btn active" data-filter="all_active">All Active</button>
+        <button class="fc-filter-btn" data-filter="queued">New</button>
+        <button class="fc-filter-btn" data-filter="in_progress">In Progress</button>
+        <button class="fc-filter-btn" data-filter="waiting_customer">Waiting</button>
+        <button class="fc-filter-btn" data-filter="reply_received">Reply Received</button>
+        <button class="fc-filter-btn" data-filter="completed">Completed</button>
+    </div>
+
+    <div class="fc-table-container">
+        <table class="fc-table">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Product</th>
+                    <th>Customer</th>
+                    <th>Qty</th>
+                    <th>Status</th>
+                    <th>Paid At</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="fcQueueBody">
+                <tr><td colspan="7" style="text-align: center; color: #94a3b8;">Loading queue...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let rawQueue = [];
+    let currentFilter = 'all_active';
+    let currentSearch = '';
+
+    const badgeMap = {
+        'queued': 'queued',
+        'in_progress': 'in_progress',
+        'waiting_customer': 'waiting_customer',
+        'completed': 'completed'
+    };
+
+    const labelMap = {
+        'queued': 'Queued',
+        'in_progress': 'In Progress',
+        'waiting_customer': 'Waiting Customer',
+        'completed': 'Completed'
+    };
+
+    async function loadQueue() {
+        try {
+            const response = await fetch('/admin/fulfillment/api/queue');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            rawQueue = data.queue;
+            updateDashboard();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function updateDashboard() {
+        // Update summary cards
+        const today = new Date().toISOString().split('T')[0];
+        let cNew = 0, cProg = 0, cWait = 0, cComp = 0;
+
+        rawQueue.forEach(q => {
+            if (q.status === 'queued') cNew++;
+            if (q.status === 'in_progress') cProg++;
+            if (q.status === 'waiting_customer') cWait++;
+            if (q.status === 'completed' && q.created_at.startsWith(today)) cComp++;
+        });
+
+        document.getElementById('valNew').innerText = cNew;
+        document.getElementById('valProgress').innerText = cProg;
+        document.getElementById('valWaiting').innerText = cWait;
+        document.getElementById('valCompleted').innerText = cComp;
+
+        // Apply filters & search
+        let filtered = rawQueue.filter(q => {
+            let passFilter = false;
+            if (currentFilter === 'all_active') passFilter = q.status !== 'completed';
+            else if (currentFilter === 'reply_received') passFilter = q.unread_reply;
+            else passFilter = q.status === currentFilter;
+
+            let passSearch = true;
+            if (currentSearch) {
+                const s = currentSearch.toLowerCase();
+                passSearch = (q.public_order_id && q.public_order_id.toLowerCase().includes(s)) ||
+                             (q.product && q.product.toLowerCase().includes(s)) ||
+                             (q.customer && q.customer.toLowerCase().includes(s)) ||
+                             (q.telegram_id && String(q.telegram_id).includes(s));
+            }
+            return passFilter && passSearch;
+        });
+
+        // Sort: Unread reply -> Queued (oldest) -> In Progress -> Waiting
+        filtered.sort((a, b) => {
+            if (a.unread_reply && !b.unread_reply) return -1;
+            if (!a.unread_reply && b.unread_reply) return 1;
+
+            const order = {'queued': 1, 'in_progress': 2, 'waiting_customer': 3, 'completed': 4};
+            if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+
+            return new Date(a.created_at) - new Date(b.created_at);
+        });
+
+        const tbody = document.getElementById('fcQueueBody');
+        tbody.innerHTML = '';
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8;">No orders found</td></tr>';
+            return;
+        }
+
+        filtered.forEach(q => {
+            const tr = document.createElement('tr');
+
+            let statusHtml = `<span class="fc-badge ${badgeMap[q.status] || 'queued'}">${labelMap[q.status] || q.status}</span>`;
+            if (q.unread_reply) {
+                statusHtml += ` <span class="fc-badge reply">New Reply</span>`;
+            }
+
+            const paidDate = q.paid_at ? new Date(q.paid_at).toLocaleString() : 'N/A';
+
+            tr.innerHTML = `
+                <td style="font-family: monospace;">${q.public_order_id || 'N/A'}</td>
+                <td>${q.product}</td>
+                <td>${q.customer}</td>
+                <td>${q.quantity}</td>
+                <td>${statusHtml}</td>
+                <td>${paidDate}</td>
+                <td><a href="/admin/fulfillment/order/${q.id}" class="fc-btn">Open</a></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Event Listeners
+    document.getElementById('fcSearch').addEventListener('input', (e) => {
+        currentSearch = e.target.value;
+        updateDashboard();
+    });
+
+    document.getElementById('fcFilters').addEventListener('click', (e) => {
+        if (e.target.classList.contains('fc-filter-btn')) {
+            document.querySelectorAll('.fc-filter-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentFilter = e.target.dataset.filter;
+            updateDashboard();
+        }
+    });
+
+    // Initial load and interval
+    loadQueue();
+    setInterval(loadQueue, 15000);
+</script>
+{% endblock %}

@@ -28,6 +28,7 @@ from bot.database.main import Database as _Database
 recovery_manager = None
 cleanup_manager = None
 restock_dispatcher = None
+outbox_dispatcher = None
 admin_server = None
 admin_server_task = None
 cache_scheduler = None
@@ -124,6 +125,12 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     restock_dispatcher = RestockDispatcher(bot)
     await restock_dispatcher.start()
 
+    # Start outbox dispatcher
+    from bot.misc.services.outbox_dispatcher import outbox_dispatcher as od
+    global outbox_dispatcher
+    outbox_dispatcher = od
+    await outbox_dispatcher.start(bot)
+
     # Start the admin web server
     import uvicorn
     from bot.web import create_admin_app
@@ -136,13 +143,13 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
         log_level="warning",
     )
     admin_server = uvicorn.Server(config)
-    
+
     async def run_admin_server():
         try:
             await admin_server.serve()
         except asyncio.CancelledError:
             pass
-            
+
     admin_server_task = asyncio.create_task(run_admin_server())
 
     from aiogram.types import BotCommand
@@ -185,6 +192,10 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     # Restock Dispatcher Stop
     if restock_dispatcher:
         await restock_dispatcher.stop()
+
+    # Outbox Dispatcher Stop
+    if outbox_dispatcher:
+        await outbox_dispatcher.stop()
 
     # Delete webhook if it was active
     if webhook_active:
@@ -262,7 +273,7 @@ async def start_bot() -> None:
     logging.getLogger("aiogram.event").setLevel(logging.WARNING)
     logging.getLogger("aiogram.middlewares").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.WARNING)
-    
+
     # Checking critical environment variables
     if not EnvKeys.TOKEN:
         logging.critical("Bot token not set! Please set TOKEN environment variable.")

@@ -9,7 +9,7 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.routing import Route
+from starlette.routing import Route, Mount
 from sqlalchemy import text
 
 from markupsafe import Markup
@@ -809,9 +809,9 @@ class OrderItemsAdmin(ModelView, model=OrderItem):
 
 class CheckoutIntakeDraftAdmin(ModelView, model=CheckoutIntakeDraft):
     column_list = [
-        CheckoutIntakeDraft.id, CheckoutIntakeDraft.user_id, CheckoutIntakeDraft.goods_id,
+        CheckoutIntakeDraft.id, CheckoutIntakeDraft.order_id, CheckoutIntakeDraft.user_id, CheckoutIntakeDraft.goods_id,
         CheckoutIntakeDraft.quantity, CheckoutIntakeDraft.status,
-        CheckoutIntakeDraft.current_step, CheckoutIntakeDraft.created_at, CheckoutIntakeDraft.expires_at
+        CheckoutIntakeDraft.current_step, CheckoutIntakeDraft.created_at, CheckoutIntakeDraft.updated_at, CheckoutIntakeDraft.expires_at
     ]
     column_searchable_list = [CheckoutIntakeDraft.user_id, CheckoutIntakeDraft.goods_id]
     column_sortable_list = [CheckoutIntakeDraft.id, CheckoutIntakeDraft.created_at]
@@ -819,7 +819,7 @@ class CheckoutIntakeDraftAdmin(ModelView, model=CheckoutIntakeDraft):
     can_edit = False
     can_delete = False
     can_export = False
-    column_details_exclude_list = ["encrypted_payload", "public_token", "schema_fingerprint"]
+    column_details_exclude_list = ["encrypted_payload", "public_token", "schema_fingerprint", "encryption_version"]
     name = "Checkout Draft"
 
     def _format_status(model, name):
@@ -901,6 +901,29 @@ class ManualFulfillmentJobAdmin(ModelView, model=ManualFulfillmentJob):
             selectinload(ManualFulfillmentJob.order_item).selectinload(OrderItem.customer_inputs)
         )
 
+    async def on_model_change(self, data, model, is_created, request):
+        from sqlalchemy import select, func
+        from bot.database.main import Database
+        from bot.database.models.main import ManualOrderConversationSession
+
+        # If status changed to cancelled, close any active conversation session
+        if not is_created and getattr(model, 'status', None) == 'cancelled':
+            async with Database().session() as session:
+                active_sessions = await session.execute(
+                    select(ManualOrderConversationSession).filter(
+                        ManualOrderConversationSession.fulfillment_job_id == model.id,
+                        ManualOrderConversationSession.status == 'active'
+                    )
+                )
+                for s in active_sessions.scalars():
+                    s.status = 'closed'
+                    s.closed_at = func.now()
+                    session.add(s)
+                await session.commit()
+
+        if getattr(super(), "on_model_change", None):
+            await super().on_model_change(data, model, is_created, request)
+
     column_searchable_list = [ManualFulfillmentJob.order_item_id, ManualFulfillmentJob.status]
     column_sortable_list = [ManualFulfillmentJob.id, ManualFulfillmentJob.created_at, ManualFulfillmentJob.updated_at]
     can_create = False
@@ -964,12 +987,13 @@ async def metrics_json(request: Request) -> JSONResponse:
 def create_admin_app() -> Starlette:
 
     from bot.web.export import export_routes
+    from bot.web.fulfillment import fulfillment_routes
 
     routes = [
         Route("/health", health_check),
         Route("/metrics", metrics_json),
         Route("/metrics/prometheus", prometheus_metrics),
-    ] + export_routes
+    ] + fulfillment_routes + export_routes
 
     app = Starlette(routes=routes)
     app.add_middleware(SessionMiddleware, secret_key=EnvKeys.SECRET_KEY, max_age=1800)
@@ -982,6 +1006,7 @@ def create_admin_app() -> Starlette:
         title="Telegram Shop Admin",
         templates_dir="bot/web/templates",
     )
+    app.state.admin = admin
 
     admin.add_view(UserAdmin)
     admin.add_view(RoleAdmin)
