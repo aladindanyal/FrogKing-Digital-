@@ -157,12 +157,22 @@ async def start(message: Message, state: FSMContext):
 
     is_new_user = (await check_user(user_id)) is None
 
+    from bot.database.methods.profile import normalize_profile
+    username, first_name, last_name = normalize_profile(
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+        last_name=message.from_user.last_name
+    )
+
     # registration_date is DateTime
     await create_user(
         telegram_id=int(user_id),
         registration_date=datetime.datetime.now(datetime.timezone.utc),
         referral_id=int(referral_id) if referral_id else None,
-        role=user_role
+        role=user_role,
+        telegram_username=username,
+        first_name=first_name,
+        last_name=last_name
     )
 
     if is_new_user:
@@ -201,11 +211,17 @@ async def back_to_menu_callback_handler(call: CallbackQuery, state: FSMContext):
     user_id = call.from_user.id
     user = await check_user_cached(user_id)
     if not user:
+        from bot.database.methods.profile import normalize_profile
+        username, first_name, last_name = normalize_profile(call.from_user)
+
         await create_user(
             telegram_id=user_id,
             registration_date=datetime.datetime.now(datetime.timezone.utc),
             referral_id=None,
-            role=1
+            role=1,
+            telegram_username=username,
+            first_name=first_name,
+            last_name=last_name
         )
         user = await check_user_cached(user_id)
 

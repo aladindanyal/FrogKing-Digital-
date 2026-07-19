@@ -304,11 +304,15 @@ def make_callback_query(mock_bot):
     """Factory to create CallbackQuery mocks."""
 
     def _make(data: str = "test", user_id: int = 100001, first_name: str = "TestUser"):
-        call = AsyncMock()
+        from aiogram.types import CallbackQuery
+        call = AsyncMock(spec=CallbackQuery)
+        call.id = "1"
         call.data = data
         call.from_user = MagicMock()
         call.from_user.id = user_id
         call.from_user.first_name = first_name
+        call.from_user.last_name = None
+        call.from_user.username = None
         call.from_user.is_bot = False
         call.message = AsyncMock()
         call.message.photo = None
@@ -330,11 +334,14 @@ def make_message(mock_bot):
     """Factory to create Message mocks."""
 
     def _make(text: str = "/start", user_id: int = 100001, first_name: str = "TestUser"):
-        msg = AsyncMock()
+        from aiogram.types import Message
+        msg = AsyncMock(spec=Message)
         msg.text = text
         msg.from_user = MagicMock()
         msg.from_user.id = user_id
         msg.from_user.first_name = first_name
+        msg.from_user.last_name = None
+        msg.from_user.username = None
         msg.from_user.is_bot = False
         msg.chat = MagicMock()
         msg.chat.type = "private"

@@ -197,6 +197,15 @@ class AuthenticationMiddleware(BaseMiddleware):
                     await event.answer(localize("maintenance.active"), show_alert=True)
                 return None
 
+        # Profile sync
+        from bot.database.methods.cache_utils import safe_create_task
+        from bot.database.methods.profile import sync_telegram_user_profile
+        safe_create_task(sync_telegram_user_profile(
+            telegram_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name
+        ))
         # Add user information to the context
         data['user_id'] = user.id
         data['user_name'] = user.first_name

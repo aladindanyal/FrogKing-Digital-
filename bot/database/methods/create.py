@@ -10,20 +10,38 @@ from bot.database.methods.cache_utils import safe_create_task
 from bot.database.methods.read import invalidate_stats_cache
 
 
-async def create_user(telegram_id: int, registration_date: datetime, referral_id: int | None, role: int = 1) -> None:
+async def create_user(
+    telegram_id: int,
+    registration_date: datetime,
+    referral_id: int | None,
+    role: int = 1,
+    telegram_username: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None
+) -> None:
     """Create user if missing; commit."""
     async with Database().session() as s:
         result = await s.execute(select(exists().where(User.telegram_id == telegram_id)))
         if result.scalar():
             return
+
+        profile_updated_at = None
+        if telegram_username or first_name or last_name:
+            profile_updated_at = registration_date
+
         s.add(
             User(
                 telegram_id=telegram_id,
                 role_id=role,
                 registration_date=registration_date,
                 referral_id=referral_id,
+                telegram_username=telegram_username,
+                first_name=first_name,
+                last_name=last_name,
+                profile_updated_at=profile_updated_at
             )
         )
+        await s.commit()
 
 
 async def create_item(item_name: str, item_description: str, item_price: int, category_name: str) -> None:

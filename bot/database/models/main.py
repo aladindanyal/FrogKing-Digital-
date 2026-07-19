@@ -99,6 +99,10 @@ class Role(Database.BASE):
 class User(Database.BASE):
     __tablename__ = 'users'
     telegram_id = Column(BigInteger, primary_key=True)
+    telegram_username = Column(String(64), nullable=True, index=True)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
+    profile_updated_at = Column(DateTime(timezone=True), nullable=True)
     role_id = Column(Integer, ForeignKey('roles.id', ondelete="RESTRICT"), default=1, index=True)
     balance = Column(Numeric(12, 2), nullable=False, default=0)
     referral_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)

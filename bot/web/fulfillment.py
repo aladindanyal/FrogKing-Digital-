@@ -172,6 +172,9 @@ def build_fulfillment_workspace_view(job: ManualFulfillmentJob) -> dict:
         "paid_at": order.created_at.isoformat() if order.created_at else None,
         "created_at": job.created_at.isoformat() if job.created_at else "",
         "telegram_id": user.telegram_id if user else None,
+        "customer_first_name": user.first_name if user else None,
+        "customer_last_name": user.last_name if user else None,
+        "customer_username": user.telegram_username if user else None,
         "has_unread": has_unread,
         "unread_reply_count": unread_reply_count,
         "inputs": customer_inputs,
@@ -210,9 +213,9 @@ async def api_queue(request: Request):
                 order = job.order_item.order
                 user = order.user
 
+                # Keep customer display logic in template but pass plain values
                 display_name = (
-                    getattr(user, "full_name", None)
-                    or getattr(user, "first_name", None)
+                    getattr(user, "first_name", None)
                     or str(getattr(user, "telegram_id", None) or getattr(user, "id", None) or "Unknown")
                 )
 
@@ -228,6 +231,9 @@ async def api_queue(request: Request):
                     "public_order_id": order.public_id,
                     "product": job.order_item.product_name_snapshot,
                     "customer": display_name,
+                    "customer_first_name": user.first_name if user else None,
+                    "customer_last_name": user.last_name if user else None,
+                    "customer_username": user.telegram_username if user else None,
                     "telegram_id": order.user_id,
                     "quantity": job.order_item.quantity,
                     "status": job.status,

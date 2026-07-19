@@ -150,9 +150,13 @@ class AuditModelView(ModelView):
 
 # Model Views
 class UserAdmin(AuditModelView, model=User):
-    column_list = [User.telegram_id, User.balance, User.role_id, User.referral_id,
-                   User.registration_date, User.is_blocked]
-    column_searchable_list = [User.telegram_id]
+    column_list = [User.telegram_id, User.telegram_username, User.first_name, User.last_name, User.balance, User.role_id, User.registration_date, User.is_blocked]
+    column_details_list = [
+        User.telegram_id, User.telegram_username, User.first_name, User.last_name, 
+        User.profile_updated_at, User.role_id, User.balance, User.referral_id, 
+        User.registration_date, User.is_blocked
+    ]
+    column_searchable_list = [User.telegram_id, User.telegram_username, User.first_name, User.last_name]
     column_sortable_list = [User.telegram_id, User.balance, User.registration_date]
     column_default_sort = (User.registration_date, True)
     name = "User"

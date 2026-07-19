@@ -247,6 +247,15 @@
             }
             return passFilter && passSearch;
         });
+        const escapeHtml = (unsafe) => {
+            if (!unsafe) return '';
+            return String(unsafe)
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        };
 
         // Sort: Unread reply -> Queued (oldest) -> In Progress -> Waiting
         filtered.sort((a, b) => {
@@ -277,10 +286,21 @@
 
             const paidDate = q.paid_at ? new Date(q.paid_at).toLocaleString() : 'N/A';
 
+            let customerNameParts = [];
+            let fullName = [q.customer_first_name, q.customer_last_name].filter(Boolean).join(' ');
+            if (fullName) customerNameParts.push(fullName);
+            if (q.customer_username) customerNameParts.push('@' + q.customer_username);
+            let customerDisplay = '';
+            if (customerNameParts.length > 0) {
+                customerDisplay = `<div dir="auto">${escapeHtml(customerNameParts.join(', '))}</div><div style="font-size: 12px; color: #94a3b8;">ID: ${q.telegram_id}</div>`;
+            } else {
+                customerDisplay = `<div>ID: ${q.telegram_id}</div>`;
+            }
+
             tr.innerHTML = `
                 <td style="font-family: monospace;">${q.public_order_id || 'N/A'}</td>
                 <td>${q.product}</td>
-                <td>${q.customer}</td>
+                <td>${customerDisplay}</td>
                 <td>${q.quantity}</td>
                 <td>${statusHtml}</td>
                 <td>${paidDate}</td>

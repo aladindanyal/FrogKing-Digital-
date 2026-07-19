@@ -110,7 +110,18 @@
         </h1>
         <div style="font-size: 14px; color: #94a3b8; text-align: right;">
             Product: <strong style="color:#fff">{{ job.product_name_snapshot }}</strong> (x{{ job.quantity }})<br>
-            Customer: <strong style="color:#fff">ID: {{ job.telegram_id }}</strong>
+            Customer: <strong style="color:#fff" dir="auto">
+                {% set full_name = [job.customer_first_name, job.customer_last_name]|select("string")|join(" ")|trim %}
+                {% if full_name and job.customer_username %}
+                    {{ full_name }}, @{{ job.customer_username }}, ID: {{ job.telegram_id }}
+                {% elif full_name %}
+                    {{ full_name }}, ID: {{ job.telegram_id }}
+                {% elif job.customer_username %}
+                    @{{ job.customer_username }}, ID: {{ job.telegram_id }}
+                {% else %}
+                    ID: {{ job.telegram_id }}
+                {% endif %}
+            </strong>
         </div>
     </div>
 
