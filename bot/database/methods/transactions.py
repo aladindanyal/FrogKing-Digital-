@@ -6,15 +6,22 @@ from sqlalchemy import select, update, exists as sa_exists, delete as sa_delete
 from sqlalchemy.exc import IntegrityError
 
 from bot.database.models import User, ItemValues, Goods, BoughtGoods, Payments, Operations
-from bot.database.models.main import PromoCodes, PromoCodeUsages, CartItems, ReferralEarnings
+from bot.database.models.main import PromoCodes, PromoCodeUsages, CartItems, ReferralEarnings, CheckoutIntakeDraft, OrderCustomerInput, ManualFulfillmentJob
 from bot.database import Database
-from bot.misc import EnvKeys
+from bot.misc import EnvKeys, encryption, masking
+from bot.misc.utils import ensure_utc
 from bot.database.methods.read import invalidate_user_cache, invalidate_stats_cache, invalidate_item_cache
 from bot.database.methods.cache_utils import safe_create_task
 from bot.database.methods.audit import log_audit
 
 
-async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str = None, quantity: int = 1) -> tuple[bool, str, dict | None]:
+async def buy_item_transaction(
+    telegram_id: int,
+    item_name: str,
+    promo_code: str = None,
+    quantity: int = 1,
+    draft_public_token: str = None
+) -> tuple[bool, str, dict | None]:
     """
     Complete transactional purchase of goods with checks and locks.
     Returns: (success, message, purchase_data)
@@ -23,6 +30,32 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
     for attempt in range(max_retries):
         async with Database().session() as s:
             try:
+                # 0. If manual fulfillment draft exists, lock it
+                draft = None
+                if draft_public_token:
+                    draft = (await s.execute(
+                        select(CheckoutIntakeDraft)
+                        .where(CheckoutIntakeDraft.public_token == draft_public_token)
+                        .with_for_update()
+                    )).scalars().one_or_none()
+
+                    if not draft:
+                        await s.rollback()
+                        return False, "draft_not_found", None
+
+                    if draft.status == 'consumed':
+                        # Idempotent return (would normally return the order details, but for now just fail-safe success or error)
+                        await s.rollback()
+                        return False, "intake.already_purchased", None
+
+                    if draft.status != 'pending':
+                        await s.rollback()
+                        return False, "intake.draft_invalidated", None
+
+                    if draft.user_id != telegram_id:
+                        await s.rollback()
+                        return False, "draft_not_found", None
+
                 # 1. Lock the user to check the balance
                 user = (await s.execute(
                     select(User).where(User.telegram_id == telegram_id).with_for_update()
@@ -40,6 +73,33 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                 if not goods:
                     await s.rollback()
                     return False, "item_not_found", None
+
+                is_manual = getattr(goods, 'fulfillment_mode', 'instant') == 'manual'
+
+                # Check mismatch between request and product mode
+                if is_manual and not draft_public_token:
+                    await s.rollback()
+                    return False, "draft_required_for_manual", None
+
+                if not is_manual and draft_public_token:
+                    await s.rollback()
+                    return False, "draft_invalid_for_instant", None
+
+                if draft:
+                    if draft.goods_id != goods.id:
+                        await s.rollback()
+                        return False, "draft_item_mismatch", None
+                    if draft.quantity != quantity:
+                        await s.rollback()
+                        return False, "draft_qty_mismatch", None
+
+                    from bot.database.methods.read import get_active_product_fields
+                    from bot.misc.intake_validator import compute_schema_fingerprint
+                    active_fields = await get_active_product_fields(s, goods.id)
+                    current_fingerprint = compute_schema_fingerprint(active_fields)
+                    if draft.schema_fingerprint != current_fingerprint:
+                        await s.rollback()
+                        return False, "draft_schema_mismatch", None
 
                 price = Decimal(str(goods.price))
                 final_price = price
@@ -59,7 +119,7 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                         await s.rollback()
                         return False, "promo_invalid", None
 
-                    if promo.expires_at and promo.expires_at < datetime.now(timezone.utc):
+                    if promo.expires_at and ensure_utc(promo.expires_at) < datetime.now(timezone.utc):
                         await s.rollback()
                         return False, "promo_expired", None
 
@@ -101,7 +161,7 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                         "original_price": float(price),
                         "discount": float(price - final_price),
                     }
-                    
+
                 # Multiply final price by quantity
                 total_final_price = final_price * quantity
 
@@ -110,8 +170,7 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                     await s.rollback()
                     return False, "insufficient_funds", None
 
-                # 4. Receive and lock the goods for purchase
-                # Fetch up to `quantity` rows
+                # 4. Receive and lock the goods for purchase (FOR ALL ITEMS)
                 item_values = (await s.execute(
                     select(ItemValues).where(ItemValues.item_id == goods.id).limit(quantity).with_for_update()
                 )).scalars().all()
@@ -119,10 +178,10 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                 if not item_values:
                     await s.rollback()
                     return False, "out_of_stock", None
-                
+
                 first_item = item_values[0]
                 is_infinity = first_item.is_infinity
-                
+
                 if not is_infinity and len(item_values) < quantity:
                     await s.rollback()
                     return False, "out_of_stock", None
@@ -135,41 +194,145 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                     for iv in item_values:
                         purchased_values.append(iv.value)
                         await s.delete(iv)
-                        
-                combined_value = "\n".join(purchased_values)
+
+                # For manual fulfillment, we consumed stock but do NOT expose the value to the user yet
+                displayed_values = purchased_values if not is_manual else []
 
                 # 6. Write off the balance
                 user.balance -= total_final_price
 
-                # 7. Create a purchase record
-                bought_item = BoughtGoods(
-                    name=item_name,
-                    value=combined_value,
-                    price=total_final_price,
-                    buyer_id=telegram_id,
-                    bought_datetime=datetime.now(timezone.utc),
-                    unique_id=uuid4().int >> 65
+                # 7. Create Orders
+                from bot.database.methods.orders import create_order_with_item
+
+                subtotal = price * quantity
+                discount_total = (price - final_price) * quantity if discount_info else Decimal("0.00")
+                total = total_final_price
+
+                order, order_item = await create_order_with_item(
+                    session=s,
+                    user_id=telegram_id,
+                    item_id=goods.id,
+                    product_name=item_name,
+                    quantity=quantity,
+                    unit_price=float(price),
+                    subtotal=float(subtotal),
+                    discount_total=float(discount_total),
+                    total=float(total),
+                    currency=EnvKeys.PAY_CURRENCY,
+                    promo_code=promo_code,
+                    product_description=goods.description
                 )
-                s.add(bought_item)
+
+                order.paid_at = datetime.now(timezone.utc)
+
+                if not is_manual:
+                    order.status = "completed"
+                    order.completed_at = datetime.now(timezone.utc)
+                    order_item.fulfillment_status = "delivered"
+                    order_item.completed_at = datetime.now(timezone.utc)
+                else:
+                    order.status = "processing"
+                    order_item.fulfillment_status = "pending"
+
                 await s.flush()
 
-                # 8. Commit the transaction
+                # Create bought goods delivery rows (legacy tracking)
+                bought_goods_ids = []
+                base_uuid = uuid4().int >> 65
+
+                if not is_manual:
+                    for idx, val in enumerate(purchased_values):
+                        bg = BoughtGoods(
+                            name=item_name,
+                            value=val,
+                            price=final_price,
+                            buyer_id=telegram_id,
+                            bought_datetime=datetime.now(timezone.utc),
+                            unique_id=base_uuid + idx,
+                            order_id=order.id,
+                            order_item_id=order_item.id
+                        )
+                        s.add(bg)
+                        await s.flush()
+                        bought_goods_ids.append(bg.id)
+
+                # 7.5 Process Manual Fulfillment Data
+                if is_manual and draft:
+                    payload = encryption.decrypt_json(draft.encrypted_payload, draft.encryption_version)
+                    answers = payload.get("answers", [])
+
+                    for ans in answers:
+                        is_secret = (ans.get("field_type") == 'secret')
+                        plaintext_val = ans.get("value", "")
+
+                        masked = masking.mask_sensitive_data(plaintext_val, ans.get("field_type"))
+
+                        enc_dict = encryption.encrypt_text(plaintext_val)
+
+                        oci = OrderCustomerInput(
+                            order_id=order.id,
+                            order_item_id=order_item.id,
+                            original_field_id=ans.get("field_id"),
+                            field_key_snapshot=ans.get("field_key"),
+                            field_type_snapshot=ans.get("field_type"),
+                            scope_snapshot=ans.get("scope"),
+                            label_i18n_snapshot=ans.get("label_i18n", {}),
+                            is_sensitive=ans.get("is_sensitive", False),
+                            unit_index=ans.get("unit_index"),
+                            masked_preview=masked,
+                            encrypted_value=enc_dict['ciphertext'],
+                            encryption_version=enc_dict['version']
+                        )
+                        s.add(oci)
+
+                    # Create job
+                    job = ManualFulfillmentJob(
+                        order_item_id=order_item.id,
+                        status='queued'
+                    )
+                    s.add(job)
+
+                    # Mark draft as consumed
+                    draft.status = 'consumed'
+                    draft.consumed_at = datetime.now(timezone.utc)
+                    draft.order_id = order.id
+                    s.add(draft)
+
+                # 8. Record Operation History
+                s.add(Operations(
+                    user_id=telegram_id,
+                    operation_value=-float(total_final_price),
+                    operation_time=datetime.now(timezone.utc)
+                ))
+
+                # 9. Commit the transaction
                 await s.commit()
 
                 safe_create_task(invalidate_user_cache(telegram_id))
                 safe_create_task(invalidate_stats_cache())
                 safe_create_task(invalidate_item_cache(item_name))
 
+                # Refactored structured transaction result
                 result_data = {
-                    "item_name": item_name,
-                    "value": combined_value,
-                    "delivered_values": purchased_values,
-                    "price": float(total_final_price),
+                    "public_order_id": order.public_id,
+                    "order_id": order.id,
+                    "order_item_id": order_item.id,
+                    "delivered_values": displayed_values,
                     "quantity": quantity,
+                    "unit_price": float(price),
+                    "subtotal": float(subtotal),
+                    "discount_total": float(discount_total),
+                    "total": float(total),
+                    "currency": order.currency,
+                    "purchase_timestamp": order.paid_at.isoformat(),
+
+                    # Legacy fallback fields
+                    "item_name": item_name,
+                    "value": displayed_values[0] if displayed_values else "",
+                    "price": float(total_final_price),
                     "new_balance": float(user.balance),
-                    "unique_id": bought_item.unique_id,
-                    "bought_id": bought_item.id,
-                    "bought_datetime": bought_item.bought_datetime.isoformat(),
+                    "unique_id": base_uuid, # base unique ID for legacy support
+                    "bought_datetime": order.paid_at.isoformat(),
                 }
                 if discount_info:
                     result_data["discount"] = discount_info
@@ -203,7 +366,6 @@ async def buy_item_transaction(telegram_id: int, item_name: str, promo_code: str
                 return False, "transaction_error", None
 
     return False, "transaction_error", None
-
 
 async def process_payment_with_referral(
         user_id: int,
@@ -380,7 +542,7 @@ async def checkout_cart_transaction(user_id: int) -> tuple[bool, str, list | Non
 
                         promo_valid = False
                         if promo and promo.is_active and promo.discount_type != 'balance':
-                            if not (promo.expires_at and promo.expires_at < datetime.now(timezone.utc)):
+                            if not (promo.expires_at and ensure_utc(promo.expires_at) < datetime.now(timezone.utc)):
                                 if not (promo.max_uses > 0 and promo.current_uses >= promo.max_uses):
                                     # Check per-user usage
                                     used = (await s.execute(
@@ -583,7 +745,7 @@ async def redeem_balance_promo(code: str, user_id: int) -> tuple[bool, str, Deci
             if promo.discount_type != "balance":
                 await s.rollback()
                 return False, "promo.not_balance_type", None
-            if promo.expires_at and promo.expires_at < datetime.now(timezone.utc):
+            if promo.expires_at and ensure_utc(promo.expires_at) < datetime.now(timezone.utc):
                 await s.rollback()
                 return False, "promo.expired", None
             if promo.max_uses > 0 and promo.current_uses >= promo.max_uses:

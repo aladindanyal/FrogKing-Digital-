@@ -1,0 +1,54 @@
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const etaSelector = document.getElementById("eta_preset");
+    const etaMinutes = document.getElementById("fulfillment_eta_minutes");
+    const modeSelector = document.getElementById("fulfillment_mode");
+    
+    // Manual inputs
+    const mEn = document.getElementById("manual_instr_en");
+    const mAr = document.getElementById("manual_instr_ar");
+    const iEn = document.getElementById("input_intro_en");
+    const iAr = document.getElementById("input_intro_ar");
+    
+    function updateManualFieldsVisibility() {
+        if (!modeSelector) return;
+        const isInstant = modeSelector.value === "instant";
+        const fields = [mEn, mAr, iEn, iAr, etaSelector, etaMinutes];
+        fields.forEach(f => {
+            if (f) {
+                const container = f.closest('.mb-3') || f.parentNode;
+                if (isInstant) {
+                    container.style.opacity = "0.4"; // visually collapsed/inactive but present
+                    container.title = "Manual configuration is inactive for instant products";
+                } else {
+                    container.style.opacity = "1";
+                    container.title = "";
+                }
+            }
+        });
+    }
+
+    if (etaSelector && etaMinutes) {
+        const etaMinutesContainer = etaMinutes.closest('.mb-3') || etaMinutes.parentNode;
+        
+        function updateEtaDisplay() {
+            if (etaSelector.value === "custom") {
+                etaMinutesContainer.style.display = "";
+            } else {
+                etaMinutesContainer.style.display = "none";
+            }
+        }
+        
+        etaSelector.addEventListener("change", function() {
+            updateEtaDisplay();
+        });
+        
+        updateEtaDisplay();
+    }
+    
+    if (modeSelector) {
+        modeSelector.addEventListener("change", updateManualFieldsVisibility);
+        updateManualFieldsVisibility();
+    }
+});
+</script>

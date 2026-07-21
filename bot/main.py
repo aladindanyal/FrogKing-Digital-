@@ -27,7 +27,10 @@ from bot.database.main import Database as _Database
 # Global variables for components
 recovery_manager = None
 cleanup_manager = None
+restock_dispatcher = None
+outbox_dispatcher = None
 admin_server = None
+admin_server_task = None
 cache_scheduler = None
 webhook_active = False
 
@@ -62,6 +65,7 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
             'shop_view': (60, 60),  # 60 times per minute
             'buy_item': (5, 60),  # 5 purchases per minute
             'top_up': (5, 300),  # 5 top-ups in 5 minutes
+            'refresh': (1, 2),  # 1 time per 2 seconds
         }
     )
     global rate_limit_middleware
@@ -115,6 +119,18 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     cleanup_manager = CleanupManager()
     await cleanup_manager.start()
 
+    # Start the restock dispatcher
+    from bot.misc.services.restock_dispatcher import RestockDispatcher
+    global restock_dispatcher
+    restock_dispatcher = RestockDispatcher(bot)
+    await restock_dispatcher.start()
+
+    # Start outbox dispatcher
+    from bot.misc.services.outbox_dispatcher import outbox_dispatcher as od
+    global outbox_dispatcher
+    outbox_dispatcher = od
+    await outbox_dispatcher.start(bot)
+
     # Start the admin web server
     import uvicorn
     from bot.web import create_admin_app
@@ -127,7 +143,14 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
         log_level="warning",
     )
     admin_server = uvicorn.Server(config)
-    asyncio.create_task(admin_server.serve())
+
+    async def run_admin_server():
+        try:
+            await admin_server.serve()
+        except asyncio.CancelledError:
+            pass
+
+    admin_server_task = asyncio.create_task(run_admin_server())
 
     from aiogram.types import BotCommand
     commands = [
@@ -144,7 +167,7 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
 
 async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     """Initialize bot shutdown"""
-    global recovery_manager, cleanup_manager, admin_server, webhook_active
+    global recovery_manager, cleanup_manager, admin_server, webhook_active, admin_server_task
 
     logging.info("Starting shutdown...")
 
@@ -166,6 +189,14 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     if cleanup_manager:
         await cleanup_manager.stop()
 
+    # Restock Dispatcher Stop
+    if restock_dispatcher:
+        await restock_dispatcher.stop()
+
+    # Outbox Dispatcher Stop
+    if outbox_dispatcher:
+        await outbox_dispatcher.stop()
+
     # Delete webhook if it was active
     if webhook_active:
         try:
@@ -176,6 +207,13 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     # Admin server stop
     if admin_server:
         admin_server.should_exit = True
+        admin_server.force_exit = True
+        if admin_server_task:
+            try:
+                import asyncio
+                await asyncio.wait_for(admin_server_task, timeout=2.0)
+            except Exception:
+                pass
 
     # Close CryptoPay shared HTTP session
     from bot.misc.services.payment import CryptoPayAPI

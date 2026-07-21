@@ -21,6 +21,7 @@ async def log_audit(
     details: str | None = None,
     ip_address: str | None = None,
 ) -> None:
+    resource_id = str(resource_id) if resource_id is not None else None
     """Write audit entry to both the log file and the database."""
     # 1. File log
     log_level = _LOG_LEVELS.get(level, logging.INFO)

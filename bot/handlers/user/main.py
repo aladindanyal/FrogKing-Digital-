@@ -24,68 +24,116 @@ from bot.logger_mesh import logger
 
 router = Router()
 
-async def _send_or_edit_main_menu(message_or_call, role_data: int, channel_username, user_id: int):
-    settings = await get_store_settings()
-    
+hero_message_registry: dict[tuple[int, int], int] = {}
+
+async def store_main_menu_hero(chat_id: int, user_id: int, message_id: int) -> None:
+    logger.info(f"Storing hero message_id {message_id} for user {user_id} in chat {chat_id}")
+    hero_message_registry[(chat_id, user_id)] = message_id
+
+async def delete_main_menu_hero_safe(bot, chat_id: int, user_id: int) -> None:
+    hero_message_id = hero_message_registry.get((chat_id, user_id))
+    if not hero_message_id:
+        logger.info(f"No tracked hero message for user {user_id} in chat {chat_id} to delete.")
+        return
+        
+    logger.info(f"Attempting to delete tracked hero message_id {hero_message_id} for user {user_id} in chat {chat_id}.")
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=hero_message_id)
+        logger.info(f"Successfully deleted hero message_id {hero_message_id}")
+    except TelegramBadRequest as e:
+        logger.warning(f"TelegramBadRequest deleting hero message_id {hero_message_id}: {e}")
+    except TelegramForbiddenError as e:
+        logger.warning(f"TelegramForbiddenError deleting hero message_id {hero_message_id}: {e}")
+    finally:
+        hero_message_registry.pop((chat_id, user_id), None)
+
+def build_main_menu_text(settings) -> str:
+    import html
+    from bot.i18n import localize
     title = settings.main_menu_title if settings and settings.main_menu_title else localize("menu.title")
     desc = settings.main_menu_description if settings and settings.main_menu_description else ""
     footer = settings.main_menu_footer if settings and settings.main_menu_footer else ""
     
-    text = f"<b>{title}</b>\n\n"
+    text = f"<blockquote><b>{html.escape(title)}</b></blockquote>"
     if desc:
-        text += f"{desc}\n\n"
+        text += f"\n\n{html.escape(desc)}"
     if footer:
-        text += f"<i>{footer}</i>"
-        
+        text += f"\n\n{html.escape(footer)}"
+    return text
+
+async def send_fresh_main_menu(
+    call: CallbackQuery,
+    role_data: int,
+    channel_username: str,
+    user_id: int,
+    *,
+    delete_source_if_safe: bool = True,
+) -> None:
+    settings = await get_store_settings()
+    text = build_main_menu_text(settings)
+    
     from bot.database.methods.read import get_main_menu_buttons
     from bot.i18n.main import current_locale
     
     buttons = await get_main_menu_buttons()
     markup = main_menu(role=role_data, buttons_config=buttons, locale=current_locale.get(), helper=EnvKeys.HELPER_ID)
+    
+    msg = call.message
+    if delete_source_if_safe and msg:
+        can_delete = True
+        if getattr(msg, "photo", None) or getattr(msg, "video", None) or getattr(msg, "document", None) or getattr(msg, "animation", None) or getattr(msg, "audio", None) or getattr(msg, "voice", None):
+            can_delete = False
+        elif getattr(msg, "date", 0) == 0:  # InaccessibleMessage
+            can_delete = False
+        elif msg.text and ("Receipt" in msg.text or "Order Reference" in msg.text):
+            can_delete = False
+            
+        if can_delete:
+            try:
+                await msg.delete()
+            except TelegramBadRequest:
+                pass
+            except TelegramForbiddenError:
+                pass
+
+    await call.bot.send_message(
+        chat_id=user_id,
+        text=text,
+        reply_markup=markup,
+        parse_mode='HTML'
+    )
+
+async def render_main_menu(message: Message, role_data: int, channel_username: str, user_id: int, *, include_image: bool = False):
+    settings = await get_store_settings()
+    text = build_main_menu_text(settings)
+    
+    from bot.database.methods.read import get_main_menu_buttons
+    from bot.i18n.main import current_locale
+    import os
+    
+    buttons = await get_main_menu_buttons()
+    markup = main_menu(role=role_data, buttons_config=buttons, locale=current_locale.get(), helper=EnvKeys.HELPER_ID)
     image_path = settings.main_menu_image_path if settings else None
     
-    msg = message_or_call if isinstance(message_or_call, Message) else message_or_call.message
-    
-    if image_path:
-        import os
-        if not os.path.exists(image_path):
-            logger.warning(f"Main menu image path exists but file is missing: {image_path}")
-            image_path = None
+    if image_path and not os.path.exists(image_path):
+        logger.warning(f"Main menu image path exists but file is missing: {image_path}")
+        image_path = None
 
-    if image_path:
-        if isinstance(message_or_call, CallbackQuery) and msg.photo:
-            try:
-                await msg.edit_caption(caption=text, reply_markup=markup, parse_mode='HTML')
-            except Exception as e:
-                if "message is not modified" not in str(e):
-                    try:
-                        await msg.delete()
-                    except:
-                        pass
-                    await msg.answer_photo(photo=FSInputFile(image_path), caption=text, reply_markup=markup, parse_mode='HTML')
-        else:
-            try:
-                await msg.delete()
-            except:
-                pass
-            await msg.answer_photo(photo=FSInputFile(image_path), caption=text, reply_markup=markup, parse_mode='HTML')
-    else:
-        if isinstance(message_or_call, CallbackQuery):
-            try:
-                await msg.edit_text(text, reply_markup=markup, parse_mode='HTML')
-            except TelegramBadRequest as e:
-                if "message is not modified" not in str(e):
-                    try:
-                        await msg.delete()
-                    except:
-                        pass
-                    await msg.answer(text, reply_markup=markup, parse_mode='HTML')
-        else:
-            try:
-                await msg.delete()
-            except:
-                pass
-            await msg.answer(text, reply_markup=markup, parse_mode='HTML')
+    if include_image and image_path:
+        await delete_main_menu_hero_safe(message.bot, message.chat.id, user_id)
+        try:
+            hero_msg = await message.answer_photo(photo=FSInputFile(image_path))
+            await store_main_menu_hero(message.chat.id, user_id, hero_msg.message_id)
+        except Exception as e:
+            logger.warning(f"Failed to send main menu image: {e}")
+
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+    except TelegramForbiddenError:
+        pass
+    await message.answer(text, reply_markup=markup, parse_mode='HTML')
 
 
 
@@ -109,12 +157,22 @@ async def start(message: Message, state: FSMContext):
 
     is_new_user = (await check_user(user_id)) is None
 
+    from bot.database.methods.profile import normalize_profile
+    username, first_name, last_name = normalize_profile(
+        username=message.from_user.username,
+        first_name=message.from_user.first_name,
+        last_name=message.from_user.last_name
+    )
+
     # registration_date is DateTime
     await create_user(
         telegram_id=int(user_id),
         registration_date=datetime.datetime.now(datetime.timezone.utc),
         referral_id=int(referral_id) if referral_id else None,
-        role=user_role
+        role=user_role,
+        telegram_username=username,
+        first_name=first_name,
+        last_name=last_name
     )
 
     if is_new_user:
@@ -139,7 +197,8 @@ async def start(message: Message, state: FSMContext):
         # Ignore channel errors (private channel, wrong link, etc.)
         logger.warning(f"Channel subscription check failed for user {user_id}: {e}")
 
-    await _send_or_edit_main_menu(message, role_data, channel_username, user_id)
+    await render_main_menu(message, role_data, channel_username, user_id, include_image=True)
+    # Don't call state.clear() before delete_main_menu_hero_safe is executed inside render_main_menu... wait, the hero is stored! So if we clear state here it's fine for FSM but we don't rely on it anymore.
     await state.clear()
 
 
@@ -152,11 +211,17 @@ async def back_to_menu_callback_handler(call: CallbackQuery, state: FSMContext):
     user_id = call.from_user.id
     user = await check_user_cached(user_id)
     if not user:
+        from bot.database.methods.profile import normalize_profile
+        username, first_name, last_name = normalize_profile(call.from_user)
+
         await create_user(
             telegram_id=user_id,
             registration_date=datetime.datetime.now(datetime.timezone.utc),
             referral_id=None,
-            role=1
+            role=1,
+            telegram_username=username,
+            first_name=first_name,
+            last_name=last_name
         )
         user = await check_user_cached(user_id)
 
@@ -164,13 +229,14 @@ async def back_to_menu_callback_handler(call: CallbackQuery, state: FSMContext):
 
     channel_username = _parse_channel_username()
 
-    await _send_or_edit_main_menu(call, role_id, channel_username, user_id)
+    await send_fresh_main_menu(call, role_id, channel_username, user_id)
     await state.clear()
 
 
 @router.callback_query(F.data == "rules")
 async def rules_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     """
     Show rules text if provided in ENV.
     """
@@ -185,6 +251,7 @@ async def rules_callback_handler(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "profile")
 async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     """
     Send profile info (balance, purchases count, id, etc.).
     """
@@ -197,7 +264,7 @@ async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
     overall_balance = sum(operations) if operations else 0
     items = await select_user_items(user_id)
     referral = EnvKeys.REFERRAL_PERCENT
-    markup = profile_keyboard(user_items=items)
+    markup = profile_keyboard()
     text = (
         f"{localize('profile.caption', name=tg_user.first_name, id=user_id)}\n"
         f"{localize('profile.id', id=user_id)}\n"
@@ -225,8 +292,7 @@ async def check_sub_to_channel(call: CallbackQuery, state: FSMContext):
         if await check_sub_channel(chat_member):
             user = await check_user_cached(user_id)
             role_id = user.get('role_id')
-            markup = main_menu(role_id, channel_username, helper)
-            await call.message.edit_text(localize("menu.title"), reply_markup=markup)
+            await send_fresh_main_menu(call, role_id, channel_username, user_id)
             await state.clear()
             return
 
@@ -327,6 +393,7 @@ from bot.keyboards.inline import wallet_keyboard
 @router.callback_query(F.data == "wallet")
 async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     user_id = call.from_user.id
     user_info = await check_user_cached(user_id)
     
@@ -348,14 +415,16 @@ async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "support_none")
-async def support_none_callback(call: CallbackQuery):
+async def support_none_callback(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     await answer_callback_safe(call, localize("support.not_set", default="Support not configured"), show_alert=True)
 
 
 @router.callback_query(F.data == "language")
-async def language_callback(call: CallbackQuery):
+async def language_callback(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     from bot.keyboards.inline import simple_buttons
     markup = simple_buttons([
         ("🇺🇸 English", "set_lang_en"),
@@ -409,5 +478,5 @@ async def set_lang_callback(call: CallbackQuery, state: FSMContext):
     role_id = user.get('role_id') if user else 1
     channel_username = _parse_channel_username()
     
-    await _send_or_edit_main_menu(call, role_id, channel_username, user_id)
+    await send_fresh_main_menu(call, role_id, channel_username, user_id)
     await state.set_state(None)

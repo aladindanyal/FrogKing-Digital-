@@ -6,6 +6,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Filter
 
 from bot.database.methods import (
     get_bought_item_info, check_value, query_categories, query_user_bought_items, get_item_info_cached,
@@ -35,15 +36,14 @@ router = Router()
 
 # --- Shared helper: render item page ---
 
-async def _render_item_page(target, state: FSMContext, item_name: str, back_data: str = None, user_id: int = None):
+async def _render_item_page(target, state: FSMContext, item_name: str, back_data: str = None, user_id: int = None, send_new: bool = False):
     """
-    Render the item detail page with optional promo discount.
-    `target` can be CallbackQuery or Message.
+    Render the item detail page for quantity selection.
     """
     data = await state.get_data()
     if not back_data:
         back_data = data.get('item_back_data', 'gp_0')
-    
+
     current_quantity = data.get('item_quantity', 1)
 
     item_info_data = await get_item_info_cached(item_name)
@@ -55,65 +55,74 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
         return
 
     quantity = await select_item_values_amount_cached(item_name)
-    quantity_line = (
-        localize("shop.item.quantity_unlimited")
-        if await check_value(item_name)
-        else localize("shop.item.quantity_left", count=quantity)
-    )
+    has_infinite = await check_value(item_name)
+    stock = -1 if has_infinite else quantity
+
+    if stock == 0:
+        quantity_line = "📦 <b>Stock Status:</b> ❌ Out of Stock"
+    else:
+        quantity_line = (
+            f"📦 <b>Available Stock:</b> ♾ Unlimited"
+            if has_infinite
+            else f"📦 <b>Available Stock:</b> {quantity}"
+        )
 
     reviews_enabled = EnvKeys.REVIEWS_ENABLED == "1"
     avg_rating = None
     review_count_val = 0
-    purchased = False
 
     if reviews_enabled:
         avg_rating = await get_item_avg_rating(item_name)
         review_count_val = await query_item_reviews(item_name, count_only=True)
-        if user_id:
-            purchased = await has_purchased_item(user_id, item_name)
 
-    applied_promo = data.get('applied_promo')
-
-    # Build price line
     unit_price = Decimal(str(item_info_data["price"]))
-    if applied_promo:
-        promo_data = data.get('applied_promo_data', {})
-        if promo_data.get('discount_type') == 'percent':
-            discount = unit_price * Decimal(str(promo_data.get('discount_value', 0))) / 100
-        else:
-            discount = min(Decimal(str(promo_data.get('discount_value', 0))), unit_price)
-        unit_discounted = (unit_price - discount).quantize(Decimal("0.01"))
-        total_discounted = unit_discounted * current_quantity
-        total_original = unit_price * current_quantity
-        price_line = localize(
-            "shop.item.price_discounted",
-            original=total_original, discounted=total_discounted,
-            currency=EnvKeys.PAY_CURRENCY, code=applied_promo,
-        )
-    else:
-        total_price = unit_price * current_quantity
-        price_line = localize("shop.item.price", amount=total_price, currency=EnvKeys.PAY_CURRENCY)
+    total_price = unit_price * current_quantity
+
+    price_line = (
+        f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
+        f"{quantity_line}\n"
+        f"🔢 <b>Selected Quantity:</b> {current_quantity}\n"
+        f"💰 <b>Total:</b> {total_price} {EnvKeys.PAY_CURRENCY}"
+    )
+
+    item_id = data.get('item_id')
+    user_identifier = user_id
+    if not user_identifier and hasattr(target, 'from_user'):
+        user_identifier = target.from_user.id
+        
+    has_active_sub = False
+    if stock == 0 and user_identifier and item_id:
+        from bot.database.methods.restock_subscriptions import is_restock_subscription_active
+        has_active_sub = await is_restock_subscription_active(user_identifier, item_id)
 
     markup = item_info(
         item_name, back_data,
         avg_rating=avg_rating, review_count=review_count_val,
-        has_purchased=purchased, applied_promo=applied_promo,
+        has_purchased=False, applied_promo=None,
         reviews_enabled=reviews_enabled, quantity=current_quantity,
+        stock=stock, item_id=item_id,
+        has_active_restock_sub=has_active_sub
     )
 
     text_lines = [
-        localize("shop.item.title", name=item_name),
-        localize("shop.item.description", description=item_info_data["description"]),
+        f"📦 <b>{item_name}</b>",
+        f"📝 {item_info_data['description']}",
+        "",
         price_line,
-        quantity_line,
     ]
     if reviews_enabled and avg_rating is not None:
+        text_lines.append("")
         text_lines.append(localize("review.avg_rating", rating=avg_rating, count=review_count_val))
 
     text = "\n".join(text_lines)
 
     try:
-        if hasattr(target, 'message') and hasattr(target.message, 'edit_text'):
+        if send_new:
+            if hasattr(target, 'message'):
+                await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
+            else:
+                await target.answer(text, reply_markup=markup, parse_mode="HTML")
+        elif hasattr(target, 'message') and hasattr(target.message, 'edit_text'):
             await safe_edit_or_send(target, text, reply_markup=markup)
         else:
             await target.answer(text, reply_markup=markup)
@@ -129,13 +138,15 @@ from bot.database.methods.lazy_queries import check_category_has_subcategories, 
 @router.callback_query(F.data == "shop")
 async def shop_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    from bot.handlers.user.main import delete_main_menu_hero_safe
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     """
     Show list of shop top-level categories.
     """
     metrics = get_metrics()
     if metrics:
         metrics.track_conversion("purchase_funnel", "view_shop", call.from_user.id)
-        
+
     await _render_category_page(call, state, parent_id=None, page=0)
 
 
@@ -167,16 +178,16 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
 
     if parent_id is None:
         back_cb = "back_to_menu"
-        
+
         # Root shop text
         title = settings.shop_root_title if settings and settings.shop_root_title else localize("shop.categories.title")
         description = settings.shop_root_description if settings and settings.shop_root_description else ""
-        
+
         display_text = f"<b>{title}</b>\n\n{description}".strip()
     else:
         grandparent_id = await get_category_parent_id(parent_id)
         back_cb = f"cpage:{grandparent_id}:0" if grandparent_id is not None else "cpage:None:0"
-        
+
         # Subcategory text
         cat_info = await get_category_by_id(parent_id)
         if cat_info:
@@ -224,29 +235,33 @@ async def category_selected_handler(call: CallbackQuery, state: FSMContext):
     """
     parts = call.data.split(':')
     cat_id = int(parts[1])
-    
+
     has_subcats = await check_category_has_subcategories(cat_id)
     if has_subcats:
         return await _render_category_page(call, state, parent_id=cat_id, page=0)
-    
+
     return await _render_goods_page(call, state, cat_id, page=0)
 
 
 async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id: int, page: int):
     await answer_callback_safe(call)
     await state.update_data(current_category_id=category_id)
-    
+
     from bot.database.methods.lazy_queries import query_items_in_category
     query_func = partial(query_items_in_category, category_id)
     paginator = LazyPaginator(query_func, per_page=10)
-    
+
     page_items = await paginator.get_page(page)
-    items_index = {item: i for i, item in enumerate(page_items)}
+    item_ids = [item[0] for item in page_items]
+    from bot.database.methods.read import get_stock_for_items
+    stock_by_item_id = await get_stock_for_items(item_ids)
+
+    items_index = {item[0]: i for i, item in enumerate(page_items)}
     await state.update_data(goods_page_items=list(page_items))
-    
+
     parent_id = await get_category_parent_id(category_id)
     back_cb = f"cpage:{parent_id}:0" if parent_id is not None else "cpage:None:0"
-    
+
     # Category text
     cat_info = await get_category_by_id(category_id)
     if cat_info:
@@ -255,24 +270,28 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
             display_text += f"\n\n{cat_info['description']}"
     else:
         display_text = localize("shop.goods.choose")
-        
+
     settings = await get_store_settings()
-    product_columns = (
-        settings.product_columns
-        if settings and settings.product_columns in (1, 2)
-        else 1
-    )
-    
+
+    def _format_goods_button_text(item_name: str, stock: int) -> str:
+        name = item_name if len(item_name) <= 40 else item_name[:37] + "..."
+        if stock == 0:
+            return f"{name} · ⛔ {localize('shop.goods.sold_out')}"
+        elif stock == -1:
+            return f"{name} · ♾️ {localize('shop.goods.available')}"
+        else:
+            return f"{name} · 📦 {stock}"
+
     markup = await lazy_paginated_keyboard(
         paginator=paginator,
-        item_text=lambda item: item,
-        item_callback=lambda item: f"itm:{items_index[item]}:{page}",
+        item_text=lambda item: _format_goods_button_text(item[1], stock_by_item_id.get(item[0], 0)),
+        item_callback=lambda item: f"itm:{items_index[item[0]]}:{page}",
         page=page,
         back_cb=back_cb,
         nav_cb_prefix="gp_",
-        row_width=product_columns
+        row_width=1
     )
-    
+
     await _edit_message_safe(call, call.message, display_text, markup)
     await state.set_state(ShopStates.viewing_goods)
 
@@ -311,7 +330,14 @@ async def item_info_callback_handler(call: CallbackQuery, state: FSMContext):
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
 
-    item_name = goods_page_items[idx]
+    item_tuple = goods_page_items[idx]
+    if isinstance(item_tuple, (list, tuple)):
+        item_id = item_tuple[0]
+        item_name = item_tuple[1]
+    else:
+        item_name = item_tuple
+        item_id = None
+
     back_data = f"gp_{goods_page}"
 
     metrics = get_metrics()
@@ -319,85 +345,349 @@ async def item_info_callback_handler(call: CallbackQuery, state: FSMContext):
         metrics.track_conversion("purchase_funnel", "view_item", call.from_user.id)
 
     # Save item name, back_data and reset quantity in state
-    await state.update_data(csrf_item=item_name, item_back_data=back_data, item_quantity=1)
+    await state.update_data(
+        csrf_item=item_name,
+        item_id=item_id,
+        item_back_data=back_data,
+        item_quantity=1
+    )
 
     await _render_item_page(call, state, item_name, back_data, user_id=call.from_user.id)
 
-@router.callback_query(F.data == "qty_inc")
-async def qty_inc_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
+# --- Quantity Selection ---
+
+@router.callback_query(F.data.startswith("qty:quick:"))
+async def qty_quick_handler(call: CallbackQuery, state: FSMContext):
+    parts = call.data.split(':')
+    item_id_str = parts[2]
+    requested_qty = int(parts[3])
+
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    if not item_name:
+
+    # Validation
+    if not item_name or str(data.get('item_id')) != item_id_str:
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
-        
-    current_qty = data.get('item_quantity', 1)
-    
-    # Check max limit (either available stock or 10 for infinity)
+
     from bot.database.methods import check_value, select_item_values_amount_cached
     is_infinity = await check_value(item_name)
-    max_qty = 10 if is_infinity else await select_item_values_amount_cached(item_name)
-    
-    if current_qty < max_qty:
-        await state.update_data(item_quantity=current_qty + 1)
-        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
-    else:
-        await answer_callback_safe(call, localize("shop.out_of_stock") if not is_infinity else "Max quantity reached", show_alert=True)
+    stock = await select_item_values_amount_cached(item_name)
 
-@router.callback_query(F.data == "qty_dec")
-async def qty_dec_handler(call: CallbackQuery, state: FSMContext):
+    if not is_infinity and requested_qty > stock:
+        await answer_callback_safe(call, f"Only {stock} items are currently available.", show_alert=True)
+        return
+
     await answer_callback_safe(call)
+    await state.update_data(item_quantity=requested_qty)
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+@router.callback_query(F.data.startswith("qty:keypad:"))
+async def qty_keypad_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
+    item_id_str = call.data.split(':')[2]
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    if not item_name:
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+
+    await state.update_data(item_quantity=0)
+    await _render_keypad_page(call, state, item_name, 0, item_id_str)
+
+async def _render_keypad_page(call: CallbackQuery, state: FSMContext, item_name: str, qty: int, item_id_str: str):
+    from bot.keyboards.inline import numeric_keypad
+    from bot.database.methods import get_item_info_cached, check_value, select_item_values_amount_cached
+
+    item_info_data = await get_item_info_cached(item_name)
+    if not item_info_data:
+        return
+
+    unit_price = Decimal(str(item_info_data["price"]))
+    total_price = unit_price * qty
+
+    is_infinity = await check_value(item_name)
+    stock = await select_item_values_amount_cached(item_name)
+    stock_line = "♾ Unlimited" if is_infinity else str(stock)
+
+    text = (
+        f"📦 <b>{item_name}</b>\n\n"
+        f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
+        f"📦 <b>Available Stock:</b> {stock_line}\n\n"
+        f"🔢 <b>Entered Quantity:</b> {qty}\n"
+        f"💰 <b>Total:</b> {total_price} {EnvKeys.PAY_CURRENCY}"
+    )
+
+    await safe_edit_or_send(call, text, reply_markup=numeric_keypad(int(item_id_str)))
+
+@router.callback_query(F.data.startswith("qty:digit:"))
+async def qty_digit_handler(call: CallbackQuery, state: FSMContext):
+    parts = call.data.split(':')
+    item_id_str = parts[2]
+    digit = parts[3]
+
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
-        
-    current_qty = data.get('item_quantity', 1)
-    if current_qty > 1:
-        await state.update_data(item_quantity=current_qty - 1)
-        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+    qty = data.get('item_quantity', 0)
+    if qty == 0:
+        new_qty = int(digit)
     else:
-        pass
+        new_qty = int(str(qty) + digit)
 
+    if len(str(new_qty)) > 4:
+        await answer_callback_safe(call, "Maximum 4 digits allowed.", show_alert=True)
+        return
 
-# --- Promo Code Application ---
-
-@router.callback_query(F.data == "apply_promo")
-async def apply_promo_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
-    await safe_edit_or_send(call, localize("promo.enter_code"), reply_markup=back("back_to_item"))
+    await state.update_data(item_quantity=new_qty)
+    await _render_keypad_page(call, state, item_name, new_qty, item_id_str)
+
+@router.callback_query(F.data.startswith("qty:backspace:"))
+async def qty_backspace_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    qty_str = str(data.get('item_quantity', 0))
+    new_str = qty_str[:-1]
+    new_qty = int(new_str) if new_str else 0
+
+    await answer_callback_safe(call)
+    await state.update_data(item_quantity=new_qty)
+    await _render_keypad_page(call, state, item_name, new_qty, item_id_str)
+
+@router.callback_query(F.data.startswith("qty:clear:"))
+async def qty_clear_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    await answer_callback_safe(call)
+    await state.update_data(item_quantity=0)
+    await _render_keypad_page(call, state, item_name, 0, item_id_str)
+
+@router.callback_query(F.data.startswith("qty:keypad_continue:"))
+async def qty_keypad_continue_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    qty = data.get('item_quantity', 0)
+
+    if qty <= 0:
+        await answer_callback_safe(call, "Quantity must be greater than zero.", show_alert=True)
+        return
+
+    await continue_product_checkout(call, state, int(item_id_str), qty)
+
+@router.callback_query(F.data.startswith("qty:keypad_back:"))
+async def qty_keypad_back_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    await answer_callback_safe(call)
+    await state.update_data(item_quantity=1)
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+
+# --- Checkout & Promo Code Flow ---
+
+async def continue_product_checkout(event: CallbackQuery | Message, state: FSMContext, goods_id: int, quantity: int):
+    from bot.database.methods.read import get_item_info_by_id
+    from bot.database.methods import check_value, select_item_values_amount_cached
+    from bot.misc.env import EnvKeys
+    from bot.i18n import localize
+    from bot.handlers.user.manual_intake import start_manual_intake
+    from bot.keyboards.inline import back
+    from bot.misc.utils import safe_edit_or_send
+
+    item_info_data = await get_item_info_by_id(goods_id)
+    if not item_info_data:
+        if isinstance(event, CallbackQuery):
+            await answer_callback_safe(event)
+        await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+
+    item_name = item_info_data['name']
+    is_infinity = await check_value(item_name)
+    stock = await select_item_values_amount_cached(item_name)
+
+    if not is_infinity and quantity > stock:
+        if isinstance(event, CallbackQuery):
+            await answer_callback_safe(event, f"Only {stock} items are currently available.", show_alert=True)
+        else:
+            await event.answer(f"Only {stock} items are currently available.")
+        return
+
+    if is_infinity and quantity > 1000:
+        if isinstance(event, CallbackQuery):
+            await answer_callback_safe(event, "Maximum 1000 allowed for unlimited products.", show_alert=True)
+        else:
+            await event.answer("Maximum 1000 allowed for unlimited products.")
+        return
+
+    if item_info_data.get("fulfillment_mode") == "manual":
+        if EnvKeys.MANUAL_CHECKOUT_ENABLED:
+            if isinstance(event, CallbackQuery):
+                await answer_callback_safe(event)
+            # Update state with identity for continuity
+            await state.update_data(item_id=goods_id, item_quantity=quantity, csrf_item=item_name)
+            await start_manual_intake(event, state, item_name, str(goods_id), user_id=event.from_user.id)
+            return
+        else:
+            msg = localize("shop.item.manual_unavailable_guard", default="This product requires manual fulfillment and is temporarily unavailable while configuration is being completed.")
+            if isinstance(event, CallbackQuery):
+                await answer_callback_safe(event, msg, show_alert=True)
+            else:
+                await event.answer(msg)
+            return
+
+    if isinstance(event, CallbackQuery):
+        await answer_callback_safe(event)
+    await state.update_data(item_id=goods_id, item_quantity=quantity, csrf_item=item_name)
+    await _render_checkout_page(event, state, item_name, str(goods_id), user_id=event.from_user.id)
+
+@router.callback_query(F.data.startswith("checkout:"))
+async def checkout_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[1]
+
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call)
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+
+    quantity = data.get('item_quantity', 1)
+    await continue_product_checkout(call, state, int(item_id_str), quantity)
+
+async def _render_checkout_page(event: CallbackQuery | Message, state: FSMContext, item_name: str, item_id_str: str, user_id: int):
+    from bot.keyboards.inline import checkout_confirmation_keyboard
+    from bot.database.methods import get_item_info_cached, check_user_cached
+    from bot.database.methods import check_value, select_item_values_amount_cached
+    from bot.database.methods.read import validate_promo_for_item
+
+    data = await state.get_data()
+    current_quantity = data.get('item_quantity', 1)
+    applied_promo = data.get('applied_promo')
+
+    item_info_data = await get_item_info_cached(item_name)
+    if not item_info_data:
+        return
+
+    is_infinity = await check_value(item_name)
+    stock = await select_item_values_amount_cached(item_name)
+
+    if not is_infinity and current_quantity > stock:
+        current_quantity = stock
+        await state.update_data(item_quantity=stock)
+
+    unit_price = Decimal(str(item_info_data["price"]))
+    subtotal = unit_price * current_quantity
+    discount = Decimal("0.00")
+
+    if applied_promo:
+        valid, _, promo_data = await validate_promo_for_item(applied_promo, item_name, user_id)
+        if valid:
+            if promo_data.get('discount_type') == 'percent':
+                discount_per_unit = unit_price * Decimal(str(promo_data.get('discount_value', 0))) / 100
+            else:
+                discount_per_unit = min(Decimal(str(promo_data.get('discount_value', 0))), unit_price)
+            discount = (discount_per_unit * current_quantity).quantize(Decimal("0.01"))
+        else:
+            applied_promo = None
+            await state.update_data(applied_promo=None)
+
+    total = subtotal - discount
+
+    user_info = await check_user_cached(user_id)
+    balance_dec = Decimal(str(user_info.get('balance', 0))) if user_info else Decimal("0.00")
+    balance_after = balance_dec - total
+
+    can_purchase = balance_after >= 0
+
+    text = (
+        f"🛒 <b>Confirm Your Order</b>\n\n"
+        f"📦 <b>Product:</b> {item_name}\n"
+        f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
+        f"🔢 <b>Quantity:</b> {current_quantity}\n"
+        f"💰 <b>Subtotal:</b> {subtotal} {EnvKeys.PAY_CURRENCY}\n"
+        f"🏷 <b>Discount:</b> {discount} {EnvKeys.PAY_CURRENCY}\n"
+        f"💳 <b>Total:</b> {total} {EnvKeys.PAY_CURRENCY}\n\n"
+        f"👛 <b>Wallet Balance:</b> {balance_dec} {EnvKeys.PAY_CURRENCY}\n"
+    )
+
+    if can_purchase:
+        text += f"📉 <b>Balance After Purchase:</b> {balance_after} {EnvKeys.PAY_CURRENCY}"
+    else:
+        text += f"❌ <b>Insufficient Balance</b>"
+
+    await safe_edit_or_send(event, text, reply_markup=checkout_confirmation_keyboard(int(item_id_str), can_purchase, applied_promo))
+
+@router.callback_query(F.data.startswith("checkout_change_qty:"))
+async def checkout_change_qty_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[1]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    await answer_callback_safe(call)
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+@router.callback_query(F.data.startswith("apply_promo:"))
+async def apply_promo_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[1]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    await answer_callback_safe(call)
+    await safe_edit_or_send(call, localize("promo.enter_code"), reply_markup=back(f"checkout:{item_id_str}"))
     await state.update_data(awaiting_promo=True)
 
-
-@router.callback_query(F.data == "remove_promo")
+@router.callback_query(F.data.startswith("remove_promo:"))
 async def remove_promo_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    await state.update_data(applied_promo=None, applied_promo_data=None)
+    item_id_str = call.data.split(':')[1]
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    if item_name:
-        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
-    else:
-        await answer_callback_safe(call, localize("promo.removed"))
 
-
-@router.callback_query(F.data == "back_to_item")
-async def back_to_item_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    """Return to item page, preserving promo state."""
-    data = await state.get_data()
-    item_name = data.get('csrf_item')
-    if not item_name:
-        # Fallback
-        await safe_edit_or_send(call, 
-            localize("shop.item.not_found"),
-            reply_markup=back("back_to_menu"),
-        )
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
-    await state.update_data(awaiting_promo=False)
-    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+    await answer_callback_safe(call)
+    await state.update_data(applied_promo=None)
+    await _render_checkout_page(call, state, item_name, item_id_str, user_id=call.from_user.id)
 
 
 # --- Balance Promo Redemption (from profile) ---
@@ -405,6 +695,8 @@ async def back_to_item_handler(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "redeem_promo")
 async def redeem_promo_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+    from bot.handlers.user.main import delete_main_menu_hero_safe
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     await safe_edit_or_send(call, localize("promo.enter_redeem_code"), reply_markup=back("profile"))
     await state.set_state(PromoFSM.waiting_redeem_code)
 
@@ -453,7 +745,7 @@ async def start_review_handler(call: CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(review_item_name=item_name)
-    await safe_edit_or_send(call, 
+    await safe_edit_or_send(call,
         localize("review.prompt_rating", name=item_name),
         reply_markup=rating_keyboard(item_name),
     )
@@ -470,7 +762,7 @@ async def receive_rating_handler(call: CallbackQuery, state: FSMContext):
         (localize("btn.skip_review_text"), "skip_review_text"),
         (localize("btn.back"), "back_to_menu"),
     ]
-    await safe_edit_or_send(call, 
+    await safe_edit_or_send(call,
         localize("review.prompt_text"),
         reply_markup=simple_buttons(buttons),
     )
@@ -503,40 +795,7 @@ async def receive_review_text_handler(message: Message, state: FSMContext):
     await state.clear()
 
 
-# --- Promo code text input (catch-all, must be AFTER state-specific message handlers) ---
 
-@router.message(F.text)
-async def promo_code_text_handler(message: Message, state: FSMContext):
-    """Handle promo code text input when awaiting_promo is set."""
-    data = await state.get_data()
-    if not data.get('awaiting_promo'):
-        return  # Not awaiting promo input — skip
-
-    item_name = data.get('csrf_item')
-    if not item_name:
-        await state.update_data(awaiting_promo=False)
-        return
-
-    code = (message.text or "").strip().upper()
-    valid, error_key, promo_data = await validate_promo_for_item(code, item_name, message.from_user.id)
-
-    if not valid:
-        await message.answer(localize(error_key), reply_markup=back("back_to_item"))
-        await state.update_data(awaiting_promo=False)
-        return
-
-    # Store promo data for discounted price display
-    await state.update_data(
-        applied_promo=code,
-        applied_promo_data={
-            'discount_type': promo_data.get('discount_type'),
-            'discount_value': str(promo_data.get('discount_value', 0)),
-        },
-        awaiting_promo=False,
-    )
-
-    # Re-render item page with discounted price
-    await _render_item_page(message, state, item_name, user_id=message.from_user.id)
 
 
 # --- View Reviews ---
@@ -561,7 +820,7 @@ async def view_reviews_handler(call: CallbackQuery, state: FSMContext):
     total_pages = await paginator.get_total_pages()
 
     if not reviews:
-        await safe_edit_or_send(call, 
+        await safe_edit_or_send(call,
             localize("review.list_empty"),
             reply_markup=back("back_to_item"),
         )
@@ -592,102 +851,212 @@ async def view_reviews_handler(call: CallbackQuery, state: FSMContext):
     await safe_edit_or_send(call, "\n".join(lines), reply_markup=kb.as_markup())
 
 
-# --- Bought items ---
+# --- Legacy Purchases Fallback ---
 
 @router.callback_query(F.data == "bought_items")
-async def bought_items_callback_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    """
-    Show list of user's purchased items with lazy loading.
-    """
-    user_id = call.from_user.id
-
-    # Create paginator for user's bought items
-    query_func = partial(query_user_bought_items, user_id)
-    paginator = LazyPaginator(query_func, per_page=10)
-
-    markup = await lazy_paginated_keyboard(
-        paginator=paginator,
-        item_text=lambda item: item.item_name,
-        item_callback=lambda item: f"bought-item:{item.id}:bought-goods-page_user_0",
-        page=0,
-        back_cb="profile",
-        nav_cb_prefix="bought-goods-page_user_"
-    )
-
-    await safe_edit_or_send(call, localize("purchases.title"), reply_markup=markup)
-
-    # Save paginator state
-    await state.update_data(bought_items_paginator=paginator.get_state())
-
-
 @router.callback_query(F.data.startswith('bought-goods-page_'))
-async def navigate_bought_items(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    """
-    Pagination for user's purchased items with lazy loading.
-    Format: 'bought-goods-page_{data}_{page}', where data = 'user' or user_id.
-    """
-    parts = call.data.split('_')
-    if len(parts) < 3:
-        await answer_callback_safe(call, localize("purchases.pagination.invalid"))
+@router.callback_query(F.data.startswith('bought-item:'))
+@router.callback_query(F.data == "orders:legacy")
+async def legacy_bought_items_redirect(call: CallbackQuery):
+    from bot.i18n import localize
+    from bot.handlers.user.orders import orders_list_handler
+    await call.answer(
+        localize("orders.legacy_redirect", default="This legacy purchase history is no longer available. Please use My Orders."),
+        show_alert=True
+    )
+    call.data = "orders:list:0"
+    await orders_list_handler(call, answer_callback=False)
+
+
+# --- Stock Refresh Handlers ---
+
+@router.callback_query(F.data.startswith('refresh:goods:'))
+async def refresh_goods_handler(call: CallbackQuery, state: FSMContext):
+    parts = call.data.split(':')
+    category_id = int(parts[2])
+    page = int(parts[3])
+    
+    await _render_goods_page(call, state, category_id, page)
+
+@router.callback_query(F.data.startswith('refresh:item:'))
+async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+        
+    from bot.database.methods.read import invalidate_item_cache, select_item_values_amount, check_value
+    await invalidate_item_cache(item_name)
+    
+    quantity = await select_item_values_amount(item_name)
+    has_infinite = await check_value(item_name)
+    stock = -1 if has_infinite else quantity
+    
+    current_quantity = data.get('item_quantity', 1)
+    
+    alert_text = None
+    if stock == 0:
+        await state.update_data(item_quantity=1, keypad_value='0')
+        if current_quantity > 0:
+            alert_text = "Stock changed. The item is now out of stock."
+    elif stock != -1 and current_quantity > stock:
+        await state.update_data(item_quantity=stock, keypad_value=str(stock))
+        alert_text = f"Stock changed. Selected quantity was adjusted to {stock}."
+        
+    if alert_text:
+        await answer_callback_safe(call, alert_text, show_alert=True)
+    else:
+        await answer_callback_safe(call)
+        
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+
+@router.callback_query(F.data.startswith('restock:subscribe:'))
+async def restock_subscribe_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    item_id = int(item_id_str)
+    
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
 
-    data_type = parts[1]
-    try:
-        current_index = int(parts[2])
-    except ValueError:
-        current_index = 0
-
-    if data_type == 'user':
-        user_id = call.from_user.id
-        back_cb = 'profile'
-        pre_back = f'bought-goods-page_user_{current_index}'
+    from bot.database.methods.restock_subscriptions import subscribe_to_restock
+    result = await subscribe_to_restock(call.from_user.id, item_id)
+    
+    if result == "available_now":
+        await answer_callback_safe(call, localize("shop.restock.available_now", default="This product is available now."), show_alert=True)
+    elif result in ("subscribed", "already_active"):
+        await answer_callback_safe(call, localize("shop.restock.subscribed", default="You’ll be notified when this product is available again."), show_alert=True)
+    elif result == "item_missing":
+        await answer_callback_safe(call, localize("shop.restock.missing", default="Product no longer exists."), show_alert=True)
+    elif result == "unlimited":
+        await answer_callback_safe(call, localize("shop.restock.available_now", default="This product is available now."), show_alert=True)
     else:
-        user_id = int(data_type)
-        back_cb = f'check-user_{data_type}'
-        pre_back = f'bought-goods-page_{data_type}_{current_index}'
+        await answer_callback_safe(call, localize("shop.restock.error", default="Unable to update the alert right now."), show_alert=True)
+        
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
-    # Get saved state
+
+@router.callback_query(F.data.startswith('restock:cancel:'))
+async def restock_cancel_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[2]
+    item_id = int(item_id_str)
+    
     data = await state.get_data()
-    paginator_state = data.get('bought_items_paginator')
+    item_name = data.get('csrf_item')
+    
+    from bot.database.methods.restock_subscriptions import cancel_restock_subscription
+    await cancel_restock_subscription(call.from_user.id, item_id)
+    
+    await answer_callback_safe(call, localize("shop.restock.cancelled", default="Restock alert cancelled."), show_alert=True)
+    
+    if item_name and str(data.get('item_id')) == item_id_str:
+        await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
-    # Create paginator with cached state
-    query_func = partial(query_user_bought_items, user_id)
-    paginator = LazyPaginator(query_func, per_page=10, state=paginator_state)
 
-    markup = await lazy_paginated_keyboard(
-        paginator=paginator,
-        item_text=lambda item: item.item_name,
-        item_callback=lambda item: f"bought-item:{item.id}:{pre_back}",
-        page=current_index,
-        back_cb=back_cb,
-        nav_cb_prefix=f"bought-goods-page_{data_type}_"
+# --- Post-Purchase Action Panel Handlers ---
+
+@router.callback_query(F.data.startswith("buy_again:"))
+async def buy_again_handler(call: CallbackQuery, state: FSMContext):
+    item_id_str = call.data.split(':')[1]
+    data = await state.get_data()
+    item_name = data.get('csrf_item')
+    
+    if not item_name or str(data.get('item_id')) != item_id_str:
+        await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+        return
+        
+    await answer_callback_safe(call)
+    await state.update_data(item_quantity=1, keypad_value='0')
+    await _render_item_page(call, state, item_name, user_id=call.from_user.id)
+
+@router.callback_query(F.data.startswith("support_order:"))
+async def support_order_handler(call: CallbackQuery):
+    unique_id = call.data.split(':')[1]
+    helper = EnvKeys.HELPER_ID
+    if helper:
+        text = (
+            f"🆘 <b>Support for Order:</b> <code>{unique_id}</code>\n\n"
+            f"Please tap the order reference above to copy it, then forward it to our support team using the button below."
+        )
+        from bot.keyboards.inline import simple_buttons
+        markup = simple_buttons([
+            ("Contact Support", f"tg://user?id={helper}"),
+            ("⬅️ Home", "back_to_menu")
+        ])
+        await safe_edit_or_send(call, text, reply_markup=markup, parse_mode='HTML')
+    else:
+        await answer_callback_safe(call, localize("support.not_set", default="Support not configured"), show_alert=True)
+
+
+
+
+
+# --- Promo code text input (catch-all, must be AFTER state-specific message handlers) ---
+
+class AwaitingPromoFilter(Filter):
+    async def __call__(self, message: Message, state: FSMContext) -> bool:
+        data = await state.get_data()
+        return bool(data.get('awaiting_promo'))
+
+@router.message(F.text, AwaitingPromoFilter())
+async def promo_code_text_handler(message: Message, state: FSMContext):
+    """Handle promo code text input when awaiting_promo is set."""
+    data = await state.get_data()
+    if not data.get('awaiting_promo'):
+        return  # Not awaiting promo input — skip
+
+    item_name = data.get('csrf_item')
+    if not item_name:
+        await state.update_data(awaiting_promo=False)
+        return
+
+    code = (message.text or "").strip().upper()
+    valid, error_key, promo_data = await validate_promo_for_item(code, item_name, message.from_user.id)
+
+    item_id = data.get('item_id')
+    if not valid:
+        await message.answer(localize(error_key), reply_markup=back(f"checkout:{item_id}"))
+        await state.update_data(awaiting_promo=False)
+        return
+
+    # Store promo data for discounted price display
+    await state.update_data(
+        applied_promo=code,
+        applied_promo_data={
+            'discount_type': promo_data.get('discount_type'),
+            'discount_value': str(promo_data.get('discount_value', 0)),
+        },
+        awaiting_promo=False,
     )
 
-    await safe_edit_or_send(call, localize("purchases.title"), reply_markup=markup)
-
-    # Update state
-    await state.update_data(bought_items_paginator=paginator.get_state())
-
-
-@router.callback_query(F.data.startswith('bought-item:'))
-async def bought_item_info_callback_handler(call: CallbackQuery):
-    await answer_callback_safe(call)
-    """
-    Show details for a purchased item.
-    """
-    trash, item_id, back_data = call.data.split(':', 2)
-    item = await get_bought_item_info(int(item_id))
+    # Re-render checkout page with discounted price
+    await _render_checkout_page(message, state, item_name, str(item_id), user_id=message.from_user.id)
+async def _render_item_page_by_id(event, state: FSMContext, item_id: int, *, back_data: str = "shop", user_id: int, send_new: bool = False):
+    from bot.database.methods.read import get_item_info_by_id
+    item = await get_item_info_by_id(item_id)
     if not item:
-        await answer_callback_safe(call, localize("purchases.item.not_found"), show_alert=True)
+        if isinstance(event, CallbackQuery):
+            if send_new:
+                await event.message.answer(localize("shop.item.not_found"), reply_markup=back(back_data))
+            else:
+                await safe_edit_or_send(event, localize("shop.item.not_found"), reply_markup=back(back_data))
+        else:
+            await event.answer(localize("shop.item.not_found"), reply_markup=back(back_data))
         return
+        
+    await state.update_data(item_quantity=1, keypad_value='0', item_id=item_id, csrf_item=item['name'], item_back_data=back_data)
+    await _render_item_page(event, state, item['name'], back_data=back_data, user_id=user_id, send_new=send_new)
 
-    text = "\n".join([
-        localize("purchases.item.name", name=item["item_name"]),
-        localize("purchases.item.price", amount=item["price"], currency=EnvKeys.PAY_CURRENCY),
-        localize("purchases.item.datetime", dt=item["bought_datetime"]),
-        localize("purchases.item.unique_id", uid=item["unique_id"]),
-        localize("purchases.item.value", value=item["value"]),
-    ])
-    await safe_edit_or_send(call, text, parse_mode='HTML', reply_markup=back(back_data))
+
+@router.callback_query(F.data.startswith("direct_item:"))
+async def direct_item_handler(call: CallbackQuery, state: FSMContext):
+    item_id = int(call.data.split(':')[1])
+    await answer_callback_safe(call)
+    await _render_item_page_by_id(call, state, item_id, back_data='menu', user_id=call.from_user.id, send_new=True)

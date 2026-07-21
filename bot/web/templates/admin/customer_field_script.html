@@ -1,0 +1,303 @@
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const presetSelector = document.getElementById("preset");
+    const typeSelector = document.getElementById("field_type");
+    const fieldKey = document.getElementById("field_key");
+    const scopeSelector = document.getElementById("scope");
+    const reqCheckbox = document.getElementById("required");
+    const sensCheckbox = document.getElementById("is_sensitive");
+    const actCheckbox = document.getElementById("is_active");
+    
+    const lenMin = document.getElementById("min_length");
+    const lenMax = document.getElementById("max_length");
+    const optionsRaw = document.getElementById("select_options_raw");
+
+    const labelEn = document.getElementById("label_en");
+    const labelAr = document.getElementById("label_ar");
+    const placeholderEn = document.getElementById("placeholder_en");
+    const placeholderAr = document.getElementById("placeholder_ar");
+    const helpEn = document.getElementById("help_text_en");
+    const helpAr = document.getElementById("help_text_ar");
+
+    const PRESETS = {
+        "email": {
+            field_key: "email", field_type: "email", scope: "per_unit", required: true, is_sensitive: true, is_active: true,
+            label_en: "Email address", label_ar: "البريد الإلكتروني",
+            placeholder_en: "name@example.com", placeholder_ar: "name@example.com",
+            help_en: "Enter the email where the subscription should be activated.", help_ar: "أدخل البريد الإلكتروني الذي تريد تفعيل الاشتراك عليه.",
+            max_length: 254
+        },
+        "username": {
+            field_key: "username", field_type: "username", scope: "per_unit", required: true, is_sensitive: false, is_active: true,
+            label_en: "Username", label_ar: "اسم المستخدم",
+            placeholder_en: "@username", placeholder_ar: "@username",
+            help_en: "Enter the username for the account or platform.", help_ar: "أدخل اسم المستخدم الخاص بالحساب أو المنصة.",
+            max_length: 64
+        },
+        "url": {
+            field_key: "account_url", field_type: "url", scope: "per_unit", required: true, is_sensitive: false, is_active: true,
+            label_en: "Account URL", label_ar: "رابط الحساب",
+            placeholder_en: "https://", placeholder_ar: "https://",
+            help_en: "Enter the profile or account link.", help_ar: "أدخل رابط الحساب أو الملف الشخصي.",
+            max_length: 200
+        },
+        "phone": {
+            field_key: "phone", field_type: "phone", scope: "per_unit", required: true, is_sensitive: true, is_active: true,
+            label_en: "Phone Number", label_ar: "رقم الهاتف",
+            placeholder_en: "+1234567890", placeholder_ar: "+1234567890",
+            help_en: "Enter the phone number with country code.", help_ar: "أدخل رقم الهاتف مع رمز الدولة.",
+            max_length: 20
+        },
+        "secret": {
+            field_key: "password", field_type: "secret", scope: "per_unit", required: true, is_sensitive: true, is_active: true,
+            label_en: "Password / Secret", label_ar: "كلمة المرور / الرمز السري",
+            placeholder_en: "********", placeholder_ar: "********",
+            help_en: "Never request OTP codes, recovery codes, temporary verification codes, or payment-card information.", help_ar: "لا تطلب رموز التحقق أو رموز الاسترداد أو الرموز المؤقتة أو معلومات البطاقة البنكية.",
+            max_length: 64
+        }
+    };
+
+    if (presetSelector) {
+        presetSelector.addEventListener("change", function() {
+            const p = PRESETS[this.value];
+            if (!p) return;
+            
+            if (fieldKey && !fieldKey.value) fieldKey.value = p.field_key;
+            if (typeSelector) typeSelector.value = p.field_type;
+            if (scopeSelector) scopeSelector.value = p.scope;
+            if (reqCheckbox) reqCheckbox.checked = p.required;
+            if (sensCheckbox) sensCheckbox.checked = p.is_sensitive;
+            if (actCheckbox) actCheckbox.checked = p.is_active;
+            
+            if (labelEn) labelEn.value = p.label_en;
+            if (labelAr) labelAr.value = p.label_ar;
+            if (placeholderEn) placeholderEn.value = p.placeholder_en;
+            if (placeholderAr) placeholderAr.value = p.placeholder_ar;
+            if (helpEn) helpEn.value = p.help_en;
+            if (helpAr) helpAr.value = p.help_ar;
+            
+            if (lenMax) lenMax.value = p.max_length;
+            
+            updateConditionalDisplay();
+            updateLivePreview();
+        });
+    }
+
+    // Live preview element injection
+    const formRow = document.querySelector(".row") || document.body;
+    const previewHtml = `
+        <div id="live_preview_box" style="padding:15px; background:#f8f9fa; border:1px solid #ddd; border-radius:4px; margin-top:20px; font-family:sans-serif;">
+            <h5 style="margin-top:0;">Live Preview: Customer will see</h5>
+            <div id="preview_content" style="background:#fff; padding:15px; border:1px solid #ccc; border-radius:4px;">
+                <label id="preview_label" style="font-weight:bold; display:block; margin-bottom:5px;">Label</label>
+                <div id="preview_help" style="font-size:12px; color:#666; margin-bottom:10px;">Help text...</div>
+                <input id="preview_input" type="text" disabled placeholder="Example: ..." style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;" />
+            </div>
+            <div id="preview_secret_warning" style="display:none; color:#dc3545; font-size:12px; margin-top:10px;">
+                <strong>Security Notice:</strong> Never request OTP codes, recovery codes, temporary verification codes, or payment-card information.<br>
+                <strong dir="rtl">تنبيه أمني:</strong> <span dir="rtl">لا تطلب رموز التحقق أو رموز الاسترداد أو الرموز المؤقتة أو معلومات البطاقة البنكية.</span>
+            </div>
+        </div>
+    `;
+    
+    // Inject the preview box before the submit button
+    const submitBtn = document.querySelector('button[type="submit"]');
+    if (submitBtn && submitBtn.parentNode) {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = previewHtml;
+        submitBtn.parentNode.insertBefore(wrap, submitBtn);
+    }
+    
+    // Inject helper text for scope
+    if (scopeSelector) {
+        const scopeHelp = document.createElement("div");
+        scopeHelp.style.fontSize = "12px";
+        scopeHelp.style.color = "#666";
+        scopeHelp.style.marginTop = "5px";
+        scopeHelp.innerHTML = "<strong>Per Order:</strong> Ask once for the whole order.<br/><strong>Per Unit:</strong> Ask once for every purchased unit. (e.g., Quantity 3 = three questions).";
+        scopeSelector.parentNode.appendChild(scopeHelp);
+    }
+
+    // Select options editor injection
+    const selectOptionsHtml = `
+        <div id="select_options_editor" style="display:none; margin-bottom:20px; border:1px solid #ccc; padding:10px; border-radius:4px;">
+            <h5>Select Options (for Dropdowns)</h5>
+            <table class="table table-sm" id="select_options_table">
+                <thead><tr><th>Option Key</th><th>English Label</th><th>Arabic Label</th><th></th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <button type="button" class="btn btn-sm btn-secondary" id="add_select_option">Add Option</button>
+        </div>
+    `;
+    
+    if (optionsRaw && optionsRaw.parentNode) {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = selectOptionsHtml;
+        optionsRaw.parentNode.insertBefore(wrap, optionsRaw);
+    }
+
+    function updateLivePreview() {
+        const plabel = document.getElementById("preview_label");
+        const phelp = document.getElementById("preview_help");
+        const pinput = document.getElementById("preview_input");
+        const pwarn = document.getElementById("preview_secret_warning");
+        
+        if (plabel) plabel.textContent = labelEn.value || 'Label';
+        if (phelp) phelp.textContent = helpEn.value || 'Help text...';
+        if (pinput) pinput.placeholder = "Example: " + (placeholderEn.value || '...');
+        
+        if (typeSelector && typeSelector.value === 'secret') {
+            if (pwarn) pwarn.style.display = 'block';
+            if (sensCheckbox) sensCheckbox.checked = true; // Force sensitive check client-side
+        } else {
+            if (pwarn) pwarn.style.display = 'none';
+        }
+    }
+    
+    function updateConditionalDisplay() {
+        if (!typeSelector) return;
+        const t = typeSelector.value;
+        const ed = document.getElementById("select_options_editor");
+        
+        // Hide/show lengths
+        const lenMinGroup = lenMin ? lenMin.closest('.mb-3') || lenMin.parentNode : null;
+        const lenMaxGroup = lenMax ? lenMax.closest('.mb-3') || lenMax.parentNode : null;
+        const phGroup = placeholderEn ? placeholderEn.closest('.mb-3') || placeholderEn.parentNode : null;
+        
+        if (t === 'select') {
+            if (ed) ed.style.display = 'block';
+            if (lenMinGroup) lenMinGroup.style.display = 'none';
+            if (lenMaxGroup) lenMaxGroup.style.display = 'none';
+            if (phGroup) phGroup.style.display = 'none';
+        } else {
+            if (ed) ed.style.display = 'none';
+            if (t === 'email') {
+                if (lenMinGroup) lenMinGroup.style.display = 'none';
+            } else {
+                if (lenMinGroup) lenMinGroup.style.display = '';
+            }
+            if (lenMaxGroup) lenMaxGroup.style.display = '';
+            if (phGroup) phGroup.style.display = '';
+        }
+    }
+    
+    // Select editor logic
+    let optionsList = [];
+    try {
+        if (optionsRaw && optionsRaw.value) {
+            optionsList = JSON.parse(optionsRaw.value);
+        }
+    } catch(e) {}
+    
+    function renderOptions() {
+        const tbody = document.querySelector("#select_options_table tbody");
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        optionsList.forEach((opt, idx) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td><input type="text" class="form-control form-control-sm opt-key" value="${opt.key}" data-idx="${idx}"></td>
+                <td><input type="text" class="form-control form-control-sm opt-en" value="${opt.en}" data-idx="${idx}"></td>
+                <td><input type="text" class="form-control form-control-sm opt-ar" value="${opt.ar}" data-idx="${idx}"></td>
+                <td><button type="button" class="btn btn-sm btn-danger remove-opt" data-idx="${idx}">X</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        if (optionsRaw) optionsRaw.value = JSON.stringify(optionsList);
+    }
+    
+    document.addEventListener("click", function(e) {
+        if (e.target.id === "add_select_option") {
+            optionsList.push({key: "", en: "", ar: ""});
+            renderOptions();
+        } else if (e.target.classList.contains("remove-opt")) {
+            const idx = e.target.getAttribute("data-idx");
+            optionsList.splice(idx, 1);
+            renderOptions();
+        }
+    });
+    
+    document.addEventListener("input", function(e) {
+        if (e.target.classList.contains("opt-key")) {
+            optionsList[e.target.getAttribute("data-idx")].key = e.target.value;
+            if (optionsRaw) optionsRaw.value = JSON.stringify(optionsList);
+        } else if (e.target.classList.contains("opt-en")) {
+            optionsList[e.target.getAttribute("data-idx")].en = e.target.value;
+            if (optionsRaw) optionsRaw.value = JSON.stringify(optionsList);
+        } else if (e.target.classList.contains("opt-ar")) {
+            optionsList[e.target.getAttribute("data-idx")].ar = e.target.value;
+            if (optionsRaw) optionsRaw.value = JSON.stringify(optionsList);
+        } else if ([labelEn, placeholderEn, helpEn].includes(e.target)) {
+            updateLivePreview();
+        }
+    });
+    
+    if (typeSelector) typeSelector.addEventListener("change", function() {
+        if (this.value === 'select') {
+            if (helpEn && !helpEn.value) helpEn.value = "The customer will see these choices as Telegram buttons.";
+            if (helpAr && !helpAr.value) helpAr.value = "ستظهر هذه الخيارات للعميل كأزرار داخل تيليجرام.";
+        } else if (this.value === 'secret') {
+            if (helpEn && !helpEn.value) helpEn.value = "Never request OTP codes, recovery codes, temporary verification codes, or payment-card information.";
+            if (helpAr && !helpAr.value) helpAr.value = "لا تطلب رموز التحقق أو رموز الاسترداد أو الرموز المؤقتة أو معلومات البطاقة البنكية.";
+        }
+        updateConditionalDisplay();
+        updateLivePreview();
+    });
+    
+    // Form submit validation
+    const form = document.querySelector("form");
+    if (form) {
+        form.addEventListener("submit", function(e) {
+            // Secret check
+            if (typeSelector && typeSelector.value === 'secret') {
+                if (sensCheckbox) sensCheckbox.checked = true;
+            }
+            
+            // Validate options if select
+            if (typeSelector && typeSelector.value === 'select') {
+                if (optionsList.length === 0) {
+                    alert("Select fields require at least one valid option.");
+                    e.preventDefault();
+                    return;
+                }
+                const keys = new Set();
+                for (let o of optionsList) {
+                    if (!o.key || !o.en) {
+                        alert("Each option must have a Key and an English label.");
+                        e.preventDefault();
+                        return;
+                    }
+                    if (keys.has(o.key)) {
+                        alert("Duplicate option key: " + o.key);
+                        e.preventDefault();
+                        return;
+                    }
+                    keys.add(o.key);
+                }
+            }
+        });
+    }
+
+    // Sort order logic
+    const goodsSelector = document.getElementById("goods");
+    const sortOrderInput = document.getElementById("sort_order");
+    
+    if (goodsSelector && sortOrderInput) {
+        goodsSelector.addEventListener("change", async function() {
+            if (!this.value) return;
+            try {
+                const res = await fetch(`/admin/quick-field-set/next-sort-order?product_id=${this.value}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    sortOrderInput.value = data.next_sort_order;
+                }
+            } catch (err) {}
+        });
+    }
+
+    // Init
+    updateConditionalDisplay();
+    updateLivePreview();
+    renderOptions();
+});
+</script>

@@ -193,6 +193,13 @@ async def get_item_info(item_name: str) -> dict | None:
         obj = result.scalars().first()
         return _obj_to_dict(obj, Goods) if obj else None
 
+async def get_item_info_by_id(item_id: int) -> dict | None:
+    """Return item (position) row as dict by id, or None."""
+    async with Database().session() as s:
+        result = await s.execute(select(Goods).where(Goods.id == item_id))
+        obj = result.scalars().first()
+        return _obj_to_dict(obj, Goods) if obj else None
+
 
 async def get_goods_info(item_id: int) -> dict | None:
     """Return item_value row as dict by id, including item_name from Goods."""
@@ -235,11 +242,11 @@ async def get_store_settings() -> StoreSettings | None:
             obj = StoreSettings(id=1, shop_root_title=None, shop_root_description=None)
             s.add(obj)
             await s.commit()
-            
+
             # Re-fetch to ensure we return a clean attached/detached state depending on usage
             result = await s.execute(select(StoreSettings).where(StoreSettings.id == 1))
             obj = result.scalars().first()
-            
+
         return obj
 
 
@@ -668,3 +675,48 @@ async def get_main_menu_buttons() -> list:
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+async def get_stock_for_items(item_ids: list[int]) -> dict[int, int]:
+    """
+    Return aggregated stock for multiple item IDs.
+    Returns -1 for infinite items, else the exact count of available rows.
+    """
+    if not item_ids:
+        return {}
+
+    from bot.database.models import ItemValues
+    from sqlalchemy import select, func
+    from bot.database import Database
+
+    async with Database().session() as s:
+        # First check which items have infinite stock
+        inf_query = select(ItemValues.item_id).where(
+            ItemValues.item_id.in_(item_ids),
+            ItemValues.is_infinity == True
+        ).distinct()
+        inf_result = await s.execute(inf_query)
+        infinite_items = set(row[0] for row in inf_result.all())
+
+        # Then count the regular stock items
+        count_query = select(ItemValues.item_id, func.count(ItemValues.id)).where(
+            ItemValues.item_id.in_(item_ids),
+            ItemValues.is_infinity == False
+        ).group_by(ItemValues.item_id)
+        count_result = await s.execute(count_query)
+
+        counts = {row[0]: row[1] for row in count_result.all()}
+
+        # Merge results
+        return {
+            iid: (-1 if iid in infinite_items else counts.get(iid, 0))
+            for iid in item_ids
+        }
+
+async def get_active_product_fields(session, goods_id: int):
+    from bot.database.models.main import ProductCustomerField
+    from sqlalchemy import select
+    stmt = select(ProductCustomerField).where(
+        ProductCustomerField.goods_id == goods_id,
+        ProductCustomerField.is_active == True
+    ).order_by(ProductCustomerField.sort_order, ProductCustomerField.id)
+    return list((await session.execute(stmt)).scalars().all())

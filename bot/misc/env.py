@@ -65,6 +65,10 @@ class EnvKeys(ABC):
     DEBUG: Final = _get_optional("DEBUG", "0")
     REVIEWS_ENABLED: Final = _get_optional("REVIEWS_ENABLED", "1")
 
+    # Manual Fulfillment (Phase 4C-3B)
+    MANUAL_CHECKOUT_ENABLED: Final = _get_optional("MANUAL_CHECKOUT_ENABLED", "0") in ("1", "true", "True")
+    CHECKOUT_INTAKE_DRAFT_TTL_HOURS: Final = int(_get_optional("CHECKOUT_INTAKE_DRAFT_TTL_HOURS", "24"))
+
     # Web admin panel
     ADMIN_HOST: Final = _get_optional("ADMIN_HOST", _get_optional("MONITORING_HOST", "localhost"))
     ADMIN_PORT: Final = int(_get_optional("ADMIN_PORT", _get_optional("MONITORING_PORT", "9090")))
@@ -81,6 +85,15 @@ class EnvKeys(ABC):
     # Cleanup
     AUDIT_RETENTION_DAYS: Final = int(_get_optional("AUDIT_RETENTION_DAYS", "90"))
     PAYMENTS_RETENTION_DAYS: Final = int(_get_optional("PAYMENTS_RETENTION_DAYS", "90"))
+
+    # Restock Alerts
+    RESTOCK_POLL_INTERVAL: Final = int(_get_optional("RESTOCK_POLL_INTERVAL", "30"))
+    RESTOCK_BATCH_SIZE: Final = int(_get_optional("RESTOCK_BATCH_SIZE", "50"))
+    RESTOCK_MAX_ATTEMPTS: Final = int(_get_optional("RESTOCK_MAX_ATTEMPTS", "5"))
+    RESTOCK_STALE_TIMEOUT: Final = int(_get_optional("RESTOCK_STALE_TIMEOUT", "300"))
+    RESTOCK_MAX_CONCURRENT_SENDS: Final = int(_get_optional("RESTOCK_MAX_CONCURRENT_SENDS", "5"))
+    RESTOCK_MAX_MESSAGES_PER_SECOND: Final = int(_get_optional("RESTOCK_MAX_MESSAGES_PER_SECOND", "20"))
+    RESTOCK_JITTER_MAX: Final = int(_get_optional("RESTOCK_JITTER_MAX", "3"))
 
     DATABASE_URL: Final = f"postgresql+asyncpg://{POSTGRES_USER}:{quote_plus(POSTGRES_PASSWORD)}@{POSTGRES_HOST}:{DB_PORT}/{POSTGRES_DB}"
 

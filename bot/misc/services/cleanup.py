@@ -48,7 +48,7 @@ class CleanupManager:
 
             try:
                 from bot.database import Database
-                from bot.database.models.main import AuditLog, Payments
+                from bot.database.models.main import AuditLog, Payments, CheckoutIntakeDraft
                 from bot.misc.env import EnvKeys
                 from bot.database.methods.audit import log_audit
 
@@ -71,11 +71,21 @@ class CleanupManager:
                     )
                     payments_deleted = payments_result.rowcount
 
+                    # 3. Delete expired intake drafts
+                    drafts_result = await s.execute(
+                        delete(CheckoutIntakeDraft).where(
+                            CheckoutIntakeDraft.expires_at < text("CURRENT_TIMESTAMP")
+                        )
+                    )
+                    drafts_deleted = drafts_result.rowcount
+
+                    await s.commit()
+
                 await log_audit(
                     "daily_cleanup",
-                    details=f"audit_deleted={audit_deleted}, payments_deleted={payments_deleted}"
+                    details=f"audit_deleted={audit_deleted}, payments_deleted={payments_deleted}, drafts_deleted={drafts_deleted}"
                 )
-                logger.info(f"Daily cleanup: audit={audit_deleted}, payments={payments_deleted}")
+                logger.info(f"Daily cleanup: audit={audit_deleted}, payments={payments_deleted}, drafts={drafts_deleted}")
 
             except Exception as e:
                 logger.error(f"Daily cleanup failed: {e}", exc_info=True)

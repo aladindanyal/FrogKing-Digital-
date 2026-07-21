@@ -153,6 +153,7 @@ class RateLimitMiddleware(BaseMiddleware):
             'shop': 'shop_view',
             'category_': 'shop_view',
             'item_': 'shop_view',
+            'refresh:': 'refresh',
         }
 
     def _get_action_from_event(self, event: TelegramObject) -> str:

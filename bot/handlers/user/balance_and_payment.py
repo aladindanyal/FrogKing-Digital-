@@ -53,7 +53,7 @@ async def replenish_balance_callback_handler(call: CallbackQuery, state: FSMCont
         await answer_callback_safe(call, localize("payments.not_configured"), show_alert=True)
         return
 
-    await safe_edit_or_send(call, 
+    await safe_edit_or_send(call,
         localize("payments.replenish_prompt", currency=EnvKeys.PAY_CURRENCY),
         reply_markup=back('profile')
     )
@@ -174,7 +174,7 @@ async def process_replenish_balance(call: CallbackQuery, state: FSMContext):
 
             await state.update_data(invoice_id=invoice_id, payment_type="cryptopay")
 
-            await safe_edit_or_send(call, 
+            await safe_edit_or_send(call,
                 localize("payments.invoice.summary",
                          amount=int(amount_dec),
                          minutes=int(ttl_seconds / 60),
@@ -283,7 +283,7 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
             # Send a notification to the referrer
             await _notify_referrer_bonus(call.bot, user_id, balance_amount, call.from_user.first_name, call.from_user.id)
 
-            await safe_edit_or_send(call, 
+            await safe_edit_or_send(call,
                 localize("payments.topped_simple",
                          amount=balance_amount,
                          currency=EnvKeys.PAY_CURRENCY),
@@ -415,16 +415,34 @@ async def successful_payment_handler(message: Message):
 
 
 @router.callback_query(F.data == "buy")
+async def legacy_buy_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call, "This menu is outdated. Please return to the shop and try again.", show_alert=True)
+
+@router.callback_query(F.data.startswith("confirm_purchase:"))
 async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
     """Processing the purchase of goods with full transactional security."""
     try:
+        item_id_str = call.data.split(':')[1]
+
         # Get item name from state (stored when viewing item info)
         data = await state.get_data()
         raw_item_name = data.get('csrf_item')
 
-        if not raw_item_name:
-            await answer_callback_safe(call, localize("middleware.security.invalid_csrf"), show_alert=True)
+        if not raw_item_name or str(data.get('item_id')) != item_id_str:
+            await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+            return
+
+        from bot.database.methods import get_item_info_cached
+        item_info_data = await get_item_info_cached(raw_item_name)
+        if not item_info_data:
+            await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
+            return
+
+        if item_info_data.get("fulfillment_mode") == "manual":
+            # Stage 4C-3A Readiness Guard
+            msg = localize("shop.item.manual_unavailable_guard", default="This product requires manual fulfillment and is temporarily unavailable while configuration is being completed.")
+            await answer_callback_safe(call, msg, show_alert=True)
             return
 
         metrics = get_metrics()
@@ -482,7 +500,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
                 message=message
             )
 
-            await safe_edit_or_send(call, 
+            await safe_edit_or_send(call,
                 error_text,
                 reply_markup=back('back_to_item')
             )
@@ -500,58 +518,76 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
             })
             metrics.track_conversion("purchase_funnel", "purchase", call.from_user.id)
 
+        try:
+            await call.message.delete()
+        except TelegramBadRequest:
+            pass
+
+        unit_price = Decimal(str(purchase_data['unit_price'])).quantize(Decimal("0.01"))
+        total_discount = Decimal(str(purchase_data.get('discount_total', 0))).quantize(Decimal("0.01"))
+        total_paid = Decimal(str(purchase_data['total'])).quantize(Decimal("0.01"))
+        currency = purchase_data.get('currency', EnvKeys.PAY_CURRENCY)
+        
+        from datetime import datetime
+        dt = datetime.fromisoformat(purchase_data['purchase_timestamp'])
+        purchased_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+
+        public_order_id = purchase_data.get('public_order_id', purchase_data['unique_id'])
+
+        receipt_header = (
+            f"✅ <b>Order Completed</b>\n\n"
+            f"🧾 <b>Order ID:</b> <code>{public_order_id}</code>\n"
+            f"📦 <b>Product:</b> {sanitize_html(purchase_request.item_name)}\n"
+            f"🔢 <b>Quantity:</b> {purchase_data['quantity']}\n"
+            f"💵 <b>Unit Price:</b> {unit_price} {currency}\n"
+        )
+        if total_discount > 0:
+            receipt_header += f"🏷 <b>Discount:</b> {total_discount} {currency}\n"
+            
+        receipt_header += (
+            f"💰 <b>Total Paid:</b> {total_paid} {currency}\n"
+            f"🕒 <b>Purchased:</b> {purchased_time}\n\n"
+        )
+
         delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])
-        if purchase_request.quantity > 1:
-            formatted_values = []
+        messages_to_send = []
+        current_msg = receipt_header + "🔑 <b>Delivered Value:</b>\n<code>\n"
+        
+        if purchase_data['quantity'] > 1:
             for i, val in enumerate(delivered_values, 1):
-                formatted_values.append(f"{i}) {sanitize_html(val)}")
-            safe_value = "\n".join(formatted_values)
+                val_str = f"{i}) {sanitize_html(val)}\n"
+                if len(current_msg) + len(val_str) + 100 > 4000:
+                    current_msg += "</code>"
+                    messages_to_send.append(current_msg)
+                    current_msg = f"🧾 <b>Order ID:</b> {public_order_id} (Part {(len(messages_to_send) + 1)})\n\n🔑 <b>Delivered Value (Continued):</b>\n<code>\n{val_str}"
+                else:
+                    current_msg += val_str
         else:
             safe_value = sanitize_html(delivered_values[0] if delivered_values else purchase_data.get('value', ''))
-
-        username = call.from_user.username or call.from_user.first_name
+            current_msg += f"{safe_value}\n"
+            
+        current_msg += "</code>\n\n⚠️ Keep this message for future reference and support."
+        messages_to_send.append(current_msg)
+        
+        for msg in messages_to_send:
+            await call.message.answer(msg, parse_mode='HTML')
 
         from bot.keyboards.inline import simple_buttons
-        buttons = []
         
-        bought_id = purchase_data.get('bought_id')
-        if isinstance(bought_id, list):
-            bought_id = bought_id[0] if bought_id else 0
-
-        buttons.append((f"📦 {purchase_data['item_name']}", f"bought-item:{bought_id}:back_to_item"))
-        buttons.append((localize("btn.back"), "back_to_item"))
-
-        # In strings.py, shop.purchase.receipt has "💲 Итого: {price} {currency}" and "💰 Цена: {price} {currency}".
-        # Since we pass `price=total_price` to `localize`, both are showing total_price right now.
-        # Let's fix that text properly.
-        unit_price = (Decimal(str(purchase_data['price'])) / purchase_request.quantity).quantize(Decimal("0.01"))
-        
-        receipt_text = localize(
-            'shop.purchase.receipt',
-            item_name=purchase_data['item_name'],
-            price=purchase_data['price'],
-            unique_id=purchase_data['unique_id'],
-            datetime=purchase_data['bought_datetime'],
-            username=username,
-            user_id=call.from_user.id,
-            value=safe_value,
-            currency=EnvKeys.PAY_CURRENCY,
-        )
-        
-        if purchase_request.quantity > 1:
-            receipt_text = receipt_text.replace("1 шт.", f"{purchase_request.quantity} pcs")
-            receipt_text = receipt_text.replace("Qty: 1", f"Qty: {purchase_request.quantity}")
-            receipt_text = receipt_text.replace(f"💰 Цена: {purchase_data['price']}", f"💰 Цена: {unit_price}")
-            receipt_text = receipt_text.replace(f"💰 Price: {purchase_data['price']}", f"💰 Price: {unit_price}")
-        else:
-            receipt_text = receipt_text.replace("1 шт.", "1 pc")
+        action_buttons = []
+        if 'order_id' in purchase_data:
+            action_buttons.append(("📦 View Order", f"orders:view:{purchase_data['order_id']}:p"))
             
-        receipt_text = receipt_text.replace("📦 Кол-во:", "📦 Qty:")
-
-        await safe_edit_or_send(call, 
-            receipt_text,
-            parse_mode='HTML',
-            reply_markup=simple_buttons(buttons),
+        action_buttons.append(("🔁 Buy Again", f"buy_again:{item_id_str}"))
+        
+        if EnvKeys.HELPER_ID:
+            action_buttons.append(("🆘 Support for This Order", f"support_order:{public_order_id}"))
+            
+        action_buttons.append(("🏠 Home", "back_to_menu"))
+        
+        await call.message.answer(
+            "What would you like to do next?",
+            reply_markup=simple_buttons(action_buttons)
         )
 
         # Secure logging

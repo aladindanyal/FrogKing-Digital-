@@ -114,6 +114,14 @@ def setup_test_database():
     Database._instance = None
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def dispose_test_database(setup_test_database):
+    """Dispose of the test database engine at the end of the session to prevent connection leaks."""
+    yield
+    from bot.database.main import Database
+    if Database._instance and hasattr(Database._instance, "engine"):
+        await Database().dispose()
+
 @pytest.fixture(autouse=True)
 async def db_cleanup(setup_test_database):
     """
@@ -125,7 +133,7 @@ async def db_cleanup(setup_test_database):
     from bot.database.main import Database
     from bot.database.models.main import (
         ReferralEarnings, BoughtGoods, Operations, Payments,
-        ItemValues, Goods, Categories, User, Role
+        ItemValues, Goods, Categories, User, Role, ProductCustomerField
     )
 
     db = Database()
@@ -136,6 +144,7 @@ async def db_cleanup(setup_test_database):
         await s.execute(delete(Operations))
         await s.execute(delete(Payments))
         await s.execute(delete(ItemValues))
+        await s.execute(delete(ProductCustomerField))
         await s.execute(delete(Goods))
         await s.execute(delete(Categories))
         await s.execute(delete(User))
@@ -256,6 +265,9 @@ def category_factory():
 def item_factory(category_factory):
     """Factory to create items with optional stock values."""
     from bot.database.methods.create import create_item, add_values_to_item
+    from bot.database import Database
+    from bot.database.models.main import Goods
+    from sqlalchemy import select
 
     async def _create(
             name: str = "TestItem",
@@ -269,6 +281,9 @@ def item_factory(category_factory):
         if values:
             for val, is_inf in values:
                 await add_values_to_item(name, val, is_inf)
+
+        async with Database().session() as s:
+            return (await s.execute(select(Goods).where(Goods.name == name))).scalar_one()
 
     return _create
 
@@ -289,13 +304,20 @@ def make_callback_query(mock_bot):
     """Factory to create CallbackQuery mocks."""
 
     def _make(data: str = "test", user_id: int = 100001, first_name: str = "TestUser"):
-        call = AsyncMock()
+        from aiogram.types import CallbackQuery
+        call = AsyncMock(spec=CallbackQuery)
+        call.id = "1"
         call.data = data
         call.from_user = MagicMock()
         call.from_user.id = user_id
         call.from_user.first_name = first_name
+        call.from_user.last_name = None
+        call.from_user.username = None
         call.from_user.is_bot = False
         call.message = AsyncMock()
+        call.message.photo = None
+        call.message.video = None
+        call.message.document = None
         call.message.bot = mock_bot
         call.message.edit_text = AsyncMock()
         call.message.date = MagicMock()
@@ -312,11 +334,14 @@ def make_message(mock_bot):
     """Factory to create Message mocks."""
 
     def _make(text: str = "/start", user_id: int = 100001, first_name: str = "TestUser"):
-        msg = AsyncMock()
+        from aiogram.types import Message
+        msg = AsyncMock(spec=Message)
         msg.text = text
         msg.from_user = MagicMock()
         msg.from_user.id = user_id
         msg.from_user.first_name = first_name
+        msg.from_user.last_name = None
+        msg.from_user.username = None
         msg.from_user.is_bot = False
         msg.chat = MagicMock()
         msg.chat.type = "private"
@@ -343,3 +368,21 @@ def role_factory():
         return await create_role(name, permissions)
 
     return _create
+
+@pytest.fixture
+def test_dp():
+    from aiogram import Dispatcher
+    from aiogram.fsm.storage.memory import MemoryStorage
+    from bot.handlers.user import router as user_router
+    from bot.handlers.admin import router as admin_router
+    from bot.handlers.other import router as other_router
+
+    # Detach root routers from any previous Dispatcher to allow re-registration
+    user_router._parent_router = None
+    admin_router._parent_router = None
+    other_router._parent_router = None
+
+    import bot.handlers.main
+    dp = Dispatcher(storage=MemoryStorage())
+    bot.handlers.main.register_all_handlers(dp)
+    return dp

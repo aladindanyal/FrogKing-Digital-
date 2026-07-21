@@ -1,0 +1,980 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+    .fc-ws {
+        background-color: #0f1115;
+        color: #e2e8f0;
+        font-family: 'Inter', system-ui, sans-serif;
+        padding: 20px;
+        min-height: calc(100vh - 64px);
+    }
+    .fc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        background: #1e2128;
+        padding: 16px 24px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+    }
+    .fc-title { margin: 0; font-size: 20px; color: #fff; display: flex; align-items: center; gap: 12px; }
+
+    .fc-badge { padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 500; }
+    .fc-badge.queued { background: #334155; color: #cbd5e1; }
+    .fc-badge.in_progress { background: #1d4ed8; color: #bfdbfe; }
+    .fc-badge.waiting_customer { background: #b45309; color: #fde68a; }
+    .fc-badge.completed { background: #166534; color: #bbf7d0; }
+
+    .fc-layout { display: flex; gap: 24px; flex-wrap: wrap; }
+    .fc-main { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 24px; }
+    .fc-side { width: 300px; display: flex; flex-direction: column; gap: 16px; }
+
+    .fc-panel {
+        background: #1e2128;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    .fc-panel h3 { margin-top: 0; margin-bottom: 16px; font-size: 16px; color: #fff; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+
+    .fc-input-row { margin-bottom: 12px; }
+    .fc-input-label { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+    .fc-input-val { font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; font-family: monospace; }
+
+    .fc-btn { background: #3b82f6; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: 0.2s; text-align: center; }
+    .fc-btn:hover:not(:disabled) { background: #2563eb; }
+    .fc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .fc-btn.secondary { background: #334155; }
+    .fc-btn.secondary:hover:not(:disabled) { background: #475569; }
+    .fc-btn.success { background: #16a34a; }
+    .fc-btn.success:hover:not(:disabled) { background: #15803d; }
+
+    .fc-timeline { display: flex; flex-direction: column; gap: 12px; }
+    .fc-msg { padding: 12px; font-size: 14px; border: 1px solid transparent; }
+    .fc-msg.admin { background: #1e3a8a; border-color: #1e40af; align-self: flex-end; max-width: 72%; border-radius: 12px; }
+    .fc-msg.customer { background: #3f3f46; border-color: #52525b; align-self: flex-start; max-width: 72%; border-radius: 12px; }
+    .fc-msg.system { background: #1e293b; border-color: #334155; font-style: italic; color: #94a3b8; text-align: center; border-radius: 6px; }
+    .fc-msg-meta { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+    .fc-msg-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .fc-actions-row { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .conversation-panel {
+        background: #1e2128;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        min-height: 420px;
+        height: clamp(560px, 66vh, 760px);
+        max-height: calc(100vh - 40px);
+    }
+    @media (max-width: 768px) {
+        .conversation-panel { min-height: 380px; }
+    }
+    .conversation-header {
+        padding: 20px 20px 16px 20px;
+        font-size: 16px;
+        color: #fff;
+        border-bottom: 1px solid #334155;
+        font-weight: 600;
+        margin: 0;
+    }
+    .conversation-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .conversation-composer {
+        padding: 16px;
+        border-top: 1px solid #334155;
+        background: #1e2128;
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+        position: sticky;
+        bottom: 0;
+    }
+    details[open] summary .fc-chevron { transform: rotate(180deg); }
+    summary::-webkit-details-marker { display: none; }
+</style>
+
+<div class="fc-ws" id="fulfillment-workspace" data-job-id="{{ job.job_id }}">
+    <div class="fc-header">
+        <h1 class="fc-title">
+            Order <span style="font-family: monospace;">{{ job.public_id }}</span>
+            <span class="fc-badge {{ job.status }}" id="badge-status">{{ job.status_label }}</span>
+        </h1>
+        <div style="font-size: 14px; color: #94a3b8; text-align: right;">
+            Product: <strong style="color:#fff">{{ job.product_name_snapshot }}</strong> (x{{ job.quantity }})<br>
+            Customer: <strong style="color:#fff" dir="auto">
+                {% set full_name = [job.customer_first_name, job.customer_last_name]|select("string")|join(" ")|trim %}
+                {% if full_name and job.customer_username %}
+                    {{ full_name }}, @{{ job.customer_username }}, ID: {{ job.telegram_id }}
+                {% elif full_name %}
+                    {{ full_name }}, ID: {{ job.telegram_id }}
+                {% elif job.customer_username %}
+                    @{{ job.customer_username }}, ID: {{ job.telegram_id }}
+                {% else %}
+                    ID: {{ job.telegram_id }}
+                {% endif %}
+            </strong>
+        </div>
+    </div>
+
+    <div class="fc-layout">
+        <div class="fc-main">
+            <!-- Submitted Inputs -->
+            <div class="fc-panel">
+                <h3>Submitted Information</h3>
+                {% for inp in job.inputs %}
+                <div class="fc-input-row">
+                    <div class="fc-input-label">{{ inp.field_key_snapshot }}</div>
+                    <div class="fc-input-val">
+                        {% if not inp.is_sensitive %}
+                            {{ inp.masked_preview }}
+                            <button class="fc-btn secondary" style="padding: 2px 8px; font-size: 12px;" onclick="copyToClipboard('{{ inp.masked_preview }}')">Copy</button>
+                        {% else %}
+                            <span id="secret-{{ inp.id }}">••••••••</span>
+                            <button class="fc-btn secondary" id="btn-rev-{{ inp.id }}" style="padding: 2px 8px; font-size: 12px;" onclick="revealSecret({{ job.job_id }}, {{ inp.id }})">Reveal</button>
+                            <button class="fc-btn secondary" style="padding: 2px 8px; font-size: 12px;" onclick="copySecret('{{ inp.id }}')">Copy</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Conversation Box -->
+            <div class="conversation-panel">
+                <div class="conversation-header">Customer Conversation</div>
+
+                <div id="conversation-container" class="conversation-messages">
+                    {% for ia in job.conversation_messages %}
+                        {% if ia.direction == 'admin_to_customer' %}
+                            <div class="fc-msg admin" id="interaction-card-{{ ia.id }}" data-interaction-id="{{ ia.id }}">
+                                <div class="fc-msg-meta">To Customer • {{ ia.created_at_fmt }}</div>
+                                <div class="fc-msg-content" dir="auto">{{ ia.safe_preview }}</div>
+                            </div>
+                        {% elif ia.direction == 'customer_to_admin' %}
+                            <div class="fc-msg customer" id="interaction-card-{{ ia.id }}" data-interaction-id="{{ ia.id }}">
+                                <div class="fc-msg-meta" style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>From Customer • {{ ia.created_at_fmt }}</span>
+                                    {% if not ia.read_at %}
+                                    <span id="badge-interaction-{{ ia.id }}" class="fc-badge new-reply" style="background-color: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">New Reply</span>
+                                    {% endif %}
+                                </div>
+                                <div style="margin-top: 8px;">
+                                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Customer Reply:</div>
+                                    <div id="reply-content-{{ ia.id }}" class="fc-msg-content" style="font-family: monospace; font-size: 14px; background: #0f172a; padding: 8px; border-radius: 4px;" dir="auto">••••••••</div>
+                                </div>
+                                <div class="fc-actions-row">
+                                    <button class="fc-btn secondary" id="btn-show-reply-{{ ia.id }}" style="padding: 2px 8px; font-size: 12px; height: 24px;" onclick="revealCustomerReply({{ job.job_id }}, {{ ia.id }})">Show Reply</button>
+                                    <button class="fc-btn secondary" id="btn-copy-reply-{{ ia.id }}" style="padding: 2px 8px; font-size: 12px; height: 24px;" onclick="copyCustomerReply({{ ia.id }})" disabled>Copy</button>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div id="no-conversation" style="color: #94a3b8; font-size: 14px; text-align: center; margin: auto;">
+                            <div style="font-size: 16px; margin-bottom: 4px; color: #cbd5e1;">No messages yet</div>
+                            Customer messages and operator replies will appear here.
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Inline Composer -->
+                <div class="conversation-composer">
+                    <div style="display: flex; gap: 12px; align-items: flex-end;">
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                            <textarea id="inlineMessageText" rows="2" maxlength="1000" style="width: 100%; box-sizing: border-box; background: #0f1115; border: 1px solid #334155; color: #fff; padding: 10px 12px; border-radius: 6px; resize: vertical; font-family: inherit; line-height: 1.4;" placeholder="Type your message (Enter to send, Shift+Enter for new line)..."></textarea>
+                            <div style="text-align: right; font-size: 11px; color: #64748b;" id="inlineMessageCount">0 / 1000</div>
+                        </div>
+                        <button class="fc-btn" id="inlineMessageSubmit" style="height: 42px; padding: 0 24px; margin-bottom: 20px;" onclick="submitInlineMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Operational Timeline -->
+            <details class="fc-panel" id="timeline-accordion" style="padding: 0;">
+                <summary style="padding: 20px; font-size: 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                    <div>Operational Timeline <span id="timeline-count" style="font-size: 12px; color: #94a3b8; margin-left: 8px;">({{ job.fulfillment_events|length }})</span></div>
+                    <svg class="fc-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </summary>
+                <div style="padding: 0 20px 20px 20px; border-top: 1px solid #334155; cursor: default;">
+                    <div class="fc-timeline" id="timeline-container" style="margin-top: 16px;">
+                        {% for ia in job.fulfillment_events %}
+                            <div class="fc-msg system" id="interaction-card-{{ ia.id }}">
+                                {{ ia.safe_preview }} • {{ ia.created_at_fmt }}
+                            </div>
+                        {% else %}
+                            <div id="no-timeline" style="color: #94a3b8; font-size: 14px; text-align: center;">No operational events</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </details>
+
+            <!-- Outbox Notifications -->
+            <details class="fc-panel" id="notifications-panel" style="padding: 0; {% if not job.notifications %}display:none;{% endif %}">
+                <summary style="padding: 20px; font-size: 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                    <div>Notifications
+                        <span id="notifications-count" style="font-size: 12px; color: #94a3b8; margin-left: 8px;">({{ job.notifications|length }})</span>
+                        {% set failed_count = job.notifications|selectattr("status", "equalto", "failed")|list|length %}
+                        <span id="notifications-failed-badge" class="fc-badge" style="background-color: #ef4444; color: white; margin-left: 8px; {% if failed_count == 0 %}display:none;{% endif %}">{{ failed_count }} Failed</span>
+                    </div>
+                    <svg class="fc-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </summary>
+                <div style="padding: 0 20px 20px 20px; border-top: 1px solid #334155; cursor: default;">
+                    <div class="fc-timeline" id="notifications-container" style="margin-top: 16px;">
+                        {% for notif in job.notifications %}
+                            <div class="fc-msg system" id="notification-card-{{ notif.id }}">
+                                {{ notif.safe_preview }} [{{ notif.status }}] • {{ notif.created_at_fmt }}
+                                {% if notif.status == 'failed' %}
+                                    <br><span style="color:#ef4444">{{ notif.last_error }}</span>
+                                    <br><button class="fc-btn secondary" style="margin-top: 8px;" onclick="retryNotification(this, {{ job.job_id }})">Retry</button>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <div class="fc-side">
+            <!-- Actions -->
+            <div class="fc-panel" style="display: flex; flex-direction: column; gap: 12px;" id="actions-container">
+                <h3>Actions</h3>
+
+                {% if job.actions.start_processing %}
+                    <button class="fc-btn" onclick="takeAction(this, 'start')">Start Processing</button>
+                {% endif %}
+                {% if job.actions.message_customer %}
+                    <!-- Message Customer button removed from side actions, integrated into Conversation Box -->
+                {% endif %}
+                {% if job.actions.request_verification %}
+                    <button class="fc-btn secondary" id="btn-verify" onclick="openVerificationModal()">Request Verification Code</button>
+                {% endif %}
+                {% if job.actions.resume_processing %}
+                    <button class="fc-btn secondary" onclick="takeAction(this, 'resume')">Resume Processing</button>
+                {% endif %}
+                {% if job.actions.complete_order %}
+                    <button class="fc-btn success" id="btn-complete" onclick="openCompleteModal()">Complete Order</button>
+                {% endif %}
+                {% if job.status == 'completed' %}
+                    <div style="color: #10b981; text-align: center; font-weight: 600;">Order Completed</div>
+                {% elif job.status == 'cancelled' %}
+                    <div style="color: #ef4444; text-align: center; font-weight: 600;">Order Cancelled</div>
+                {% elif not job.actions.start_processing and not job.actions.message_customer and not job.actions.request_verification and not job.actions.resume_processing and not job.actions.complete_order %}
+                    <div style="color: #94a3b8; text-align: center; font-weight: 600;">Action state unavailable</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Message Modal -->
+<div id="messageModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 450px; max-width: 90vw; display: flex; flex-direction: column;">
+        <div style="padding: 16px; border-bottom: 1px solid #333; font-weight: 600; color: #fff;">Message Customer</div>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+            <textarea id="messageText" rows="6" maxlength="1000" required style="width: 100%; box-sizing: border-box; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; resize: vertical; font-family: inherit;" placeholder="Type your message..."></textarea>
+            <div style="text-align: right; font-size: 12px; color: #888;" id="messageCount">0 / 1000</div>
+        </div>
+        <div style="padding: 16px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="fc-btn secondary" id="messageCancel" onclick="closeMessageModal()">Cancel</button>
+            <button class="fc-btn" id="messageSubmit" onclick="submitCustomerMessage()">Send Message</button>
+        </div>
+    </div>
+</div>
+
+<!-- Verification Modal -->
+<div id="verificationModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 450px; max-width: 90vw; display: flex; flex-direction: column;">
+        <div style="padding: 16px; border-bottom: 1px solid #333; font-weight: 600; color: #fff;">Request Verification Code</div>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+            <textarea id="verificationText" rows="6" maxlength="1000" required style="width: 100%; box-sizing: border-box; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; resize: vertical; font-family: inherit;">🔐 Verification Required
+
+We have started processing your Order.
+Please send the verification code you received to continue processing your Order.</textarea>
+            <div style="text-align: right; font-size: 12px; color: #888;" id="verificationCount">0 / 1000</div>
+        </div>
+        <div style="padding: 16px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="fc-btn secondary" id="verificationCancel" onclick="closeVerificationModal()">Cancel</button>
+            <button class="fc-btn secondary" id="verificationSubmit" onclick="submitVerificationRequest()">Request Verification</button>
+        </div>
+    </div>
+</div>
+
+<!-- Complete Modal -->
+<div id="completeModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 8px; width: 450px; max-width: 90vw; display: flex; flex-direction: column;">
+        <div style="padding: 16px; border-bottom: 1px solid #333; font-weight: 600; color: #fff;">Complete Order</div>
+        <div style="padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+            <textarea id="completeText" rows="6" maxlength="1000" style="width: 100%; box-sizing: border-box; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; resize: vertical; font-family: inherit;" placeholder="Optional completion note for customer..."></textarea>
+            <div style="text-align: right; font-size: 12px; color: #888;" id="completeCount">0 / 1000</div>
+        </div>
+        <div style="padding: 16px; border-top: 1px solid #333; display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="fc-btn secondary" id="completeCancel" onclick="closeCompleteModal()">Cancel</button>
+            <button class="fc-btn success" id="completeSubmit" onclick="submitCompleteOrder()">Complete Order</button>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.innerText = message;
+        toast.style.cssText = "position:fixed;bottom:20px;right:20px;background:#ef4444;color:#fff;padding:12px 20px;border-radius:6px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.3);";
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    const workspaceRoot = document.getElementById("fulfillment-workspace");
+    const JOB_ID = workspaceRoot ? Number(workspaceRoot.dataset.jobId) : NaN;
+
+    function orderActionUrl(action) {
+        if (!Number.isInteger(JOB_ID) || JOB_ID <= 0) {
+            throw new Error("Invalid fulfillment job ID");
+        }
+        return `/admin/fulfillment/api/order/${JOB_ID}/${action}`;
+    }
+
+    async function apiPost(endpoint, payload = {}) {
+        try {
+            const url = orderActionUrl(endpoint);
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const contentType = resp.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.message || 'Action failed. Please try again.');
+                return data;
+            } else {
+                if (!resp.ok) throw new Error('Action failed. Please try again.');
+                return null;
+            }
+        } catch (e) {
+            showToast(e.message);
+            throw e;
+        }
+    }
+
+    async function takeAction(btn, action, payload = {}) {
+        if (btn) btn.disabled = true;
+        try {
+            await apiPost(action, payload);
+            pollState(true);
+        } catch(e) {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    let isRequestRunning = false;
+    let lastConversationMessageId = null;
+
+    // --- Inline Composer ---
+    async function submitInlineMessage() {
+        if (isRequestRunning) return;
+        const textElem = document.getElementById('inlineMessageText');
+        const msg = textElem.value.trim();
+        if (!msg) {
+            showToast("Message text is required.");
+            textElem.focus();
+            return;
+        }
+
+        isRequestRunning = true;
+        const btnSubmit = document.getElementById('inlineMessageSubmit');
+        btnSubmit.disabled = true;
+        textElem.disabled = true;
+
+        // Optimistic UI for queued message
+        const convContainer = document.getElementById('conversation-container');
+        const noConv = document.getElementById('no-conversation');
+        if (noConv) noConv.remove();
+
+        const optId = 'opt-' + Date.now();
+        const optDiv = document.createElement('div');
+        optDiv.className = 'fc-msg admin';
+        optDiv.id = optId;
+        optDiv.style.opacity = '0.7';
+
+        const now = new Date();
+        const fmt = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+        optDiv.innerHTML = `<div class="fc-msg-meta">To Customer • ${fmt}</div><div class="fc-msg-content" style="border-left: 2px solid #ef4444;" dir="auto"></div>`;
+        optDiv.querySelector('.fc-msg-content').textContent = `[QUEUED] ${msg}`;
+        convContainer.appendChild(optDiv);
+        scrollConversationToBottom(true);
+
+        try {
+            const data = await apiPost('message', { message: msg });
+            if (data && data.ok) {
+                textElem.value = '';
+                document.getElementById('inlineMessageCount').innerText = '0 / 1000';
+                pollState(true);
+            } else {
+                optDiv.remove();
+            }
+        } catch (e) {
+            optDiv.remove();
+            textElem.focus();
+        } finally {
+            isRequestRunning = false;
+            btnSubmit.disabled = false;
+            textElem.disabled = false;
+        }
+    }
+
+    function scrollConversationToBottom(smooth = true) {
+        const container = document.getElementById('conversation-container');
+        if (!container) return;
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: smooth ? "smooth" : "auto"
+        });
+    }
+
+    // --- Request Verification Modal ---
+    function openVerificationModal() {
+        const modal = document.getElementById('verificationModal');
+        const text = document.getElementById('verificationText');
+        document.getElementById('verificationCount').innerText = text.value.length + ' / 1000';
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => text.focus(), 100);
+    }
+    function closeVerificationModal() {
+        const modal = document.getElementById('verificationModal');
+        if (modal) modal.style.display = 'none';
+
+        const textElem = document.getElementById('verificationText');
+        if (textElem) textElem.disabled = false;
+
+        document.body.style.overflow = '';
+        document.body.classList.remove('modal-open');
+
+        const btnSubmit = document.getElementById('verificationSubmit');
+        if (btnSubmit) btnSubmit.disabled = false;
+
+        const btnCancel = document.getElementById('verificationCancel');
+        if (btnCancel) btnCancel.disabled = false;
+
+        isRequestRunning = false;
+    }
+    async function submitVerificationRequest() {
+        if (isRequestRunning) return;
+        const textElem = document.getElementById('verificationText');
+        const msg = textElem.value.trim();
+        if (!msg) {
+            showToast("Message text is required.");
+            textElem.focus();
+            return;
+        }
+
+        isRequestRunning = true;
+        document.getElementById('verificationSubmit').disabled = true;
+        document.getElementById('verificationCancel').disabled = true;
+        textElem.disabled = true;
+
+        try {
+            const data = await apiPost('request-verification', { message: msg });
+            if (data && data.ok) {
+                showToast("Verification request queued.");
+                closeVerificationModal();
+                pollState(true);
+            }
+        } catch (e) {
+            if (document.getElementById('verificationModal').style.display !== 'none') {
+                textElem.focus();
+            }
+        } finally {
+            isRequestRunning = false;
+            document.getElementById('verificationSubmit').disabled = false;
+            document.getElementById('verificationCancel').disabled = false;
+            textElem.disabled = false;
+        }
+    }
+
+    // --- Complete Modal ---
+    function openCompleteModal() {
+        const modal = document.getElementById('completeModal');
+        const text = document.getElementById('completeText');
+        text.value = '';
+        document.getElementById('completeCount').innerText = '0 / 1000';
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => text.focus(), 100);
+    }
+    function closeCompleteModal() {
+        const modal = document.getElementById('completeModal');
+        if (modal) modal.style.display = 'none';
+
+        const textElem = document.getElementById('completeText');
+        if (textElem) {
+            textElem.value = '';
+            textElem.disabled = false;
+        }
+
+        const countElem = document.getElementById('completeCount');
+        if (countElem) countElem.innerText = '0 / 1000';
+
+        document.body.style.overflow = '';
+        document.body.classList.remove('modal-open');
+
+        const btnSubmit = document.getElementById('completeSubmit');
+        if (btnSubmit) btnSubmit.disabled = false;
+
+        const btnCancel = document.getElementById('completeCancel');
+        if (btnCancel) btnCancel.disabled = false;
+
+        isRequestRunning = false;
+    }
+    async function submitCompleteOrder() {
+        if (isRequestRunning) return;
+        const textElem = document.getElementById('completeText');
+        const msg = textElem.value.trim();
+
+        isRequestRunning = true;
+        document.getElementById('completeSubmit').disabled = true;
+        document.getElementById('completeCancel').disabled = true;
+        textElem.disabled = true;
+
+        try {
+            const data = await apiPost('complete', { note: msg });
+            if (data && data.ok) {
+                showToast("Order completed.");
+                closeCompleteModal();
+                pollState(true);
+            }
+        } catch (e) {
+            if (document.getElementById('completeModal').style.display !== 'none') {
+                textElem.focus();
+            }
+        } finally {
+            isRequestRunning = false;
+            document.getElementById('completeSubmit').disabled = false;
+            document.getElementById('completeCancel').disabled = false;
+            textElem.disabled = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const textareas = [
+            { id: 'inlineMessageText', countId: 'inlineMessageCount' },
+            { id: 'verificationText', countId: 'verificationCount' },
+            { id: 'completeText', countId: 'completeCount' }
+        ];
+
+        textareas.forEach(t => {
+            const elem = document.getElementById(t.id);
+            if (elem) {
+                elem.addEventListener('input', function() {
+                    document.getElementById(t.countId).innerText = this.value.length + ' / 1000';
+                });
+            }
+        });
+
+        const inlineText = document.getElementById('inlineMessageText');
+        if (inlineText) {
+            inlineText.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitInlineMessage();
+                }
+            });
+        }
+
+        const convContainer = document.getElementById('conversation-container');
+        if (convContainer) {
+            // Calculate initial max interaction id
+            const cards = convContainer.querySelectorAll('.fc-msg.admin, .fc-msg.customer');
+            cards.forEach(c => {
+                if (c.dataset.interactionId) {
+                    const iid = parseInt(c.dataset.interactionId, 10);
+                    if (!lastConversationMessageId || iid > lastConversationMessageId) {
+                        lastConversationMessageId = iid;
+                    }
+                }
+            });
+            // Initial scroll to bottom
+            scrollConversationToBottom(false);
+        }
+
+        const modals = ['verificationModal', 'completeModal'];
+        modals.forEach(m => {
+            const mElem = document.getElementById(m);
+            if (mElem) {
+                mElem.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        if (isRequestRunning) return;
+                        if (m === 'verificationModal') closeVerificationModal();
+                        if (m === 'completeModal') closeCompleteModal();
+                    }
+                });
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('verificationModal') && document.getElementById('verificationModal').style.display === 'flex') closeVerificationModal();
+                if (document.getElementById('completeModal') && document.getElementById('completeModal').style.display === 'flex') closeCompleteModal();
+            }
+        });
+
+        autoRevealReplies();
+    });
+
+    const autoRevealedInteractions = new Set();
+
+    function autoRevealReplies() {
+        if (!Number.isInteger(JOB_ID) || JOB_ID <= 0) return;
+        const replyBtns = document.querySelectorAll('[id^="btn-show-reply-"]');
+        replyBtns.forEach(btn => {
+            if (btn.textContent !== 'Show Reply' || btn.disabled) return;
+            const interactionId = parseInt(btn.id.replace('btn-show-reply-', ''), 10);
+            if (!autoRevealedInteractions.has(interactionId) && btn.dataset.autoAttempted !== "true") {
+                btn.dataset.autoAttempted = "true";
+                revealCustomerReply(JOB_ID, interactionId, true);
+            }
+        });
+    }
+
+    async function retryNotification(btn) {
+        if (btn) btn.disabled = true;
+        try {
+            await apiPost('retry-notification');
+            await pollState(true);
+        } catch(e) {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function renderActions(actions, status) {
+        let html = '<h3>Actions</h3>';
+        if (actions.start_processing) {
+            html += `<button class="fc-btn" onclick="takeAction(this, 'start')">Start Processing</button>\n`;
+        }
+        if (actions.message_customer) {
+            // Message Customer button removed from side actions, integrated into Conversation Box
+        }
+        if (actions.request_verification) {
+            html += `<button class="fc-btn secondary" id="btn-verify" onclick="openVerificationModal()">Request Verification Code</button>\n`;
+        }
+        if (actions.resume_processing) {
+            html += `<button class="fc-btn secondary" onclick="takeAction(this, 'resume')">Resume Processing</button>\n`;
+        }
+        if (actions.complete_order) {
+            html += `<button class="fc-btn success" id="btn-complete" onclick="openCompleteModal()">Complete Order</button>\n`;
+        }
+        if (status === 'completed') {
+            html += `<div style="color: #10b981; text-align: center; font-weight: 600;">Order Completed</div>\n`;
+        } else if (status === 'cancelled') {
+            html += `<div style="color: #ef4444; text-align: center; font-weight: 600;">Order Cancelled</div>\n`;
+        } else if (!actions.start_processing && !actions.message_customer && !actions.request_verification && !actions.resume_processing && !actions.complete_order) {
+            html += `<div style="color: #94a3b8; text-align: center; font-weight: 600;">Action state unavailable</div>\n`;
+        }
+        return html;
+    }
+
+    // --- LIVE POLLING & RECONCILIATION ---
+    async function pollState(immediate = false) {
+        if (!immediate && document.visibilityState !== 'visible') return;
+        try {
+            if (!Number.isInteger(JOB_ID) || JOB_ID <= 0) return;
+            const resp = await fetch(`/admin/fulfillment/api/order/${JOB_ID}/state`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (!data.ok || data.job_id !== JOB_ID) return;
+
+            if (typeof data.actions !== 'object' || data.actions === null) return;
+            const validKeys = ['start_processing', 'message_customer', 'request_verification', 'resume_processing', 'complete_order'];
+            const hasValidKeys = validKeys.every(k => typeof data.actions[k] === 'boolean');
+            if (!hasValidKeys) return;
+
+            // Validate status
+            if (!['queued', 'in_progress', 'waiting_customer', 'completed', 'cancelled'].includes(data.status)) return;
+
+            // 1. Update status badge
+            const badge = document.getElementById('badge-status');
+            if (badge) {
+                badge.className = `fc-badge ${data.status}`;
+                badge.innerText = data.status_label;
+            }
+
+            // 2. Conversation Box
+            const convContainer = document.getElementById('conversation-container');
+            if (data.conversation_messages && data.conversation_messages.length > 0) {
+                const noConv = document.getElementById('no-conversation');
+                if (noConv) noConv.remove();
+            }
+
+            let newMessagesAdded = false;
+            if (data.conversation_messages) {
+                data.conversation_messages.forEach(ia => {
+                    if (lastConversationMessageId !== null && ia.id <= lastConversationMessageId) {
+                        // Already handled, just update badge if needed
+                        if (ia.direction === 'customer_to_admin' && !ia.is_unread) {
+                            const bdg = document.getElementById(`badge-interaction-${ia.id}`);
+                            if (bdg) bdg.remove();
+                        }
+                        return;
+                    }
+
+                    const cardId = `interaction-card-${ia.id}`;
+                    const existing = document.getElementById(cardId);
+                    if (!existing) {
+                        const div = document.createElement('div');
+                        div.id = cardId;
+                        div.dataset.interactionId = ia.id;
+                        if (ia.direction === 'admin_to_customer') {
+                            div.className = 'fc-msg admin';
+                            div.innerHTML = `<div class="fc-msg-meta">To Customer • ${ia.created_at_fmt}</div><div class="fc-msg-content" dir="auto"></div>`;
+                            div.querySelector('.fc-msg-content').textContent = ia.safe_preview;
+                        } else if (ia.direction === 'customer_to_admin') {
+                            div.className = 'fc-msg customer';
+                            const badgeHtml = ia.is_unread ? `<span id="badge-interaction-${ia.id}" class="fc-badge new-reply" style="background-color: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">New Reply</span>` : '';
+                            div.innerHTML = `
+                                <div class="fc-msg-meta" style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>From Customer • ${ia.created_at_fmt}</span>
+                                    ${badgeHtml}
+                                </div>
+                                <div style="margin-top: 8px;">
+                                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Customer Reply:</div>
+                                    <div id="reply-content-${ia.id}" class="fc-msg-content" style="font-family: monospace; font-size: 14px; background: #0f172a; padding: 8px; border-radius: 4px;" dir="auto">••••••••</div>
+                                </div>
+                                <div class="fc-actions-row">
+                                    <button class="fc-btn secondary" id="btn-show-reply-${ia.id}" style="padding: 2px 8px; font-size: 12px; height: 24px;" onclick="revealCustomerReply(${JOB_ID}, ${ia.id})">Show Reply</button>
+                                    <button class="fc-btn secondary" id="btn-copy-reply-${ia.id}" style="padding: 2px 8px; font-size: 12px; height: 24px;" onclick="copyCustomerReply(${ia.id})" disabled>Copy</button>
+                                </div>`;
+                        }
+
+                        // Remove optimistic UI if it was queued recently
+                        const opts = Array.from(convContainer.querySelectorAll('[id^="opt-"]'));
+                        if (opts.length > 0) {
+                            opts[0].remove();
+                        }
+
+                        convContainer.appendChild(div);
+                        newMessagesAdded = true;
+                        if (!lastConversationMessageId || ia.id > lastConversationMessageId) {
+                            lastConversationMessageId = ia.id;
+                        }
+                    } else {
+                        if (ia.direction === 'customer_to_admin' && !ia.is_unread) {
+                            const bdg = document.getElementById(`badge-interaction-${ia.id}`);
+                            if (bdg) bdg.remove();
+                        }
+                    }
+                });
+            }
+
+            if (newMessagesAdded) {
+                // If it's from current user's action, immediate is true, so smooth = !immediate = false
+                scrollConversationToBottom(!immediate);
+            }
+
+            // 2b. Operational Timeline
+            const timelineCount = document.getElementById('timeline-count');
+            if (timelineCount && data.fulfillment_events) {
+                timelineCount.textContent = `(${data.fulfillment_events.length})`;
+            }
+
+            const timeline = document.getElementById('timeline-container');
+            if (data.fulfillment_events && data.fulfillment_events.length > 0) {
+                const noTimeline = document.getElementById('no-timeline');
+                if (noTimeline) noTimeline.remove();
+            }
+
+            if (data.fulfillment_events) {
+                data.fulfillment_events.forEach(ia => {
+                    const cardId = `interaction-card-${ia.id}`;
+                    const existing = document.getElementById(cardId);
+                    if (!existing) {
+                        const div = document.createElement('div');
+                        div.id = cardId;
+                        div.className = 'fc-msg system';
+                        div.innerHTML = `${ia.safe_preview} • ${ia.created_at_fmt}`;
+
+                        // Prepend for descending order
+                        if (timeline.firstChild) {
+                            timeline.insertBefore(div, timeline.firstChild);
+                        } else {
+                            timeline.appendChild(div);
+                        }
+                    }
+                });
+            }
+
+            // 3. Notifications
+            const notifPanel = document.getElementById('notifications-panel');
+            const notifContainer = document.getElementById('notifications-container');
+            const notifCount = document.getElementById('notifications-count');
+            const notifBadge = document.getElementById('notifications-failed-badge');
+            if (data.notifications) {
+                if (notifCount) notifCount.textContent = `(${data.notifications.length})`;
+                let failed = data.notifications.filter(n => n.status === 'failed').length;
+                if (notifBadge) {
+                    notifBadge.textContent = `${failed} Failed`;
+                    notifBadge.style.display = failed > 0 ? 'inline-block' : 'none';
+                }
+            }
+
+            if (data.notifications.length > 0) {
+                if (notifPanel) notifPanel.style.display = 'block';
+                data.notifications.forEach(notif => {
+                    const cardId = `notification-card-${notif.id}`;
+                    const existing = document.getElementById(cardId);
+                    if (!existing) {
+                        const div = document.createElement('div');
+                        div.className = 'fc-msg system';
+                        div.id = cardId;
+                        let retryBtn = notif.status === 'failed' ? `<br><span style="color:#ef4444">${notif.last_error}</span><br><button class="fc-btn secondary" style="margin-top: 8px;" onclick="retryNotification(this)">Retry</button>` : '';
+                        div.innerHTML = `${notif.safe_preview} [${notif.status}] • ${notif.created_at_fmt} ${retryBtn}`;
+                        notifContainer.appendChild(div);
+                    } else {
+                        // update status if needed
+                        if (notif.status === 'sent' || notif.status === 'delivered') {
+                            existing.innerHTML = `${notif.safe_preview} [${notif.status}] • ${notif.created_at_fmt}`;
+                        } else if (notif.status === 'failed' && !existing.innerHTML.includes('Retry')) {
+                            existing.innerHTML = `${notif.safe_preview} [${notif.status}] • ${notif.created_at_fmt} <br><span style="color:#ef4444">${notif.last_error}</span><br><button class="fc-btn secondary" style="margin-top: 8px;" onclick="retryNotification(this)">Retry</button>`;
+                        }
+                    }
+                });
+            }
+
+            // 4. Update actions buttons safely
+            const actionsContainer = document.getElementById('actions-container');
+            if (actionsContainer) {
+                const newHtml = renderActions(data.actions, data.status);
+                if (actionsContainer.innerHTML.trim() !== newHtml.trim()) {
+                    actionsContainer.innerHTML = newHtml;
+                }
+            }
+
+            autoRevealReplies();
+        } catch(e) {}
+    }
+
+    setInterval(pollState, 3000);
+
+    let secretStore = {};
+    let timeouts = {};
+
+    async function revealSecret(jobId, inputId) {
+        const btn = document.getElementById(`btn-rev-${inputId}`);
+        const span = document.getElementById(`secret-${inputId}`);
+
+        btn.disabled = true;
+        try {
+            const data = await apiPost('reveal', { input_id: inputId });
+            const val = data.plaintext;
+            secretStore[inputId] = val;
+            span.innerText = val;
+            span.style.color = '#fbbf24'; // highlight
+
+            if (timeouts[inputId]) clearTimeout(timeouts[inputId]);
+            timeouts[inputId] = setTimeout(() => {
+                span.innerText = '••••••••';
+                span.style.color = '#fff';
+                delete secretStore[inputId];
+                btn.disabled = false;
+            }, 45000);
+        } catch (e) {
+            btn.disabled = false;
+        }
+    }
+
+    function copySecret(inputId) {
+        if (secretStore[inputId]) {
+            copyToClipboard(secretStore[inputId]);
+        } else {
+            showToast("Reveal the secret first to copy it.");
+        }
+    }
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).catch(() => {});
+    }
+
+    let customerReplyStore = {};
+
+    async function revealCustomerReply(jobId, interactionId, isAuto = false) {
+        const btnShow = document.getElementById(`btn-show-reply-${interactionId}`);
+        const btnCopy = document.getElementById(`btn-copy-reply-${interactionId}`);
+        const contentDiv = document.getElementById(`reply-content-${interactionId}`);
+        const badge = document.getElementById(`badge-interaction-${interactionId}`);
+
+        if (btnShow.textContent === 'Hide Reply') {
+            hideCustomerReply(interactionId);
+            return;
+        }
+
+        btnShow.disabled = true;
+
+        try {
+            const res = await fetch(`/admin/fulfillment/api/order/${jobId}/interaction/${interactionId}/reveal`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            const data = await res.json();
+
+            if (data.ok) {
+                const plaintext = data.reply;
+                customerReplyStore[interactionId] = plaintext;
+                contentDiv.textContent = plaintext;
+                contentDiv.style.color = '#fbbf24';
+
+                btnShow.textContent = 'Hide Reply';
+                btnShow.disabled = false;
+                btnCopy.disabled = false;
+
+                if (badge) {
+                    badge.remove();
+                }
+
+                if (isAuto) {
+                    autoRevealedInteractions.add(interactionId);
+                }
+            } else {
+                showToast(data.message || (isAuto ? "Failed to auto-reveal reply." : "Failed to reveal reply."));
+                btnShow.disabled = false;
+            }
+        } catch (e) {
+            showToast(isAuto ? "Network error auto-revealing reply." : "Network error. Please try again.");
+            btnShow.disabled = false;
+        }
+    }
+
+    function hideCustomerReply(interactionId) {
+        const btnShow = document.getElementById(`btn-show-reply-${interactionId}`);
+        const btnCopy = document.getElementById(`btn-copy-reply-${interactionId}`);
+        const contentDiv = document.getElementById(`reply-content-${interactionId}`);
+
+        contentDiv.textContent = '••••••••';
+        contentDiv.style.color = '#fff';
+
+        btnShow.textContent = 'Show Reply';
+        btnCopy.disabled = true;
+
+        delete customerReplyStore[interactionId];
+    }
+
+    async function copyCustomerReply(interactionId) {
+        if (customerReplyStore[interactionId]) {
+            try {
+                await navigator.clipboard.writeText(customerReplyStore[interactionId]);
+                showToast("Reply copied");
+            } catch (err) {
+                showToast("Failed to copy text.");
+            }
+        }
+    }
+</script>
+{% endblock %}

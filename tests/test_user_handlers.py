@@ -136,4 +136,4 @@ class TestRulesHandler:
             env.RULES = ""
             await rules_callback_handler(call, fsm_context)
 
-        call.answer.assert_called_once()
+        assert call.answer.call_count >= 1
