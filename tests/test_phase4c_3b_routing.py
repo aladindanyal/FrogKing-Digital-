@@ -12,11 +12,6 @@ from bot.database.models.main import User, Categories, Goods, ProductCustomerFie
 from bot.misc import encryption
 import os
 
-@pytest.fixture
-def test_dp():
-    dp = Dispatcher(storage=MemoryStorage())
-    register_all_handlers(dp)
-    return dp
 
 @pytest.fixture
 def mock_bot():

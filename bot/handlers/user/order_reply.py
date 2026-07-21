@@ -14,6 +14,18 @@ from bot.misc.encryption import encrypt_text
 
 router = Router()
 
+class NonCommandConversationMessageFilter(Filter):
+    async def __call__(self, message: Message) -> bool:
+        if not message.text:
+            return True
+        if message.text.startswith('/'):
+            return False
+        if message.entities:
+            for entity in message.entities:
+                if entity.type == 'bot_command' and entity.offset == 0:
+                    return False
+        return True
+
 class ActiveConversationFilter(Filter):
     async def __call__(self, message: Message) -> Union[bool, Dict[str, Any]]:
         async with Database().session() as session:
@@ -25,12 +37,16 @@ class ActiveConversationFilter(Filter):
                 )
             )
             active_session = result.scalar_one_or_none()
-            if active_session and active_session.expires_at > datetime.datetime.now(datetime.timezone.utc):
-                return {"active_session_id": active_session.id}
-
-            if active_session and active_session.expires_at <= datetime.datetime.now(datetime.timezone.utc):
-                active_session.status = 'expired'
-                await session.commit()
+            if active_session:
+                expires_at = active_session.expires_at
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                if expires_at > now_utc:
+                    return {"active_session_id": active_session.id}
+                if expires_at <= now_utc:
+                    active_session.status = 'expired'
+                    await session.commit()
 
             return False
 
@@ -168,7 +184,7 @@ async def on_reply_to_order(call: CallbackQuery):
 
 
 
-@router.message(StateFilter(None), F.text, ActiveConversationFilter())
+@router.message(StateFilter(None), F.text, NonCommandConversationMessageFilter(), ActiveConversationFilter())
 async def process_order_reply(message: Message, active_session_id: int):
     if len(message.text) > 1000:
         await message.answer("Your message is too long. Please keep it under 1000 characters.")

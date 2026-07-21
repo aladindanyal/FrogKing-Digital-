@@ -368,3 +368,21 @@ def role_factory():
         return await create_role(name, permissions)
 
     return _create
+
+@pytest.fixture
+def test_dp():
+    from aiogram import Dispatcher
+    from aiogram.fsm.storage.memory import MemoryStorage
+    from bot.handlers.user import router as user_router
+    from bot.handlers.admin import router as admin_router
+    from bot.handlers.other import router as other_router
+
+    # Detach root routers from any previous Dispatcher to allow re-registration
+    user_router._parent_router = None
+    admin_router._parent_router = None
+    other_router._parent_router = None
+
+    import bot.handlers.main
+    dp = Dispatcher(storage=MemoryStorage())
+    bot.handlers.main.register_all_handlers(dp)
+    return dp

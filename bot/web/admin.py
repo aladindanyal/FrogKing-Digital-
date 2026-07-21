@@ -159,9 +159,34 @@ class UserAdmin(AuditModelView, model=User):
     column_searchable_list = [User.telegram_id, User.telegram_username, User.first_name, User.last_name]
     column_sortable_list = [User.telegram_id, User.balance, User.registration_date]
     column_default_sort = (User.registration_date, True)
+
+    form_columns = [
+        User.balance,
+        User.is_blocked,
+        "role",
+        User.referral_id,
+    ]
+
     name = "User"
     name_plural = "Users"
     icon = "fa-solid fa-users"
+
+    async def get_object_for_edit(self, value: Any) -> Any:
+        from sqlalchemy import select
+        from sqlalchemy.orm import noload, joinedload
+        try:
+            pk = int(value)
+        except (ValueError, TypeError):
+            return None
+
+        stmt = (
+            select(User)
+            .where(User.telegram_id == pk)
+            .options(noload("*"))
+            .options(joinedload(User.role))
+        )
+        rows = await self._run_query(stmt)
+        return rows[0] if rows else None
 
 
 _PERM_FLAGS = [

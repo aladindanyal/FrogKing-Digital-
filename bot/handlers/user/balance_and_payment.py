@@ -576,7 +576,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         
         action_buttons = []
         if 'order_id' in purchase_data:
-            action_buttons.append(("📦 View Order", f"orders:view:{purchase_data['order_id']}"))
+            action_buttons.append(("📦 View Order", f"orders:view:{purchase_data['order_id']}:p"))
             
         action_buttons.append(("🔁 Buy Again", f"buy_again:{item_id_str}"))
         
