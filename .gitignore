@@ -154,3 +154,8 @@ pytest_error*.txt
 pytest_out.txt
 test_failure.txt
 error_output*.html
+
+# Patch scripts
+fix_*.py
+modify_*.py
+append_*.py
