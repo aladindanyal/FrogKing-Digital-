@@ -203,22 +203,25 @@ async def add_to_cart(user_id: int, item_name: str, promo_code: str = None) -> t
 
 
 
-async def create_review(user_id: int, item_name: str, rating: int, text: str = None) -> int | None:
-    """Create a review. Returns ID or None if already reviewed."""
+async def create_review(user_id: int, product_id: int, order_id: int, order_item_id: int, item_name: str, rating: int, comment: str = None) -> int | None:
+    """Create a pending review. Returns ID or None if already reviewed."""
     async with Database().session() as s:
         existing = (await s.execute(
             select(exists().where(
-                Reviews.user_id == user_id,
-                Reviews.item_name == item_name
+                Reviews.order_item_id == order_item_id
             ))
         )).scalar()
         if existing:
             return None
         review = Reviews(
             user_id=user_id,
+            product_id=product_id,
+            order_id=order_id,
+            order_item_id=order_item_id,
             item_name=item_name,
             rating=rating,
-            text=text,
+            comment=comment,
+            status='pending'
         )
         s.add(review)
         await s.flush()

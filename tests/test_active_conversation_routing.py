@@ -40,8 +40,29 @@ async def test_active_conversation_routing(test_dp, mock_bot):
         s.add(order)
         await s.flush()
 
+        # Create an order item
+        from bot.database.models.main import OrderItem, Categories, Goods
+        cat = Categories(name="Cat ACR")
+        s.add(cat)
+        await s.flush()
+        good = Goods(name="Good ACR", category_id=cat.id, price=10, description="description")
+        s.add(good)
+        await s.flush()
+        oi = OrderItem(
+            order_id=order.id,
+            item_id=good.id,
+            quantity=1,
+            unit_price=10,
+            subtotal=10,
+            total=10,
+            product_name_snapshot="Good ACR",
+            fulfillment_status="delivered"
+        )
+        s.add(oi)
+        await s.flush()
+
         # Create a job
-        job = ManualFulfillmentJob(order_item_id=1, status="in_progress")
+        job = ManualFulfillmentJob(order_item_id=oi.id, status="in_progress")
         s.add(job)
         await s.flush()
 

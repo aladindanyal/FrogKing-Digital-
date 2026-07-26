@@ -226,6 +226,7 @@ async def test_on_reply_to_order():
                 product_name_snapshot = "Prod"
             class DJ:
                 order_item = DOI()
+                order_item_id = 9999
 
             self.order_id = o_id
             self.fulfillment_job_id = j_id
@@ -245,7 +246,8 @@ async def test_on_reply_to_order():
     await outbox_dispatcher._send_notification(DummyNotif(99999, order_id, job_id), DummySession())
     kb_out = outbox_dispatcher.bot.last_markup
     assert kb_out.inline_keyboard[0][0].callback_data == f"orders:view:{order_id}:c:0"
-    assert kb_out.inline_keyboard[0][1].callback_data == "back_to_menu"
+    assert kb_out.inline_keyboard[1][0].callback_data == f"review:start:9999:c:{order_id}"
+    assert kb_out.inline_keyboard[2][0].callback_data == "back_to_menu"
     assert len(f"orders:view:{order_id}:c:0") <= 64
 
     # Ensure handler logic correctly matches

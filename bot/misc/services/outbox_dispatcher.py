@@ -130,12 +130,19 @@ class OutboxDispatcher:
         if notif_type == 'comp':
             source_kind = "c"
             view_callback = f"orders:view:{notif.order_id}:{source_kind}:{source_id}"
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="View Order", callback_data=view_callback),
-                    InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
-                ]
-            ])
+
+            from bot.i18n.main import localize
+            buttons = [
+                [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+            ]
+
+            # The 'comp' type is canonical for completed manual fulfillment.
+            buttons.append([InlineKeyboardButton(text=localize("orders.leave_review", default="⭐ Leave a Review"), callback_data=f"review:start:{notif.job.order_item_id}:c:{notif.order_id}")])
+
+            buttons.append([InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")])
+
+            kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+
             message_text = f"✅ Order Completed\n\nOrder ID:\n{public_id}\n\nProduct:\n{product_name}\n\nYour Order has been completed successfully."
             if interaction and interaction.safe_preview and interaction.safe_preview != "Order completed":
                 message_text += f"\n\n{interaction.safe_preview}"

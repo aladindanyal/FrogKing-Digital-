@@ -551,7 +551,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
 
         delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])
         messages_to_send = []
-        current_msg = receipt_header + "🔑 <b>Delivered Value:</b>\n<code>\n"
+        current_msg = "🔑 <b>Delivered Value:</b>\n<code>\n"
         
         if purchase_data['quantity'] > 1:
             for i, val in enumerate(delivered_values, 1):
@@ -559,7 +559,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
                 if len(current_msg) + len(val_str) + 100 > 4000:
                     current_msg += "</code>"
                     messages_to_send.append(current_msg)
-                    current_msg = f"🧾 <b>Order ID:</b> {public_order_id} (Part {(len(messages_to_send) + 1)})\n\n🔑 <b>Delivered Value (Continued):</b>\n<code>\n{val_str}"
+                    current_msg = f"🔑 <b>Delivered Value (Continued):</b>\n<code>\n{val_str}"
                 else:
                     current_msg += val_str
         else:
@@ -572,23 +572,11 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         for msg in messages_to_send:
             await call.message.answer(msg, parse_mode='HTML')
 
-        from bot.keyboards.inline import simple_buttons
-        
-        action_buttons = []
         if 'order_id' in purchase_data:
-            action_buttons.append(("📦 View Order", f"orders:view:{purchase_data['order_id']}:p"))
-            
-        action_buttons.append(("🔁 Buy Again", f"buy_again:{item_id_str}"))
-        
-        if EnvKeys.HELPER_ID:
-            action_buttons.append(("🆘 Support for This Order", f"support_order:{public_order_id}"))
-            
-        action_buttons.append(("🏠 Home", "back_to_menu"))
-        
-        await call.message.answer(
-            "What would you like to do next?",
-            reply_markup=simple_buttons(action_buttons)
-        )
+            from bot.handlers.user.renderers import render_purchase_success_from_order
+            text, kb = await render_purchase_success_from_order(call.message, purchase_data['order_id'])
+            if text and kb:
+                await call.message.answer(text, reply_markup=kb, parse_mode='HTML')
 
         # Secure logging
         try:

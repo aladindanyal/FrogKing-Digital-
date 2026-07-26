@@ -18,6 +18,7 @@ from sqlalchemy import select
 from bot.i18n.main import localize, current_locale
 from bot.misc.customer_fields import get_localized_label
 from bot.misc.validators import sanitize_html
+from bot.misc.utils import safe_edit_or_send
 from bot.misc import EnvKeys
 
 router = Router()
@@ -189,11 +190,25 @@ async def order_view_handler(call: CallbackQuery):
         if EnvKeys.HELPER_ID:
             kb.button(text=localize("orders.support", default="🆘 Support for This Order"), callback_data=f"support_order:{order.public_id}")
 
-        # Buy Again
-        if item:
-            kb.button(text=localize("orders.buy_again", default="🔁 Buy Again"), callback_data=f"order_buy_again:{item.id}")
+        # Buy Again and Reviews
+        if order.status == "completed":
+            from bot.database.methods.read import get_review_by_order_item
+            for order_item in items:
+                prod_name = sanitize_html(order_item.product_name_snapshot)[:15]
+                # Buy Again
+                kb.button(text=localize("orders.buy_again", default=f"🔁 Buy {prod_name} Again"), callback_data=f"order_buy_again:{order_item.item_id}")
 
-        if origin == "r":
+                # Review
+                if order_item.fulfillment_status == "delivered":
+                    existing_review = await get_review_by_order_item(order_item.id)
+                    if existing_review:
+                        kb.button(text=localize("orders.view_review", prod_name=prod_name), callback_data=f"review_view:{order_item.id}")
+                    else:
+                        kb.button(text=localize("orders.leave_review"), callback_data=f"review:start:{order_item.id}:{origin}:{order.id}")
+        elif item:
+            kb.button(text=localize("orders.buy_again", default="🔁 Buy Again"), callback_data=f"order_buy_again:{item.item_id}")
+
+        if origin in ("r", "p"):
             back_data = f"orders:receipt:{order.id}"
         elif origin == "a":
             back_data = f"orders:active:{order.id}"
@@ -422,10 +437,11 @@ async def render_order_receipt(session: AsyncSession, order_id: int) -> tuple[st
 @router.callback_query(F.data.startswith("orders:receipt:"))
 async def order_receipt_handler(call: CallbackQuery):
     order_id = int(call.data.split(":")[2])
-    async with Database().session() as s:
-        text, kb = await render_order_receipt(s, order_id)
-        await call.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        await call.answer()
+    from bot.handlers.user.renderers import render_purchase_success_from_order
+    text, kb = await render_purchase_success_from_order(call.message, order_id)
+    if text and kb:
+        await safe_edit_or_send(call, text, reply_markup=kb, parse_mode='HTML')
+    await call.answer()
 
 @router.callback_query(F.data.startswith("orders:active:"))
 async def order_active_warning_handler(call: CallbackQuery):

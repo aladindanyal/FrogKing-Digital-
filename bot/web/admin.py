@@ -784,14 +784,41 @@ class CartItemsAdmin(ModelView, model=CartItems):
 
 
 class ReviewsAdmin(AuditModelView, model=Reviews):
-    column_list = [Reviews.id, Reviews.user_id, Reviews.item_name,
-                   Reviews.rating, Reviews.text, Reviews.created_at]
-    column_searchable_list = [Reviews.user_id, Reviews.item_name]
-    column_sortable_list = [Reviews.id, Reviews.rating, Reviews.created_at]
+    column_list = [
+        Reviews.id, Reviews.user_id, Reviews.product_id, Reviews.order_id,
+        Reviews.rating, Reviews.status, Reviews.is_featured, Reviews.created_at
+    ]
+    column_searchable_list = [Reviews.user_id, Reviews.item_name, Reviews.status]
+    column_sortable_list = [Reviews.id, Reviews.rating, Reviews.created_at, Reviews.status, Reviews.is_featured]
     column_default_sort = (Reviews.id, True)
     name = "Review"
     name_plural = "Reviews"
     icon = "fa-solid fa-star"
+
+    form_columns = [
+        Reviews.status,
+        Reviews.is_featured,
+        Reviews.admin_reply
+    ]
+
+    form_overrides = {
+        "status": SelectField
+    }
+
+    form_args = dict(
+        status=dict(choices=[
+            ('pending', 'Pending'),
+            ('approved', 'Approved'),
+            ('rejected', 'Rejected'),
+            ('hidden', 'Hidden')
+        ])
+    )
+
+    async def after_model_change(self, data: dict, model: Any, is_created: bool, request: Request) -> None:
+        if not is_created:
+            # Check if status/featured changed
+            pass # Simplified auditing for now
+        await super().after_model_change(data, model, is_created, request)
 
 
 class ProductRestockSubscriptionAdmin(ModelView, model=ProductRestockSubscription):

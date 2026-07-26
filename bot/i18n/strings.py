@@ -447,6 +447,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.promo.category_not_found": "❌ Категория не найдена.",
         "admin.promo.item_not_found": "❌ Товар не найден.",
         "btn.redeem_promo": "🔥 Promo Code",
+        "btn.skip": "⏭ Пропустить комментарий",
+        "btn.cancel": "❌ Отмена",
+        "btn.submit": "✅ Отправить отзыв",
+        "btn.edit_text": "📝 Редактировать комментарий",
+        "btn.change_rating": "⭐ Изменить оценку",
+        "orders.view_review": "⭐ Посмотреть отзыв ({prod_name})",
         "review.disabled": "Отзывы отключены.",
 
         # === Cart ===
@@ -479,6 +485,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "history.purchase": "🛒 Покупка: {amount} {currency}",
         "history.referral": "🎲 Реферальный бонус: +{amount} {currency}",
         "history.date": "📅 {date}",
+
+        "orders.leave_review": "⭐ Leave a Review",
+        "orders.review_submitted": "✅ Review Submitted",
+        "orders.choose_rating": "Choose Rating",
+        "orders.write_comment": "Write a Comment",
+        "orders.skip_comment": "⏭ Skip Comment",
+        "orders.change_rating": "⭐ Change Rating",
+        "orders.edit_comment": "✏️ Edit Comment",
+        "orders.submit_review": "✅ Submit Review",
+        "orders.awaiting_approval": "Awaiting Approval",
+        "orders.verified_purchase": "✅ Verified Purchase",
+        "orders.admin_reply": "Admin Reply",
+        "orders.no_reviews": "No Reviews Yet",
+        "orders.view_all_reviews": "View All Reviews",
+        "orders.cancel": "❌ Cancel",
+        "orders.back": "⬅️ Back to Rating",
 
         # === Reviews ===
         "btn.leave_review": "⭐ Оставить отзыв",
@@ -1015,6 +1037,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.promo.category_not_found": "❌ Category not found.",
         "admin.promo.item_not_found": "❌ Item not found.",
         "btn.redeem_promo": "🔥 Promo Code",
+        "btn.skip": "⏭ Skip Comment",
+        "btn.cancel": "❌ Cancel",
+        "btn.submit": "✅ Submit Review",
+        "btn.edit_text": "📝 Edit Comment",
+        "btn.change_rating": "⭐ Change Rating",
+        "orders.view_review": "⭐ View Review ({prod_name})",
         "review.disabled": "Reviews are disabled.",
 
         # === Cart ===
@@ -1047,6 +1075,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "history.purchase": "🛒 Purchase: {amount} {currency}",
         "history.referral": "🎲 Referral bonus: +{amount} {currency}",
         "history.date": "📅 {date}",
+
+        "orders.leave_review": "⭐ Leave a Review",
+        "orders.review_submitted": "✅ Review Submitted",
+        "orders.choose_rating": "Choose Rating",
+        "orders.write_comment": "Write a Comment",
+        "orders.skip_comment": "⏭ Skip Comment",
+        "orders.change_rating": "⭐ Change Rating",
+        "orders.edit_comment": "✏️ Edit Comment",
+        "orders.submit_review": "✅ Submit Review",
+        "orders.awaiting_approval": "Awaiting Approval",
+        "orders.verified_purchase": "✅ Verified Purchase",
+        "orders.admin_reply": "Admin Reply",
+        "orders.no_reviews": "No Reviews Yet",
+        "orders.view_all_reviews": "View All Reviews",
+        "orders.cancel": "❌ Cancel",
+        "orders.back": "⬅️ Back to Rating",
 
         # === Reviews ===
         "btn.leave_review": "⭐ Leave a review",
@@ -1211,5 +1255,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.notify_restock": "🔔 أعلمني عندما يتوفر",
         "restock_notification_text": "🎉 <b>المنتج متوفر من جديد!</b>\n\nعاد المنتج <b>{item_name}</b> إلى المخزون.\n\nاضغط بالأسفل للتحقق من الكمية وإكمال عملية الشراء.",
         "btn.view_product": "🛒 عرض المنتج",
+        "btn.skip": "⏭ تخطي التعليق",
+        "btn.cancel": "❌ إلغاء",
+        "btn.submit": "✅ إرسال المراجعة",
+        "btn.edit_text": "📝 تعديل التعليق",
+        "btn.change_rating": "⭐ تغيير التقييم",
+        "orders.view_review": "⭐ عرض المراجعة ({prod_name})",
     }
 }
