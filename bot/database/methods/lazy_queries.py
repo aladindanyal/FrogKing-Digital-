@@ -262,18 +262,21 @@ async def query_user_operations_history(user_id: int, offset: int = 0, limit: in
 async def query_item_reviews(item_name: str, offset: int = 0, limit: int = 10,
                              count_only: bool = False) -> Any:
     """Query reviews for an item with pagination"""
+    from bot.database.models.main import User
     async with Database().session() as s:
-        base = select(Reviews).where(Reviews.item_name == item_name)
+        base = select(Reviews, User.first_name, User.last_name, User.telegram_username).join(User, User.telegram_id == Reviews.user_id).where(Reviews.item_name == item_name, Reviews.status == 'approved')
         if count_only:
             count_q = select(func.count()).select_from(base.subquery())
             return (await s.execute(count_q)).scalar() or 0
         result = await s.execute(
-            base.order_by(desc(Reviews.created_at)).offset(offset).limit(limit)
+            base.order_by(desc(Reviews.is_featured), desc(Reviews.created_at)).offset(offset).limit(limit)
         )
         return [
             {
                 'id': r.id, 'user_id': r.user_id, 'rating': r.rating,
-                'text': r.text, 'created_at': r.created_at,
+                'comment': r.comment, 'created_at': r.created_at,
+                'is_featured': r.is_featured, 'admin_reply': r.admin_reply,
+                'full_name': (fn or '') + (' ' + ln if ln else ''), 'username': un
             }
-            for r in result.scalars().all()
+            for r, fn, ln, un in result.all()
         ]

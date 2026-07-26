@@ -630,7 +630,7 @@ async def get_item_avg_rating(item_name: str) -> float | None:
     """Return average rating for an item, or None if no reviews."""
     async with Database().session() as s:
         result = (await s.execute(
-            select(func.avg(Reviews.rating)).where(Reviews.item_name == item_name)
+            select(func.avg(Reviews.rating)).where(Reviews.item_name == item_name, Reviews.status == 'approved')
         )).scalar()
         return round(float(result), 1) if result else None
 
@@ -644,6 +644,48 @@ async def has_purchased_item(user_id: int, item_name: str) -> bool:
                 BoughtGoods.item_name == item_name
             ))
         )).scalar()
+async def get_review_by_order_item(order_item_id: int) -> Reviews | None:
+    """Get a review by order_item_id."""
+    from bot.database.models.main import Reviews
+    async with Database().session() as s:
+        return (await s.execute(
+            select(Reviews).where(Reviews.order_item_id == order_item_id)
+        )).scalar_one_or_none()
+
+async def get_eligible_order_item_for_review(user_id: int, order_item_id: int):
+    """Verify order item belongs to user and is in a successful final state."""
+    from bot.database.models.main import OrderItem, Order, Goods
+    async with Database().session() as s:
+        result = await s.execute(
+            select(OrderItem, Order, Goods)
+            .join(Order, Order.id == OrderItem.order_id)
+            .join(Goods, Goods.id == OrderItem.item_id)
+            .where(OrderItem.id == order_item_id)
+            .where(Order.user_id == user_id)
+            .where(Order.status == 'completed')
+        )
+        return result.first()
+
+
+async def get_global_reviews(page: int = 0, limit: int = 5):
+    """Return globally approved reviews, featured first, then newest."""
+    from bot.database.models.main import Reviews, User
+    async with Database().session() as s:
+        total = (await s.execute(
+            select(func.count(Reviews.id)).where(Reviews.status == 'approved')
+        )).scalar() or 0
+
+        reviews = (await s.execute(
+            select(Reviews, User.first_name, User.last_name, User.telegram_username)
+            .join(User, User.telegram_id == Reviews.user_id)
+            .where(Reviews.status == 'approved')
+            .order_by(Reviews.is_featured.desc(), Reviews.created_at.desc())
+            .offset(page * limit)
+            .limit(limit)
+        )).all()
+
+        return reviews, total
+
 
 
 async def get_user_review(user_id: int, item_name: str) -> dict | None:
@@ -659,11 +701,7 @@ async def get_user_review(user_id: int, item_name: str) -> dict | None:
         return _obj_to_dict(obj, Reviews) if obj else None
 
 
-async def invalidate_rating_cache(item_name: str):
-    """Invalidate avg rating cache for an item."""
-    cache = get_cache_manager()
-    if cache:
-        await cache.delete(f"avg_rating:{item_name}")
+
 
 async def get_main_menu_buttons() -> list:
     from bot.database.models.main import MainMenuButtonSettings

@@ -394,3 +394,27 @@ def referral_system_keyboard(has_referrals: bool = False, has_earnings: bool = F
     kb.button(text=localize("btn.back"), callback_data="profile")
     kb.adjust(1)
     return kb.as_markup()
+
+def rating_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for i in range(1, 6):
+        kb.button(text=f"{i} ⭐", callback_data=f"review:rate:{i}")
+    kb.button(text=localize("btn.cancel", default="❌ Cancel"), callback_data="review:cancel")
+    kb.adjust(5, 1)
+    return kb.as_markup()
+
+def review_text_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text=localize("btn.skip", default="⏭ Skip Comment"), callback_data="review:skip")
+    kb.button(text=localize("btn.cancel", default="❌ Cancel"), callback_data="review:cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+def review_preview_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text=localize("btn.submit", default="✅ Submit Review"), callback_data="review:submit")
+    kb.button(text=localize("btn.edit_text", default="📝 Edit Comment"), callback_data="review:edit")
+    kb.button(text=localize("btn.change_rating", default="⭐ Change Rating"), callback_data="review:change_rating")
+    kb.button(text=localize("btn.cancel", default="❌ Cancel"), callback_data="review:cancel")
+    kb.adjust(1)
+    return kb.as_markup()

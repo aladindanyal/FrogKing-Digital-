@@ -580,17 +580,36 @@ class Reviews(Database.BASE):
     __tablename__ = 'reviews'
     id = Column(Integer, primary_key=True)
     user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete='CASCADE'), nullable=False, index=True)
-    item_name = Column(String(100), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey('goods.id', ondelete='CASCADE'), nullable=True, index=True)
+    order_id = Column(Integer, ForeignKey('orders.id', ondelete='CASCADE'), nullable=True, index=True)
+    order_item_id = Column(Integer, ForeignKey('order_items.id', ondelete='CASCADE'), nullable=True, unique=True, index=True)
+    item_name = Column(String(100), nullable=True, index=True)
     rating = Column(Integer, nullable=False)  # 1-5
-    text = Column(Text, nullable=True)
+    comment = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default='pending', server_default='pending')
+    is_featured = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    admin_reply = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    moderated_at = Column(DateTime(timezone=True), nullable=True)
+    moderated_by = Column(BigInteger, ForeignKey('users.telegram_id', ondelete='SET NULL'), nullable=True)
+
     __table_args__ = (
-        UniqueConstraint('user_id', 'item_name', name='uq_review_per_user_item'),
         CheckConstraint('rating >= 1 AND rating <= 5', name='ck_review_rating_range'),
+        CheckConstraint("status IN ('pending', 'approved', 'hidden', 'rejected')", name='ck_review_status_enum'),
+        Index('ix_reviews_status', 'status'),
+        Index('ix_reviews_is_featured', 'is_featured'),
+        Index('ix_reviews_created_at', 'created_at'),
     )
 
+    product = relationship("Goods", lazy='raise')
+    order = relationship("Order", lazy='raise')
+    order_item = relationship("OrderItem", lazy='raise')
+    user = relationship("User", foreign_keys=[user_id], lazy='raise')
+    moderator = relationship("User", foreign_keys=[moderated_by], lazy='raise')
+
     def __str__(self):
-        return f"{self.item_name} ({self.rating}★)"
+        return f"{self.item_name or self.product_id} ({self.rating}★)"
 
 
 class ProductRestockSubscription(Database.BASE):

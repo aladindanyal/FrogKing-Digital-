@@ -18,11 +18,11 @@ async def generate_public_order_id(session: AsyncSession) -> str:
     max_retries = 10
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y%m%d")
-    
+
     for _ in range(max_retries):
         suffix = ''.join(random.choices(PUBLIC_ID_ALPHABET, k=8))
         candidate = f"FGK-{date_str}-{suffix}"
-        
+
         # Check if candidate exists. This does not lock, but a collision is extremely unlikely.
         # If it does collide upon insert/flush, the DB unique constraint will raise an error,
         # which will be caught outer transaction (which is an acceptable terminal failure for extreme edges).
@@ -51,12 +51,12 @@ async def create_order_with_item(
     Creates an Order and an OrderItem in the provided session.
     This does NOT commit the session. It only adds and flushes, ensuring
     atomic participation in the caller's outer transaction.
-    
+
     All monetary fields must be positive.
     """
-    
+
     public_id = await generate_public_order_id(session)
-    
+
     # Create the parent order
     order = Order(
         public_id=public_id,
@@ -68,10 +68,10 @@ async def create_order_with_item(
         total=total,
         promo_code_snapshot=promo_code
     )
-    
+
     session.add(order)
     await session.flush()  # Get order.id
-    
+
     # Create the single order item containing the full quantity
     order_item = OrderItem(
         order_id=order.id,
@@ -85,10 +85,10 @@ async def create_order_with_item(
         total=total,
         fulfillment_status="pending"
     )
-    
+
     session.add(order_item)
     await session.flush()  # Get order_item.id
-    
+
     return order, order_item
 
 async def get_order_by_id(session: AsyncSession, order_id: int) -> Optional[Order]:

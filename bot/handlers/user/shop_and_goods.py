@@ -14,7 +14,7 @@ from bot.database.methods import (
 )
 from bot.database.methods.read import (
     get_item_avg_rating, has_purchased_item, validate_promo_for_item,
-    get_user_review, invalidate_rating_cache, get_item_info,
+    get_user_review, get_item_info,
     get_store_settings, get_category_by_id,
 )
 from bot.database.methods.create import create_review
@@ -22,6 +22,7 @@ from bot.database.methods.lazy_queries import query_item_reviews
 from bot.database.methods.transactions import redeem_balance_promo
 from bot.database.methods.audit import log_audit
 from bot.misc.utils import safe_edit_or_send
+from bot.misc.validators import sanitize_html
 from bot.keyboards import item_info, back, lazy_paginated_keyboard
 from bot.keyboards.inline import simple_buttons, rating_keyboard
 from bot.i18n import localize
@@ -723,79 +724,240 @@ async def redeem_promo_code_handler(message: Message, state: FSMContext):
 
 # --- Review Handlers ---
 
-@router.callback_query(F.data.startswith("review:"))
+from bot.database.methods.read import get_eligible_order_item_for_review
+
+@router.callback_query(F.data.startswith("review:start:"))
 async def start_review_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
+    await call.answer()
     if EnvKeys.REVIEWS_ENABLED != "1":
-        await answer_callback_safe(call, localize("review.disabled"), show_alert=True)
+        await call.message.answer(localize("review.disabled"))
         return
 
-    item_name = call.data.split(":", 1)[1]
-
-    # Check if user purchased the item
-    purchased = await has_purchased_item(call.from_user.id, item_name)
-    if not purchased:
-        await answer_callback_safe(call, localize("review.not_purchased"), show_alert=True)
+    parts = call.data.split(":")
+    if len(parts) < 5:
+        await call.message.answer("Invalid callback data")
         return
 
-    # Check if already reviewed
-    existing = await get_user_review(call.from_user.id, item_name)
+    try:
+        order_item_id = int(parts[2])
+        origin = parts[3]
+        order_id = int(parts[4])
+    except ValueError:
+        await call.message.answer("Invalid IDs")
+        return
+
+    result = await get_eligible_order_item_for_review(call.from_user.id, order_item_id)
+    if not result:
+        await call.message.answer("Item not eligible for review.")
+        return
+
+    order_item, order, goods = result
+
+    from bot.database.methods.read import get_review_by_order_item
+    existing = await get_review_by_order_item(order_item_id)
     if existing:
-        await answer_callback_safe(call, localize("review.already_exists"), show_alert=True)
+        await call.message.answer(localize("review.already_exists"))
         return
 
-    await state.update_data(review_item_name=item_name)
+    prod_name = sanitize_html(getattr(order_item, 'product_name_snapshot', goods.name))
+
+    await state.update_data(
+        review_order_item_id=order_item_id,
+        review_order_id=order_id,
+        review_origin=origin,
+        review_product_id=goods.id,
+        review_product_name=prod_name
+    )
+
+    from bot.keyboards.inline import rating_keyboard
+    await log_audit("review_start_received", user_id=call.from_user.id, resource_type="OrderItem", resource_id=str(order_item_id))
     await safe_edit_or_send(call,
-        localize("review.prompt_rating", name=item_name),
-        reply_markup=rating_keyboard(item_name),
+        localize("review.prompt_rating", name=prod_name),
+        reply_markup=rating_keyboard(),
     )
     await state.set_state(ReviewFSM.waiting_rating)
 
-
-@router.callback_query(F.data.startswith("rating:"), ReviewFSM.waiting_rating)
+@router.callback_query(F.data.startswith("review:rate:"), ReviewFSM.waiting_rating)
+@router.callback_query(F.data.startswith("review:rate:"), ReviewFSM.waiting_confirm)
 async def receive_rating_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    rating = int(call.data.split(":")[1])
-    await state.update_data(review_rating=rating)
+    await call.answer()
+    try:
+        rating = int(call.data.split(":")[2])
+    except ValueError:
+        return
 
-    buttons = [
-        (localize("btn.skip_review_text"), "skip_review_text"),
-        (localize("btn.back"), "back_to_menu"),
-    ]
+    await state.update_data(review_rating=rating)
+    data = await state.get_data()
+
+    await log_audit("review_rating_selected", user_id=call.from_user.id, resource_type="Rating", resource_id=str(rating))
+
+    if await state.get_state() == ReviewFSM.waiting_confirm:
+        await show_review_preview(call, state)
+        return
+
+    from bot.keyboards.inline import review_text_keyboard
     await safe_edit_or_send(call,
         localize("review.prompt_text"),
-        reply_markup=simple_buttons(buttons),
+        reply_markup=review_text_keyboard(),
     )
     await state.set_state(ReviewFSM.waiting_text)
 
-
-@router.callback_query(F.data == "skip_review_text", ReviewFSM.waiting_text)
+@router.callback_query(F.data == "review:skip", ReviewFSM.waiting_text)
 async def skip_review_text_handler(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    data = await state.get_data()
-    item_name = data.get('review_item_name')
-    rating = data.get('review_rating')
-
-    await create_review(call.from_user.id, item_name, rating)
-    await invalidate_rating_cache(item_name)
-    await safe_edit_or_send(call, localize("review.created"), reply_markup=back("back_to_menu"))
-    await state.clear()
-
+    await call.answer()
+    await state.update_data(review_text="")
+    await show_review_preview(call, state)
 
 @router.message(ReviewFSM.waiting_text, F.text)
 async def receive_review_text_handler(message: Message, state: FSMContext):
-    data = await state.get_data()
-    item_name = data.get('review_item_name')
-    rating = data.get('review_rating')
     text = (message.text or "")[:500].strip()
+    await state.update_data(review_text=text)
+    await show_review_preview(message, state)
 
-    await create_review(message.from_user.id, item_name, rating, text)
-    await invalidate_rating_cache(item_name)
-    await message.answer(localize("review.created"), reply_markup=back("back_to_menu"))
+@router.callback_query(F.data == "review:edit", ReviewFSM.waiting_confirm)
+async def edit_review_text_handler(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    from bot.keyboards.inline import review_text_keyboard
+    await safe_edit_or_send(call,
+        localize("review.prompt_text"),
+        reply_markup=review_text_keyboard(),
+    )
+    await state.set_state(ReviewFSM.waiting_text)
+
+@router.callback_query(F.data == "review:change_rating", ReviewFSM.waiting_confirm)
+async def change_rating_handler(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    data = await state.get_data()
+    from bot.keyboards.inline import rating_keyboard
+    await safe_edit_or_send(call,
+        localize("review.prompt_rating", name=data.get('review_product_name')),
+        reply_markup=rating_keyboard(),
+    )
+
+async def show_review_preview(event, state: FSMContext):
+    data = await state.get_data()
+    rating = data.get('review_rating', 5)
+    text = data.get('review_text', '')
+    prod_name = data.get('review_product_name', 'Product')
+
+    stars = "⭐" * rating
+    preview = f"📋 <b>Review Preview</b>\n\n🛍 <b>Product:</b> {prod_name}\n🌟 <b>Rating:</b> {stars}"
+    if text:
+        preview += f"\n💬 <b>Comment:</b> {sanitize_html(text)}"
+
+    preview += "\n\n✅ <i>Verified Purchase</i>"
+
+    from bot.keyboards.inline import review_preview_keyboard
+
+    if isinstance(event, CallbackQuery):
+        await safe_edit_or_send(event, preview, reply_markup=review_preview_keyboard())
+    else:
+        await event.answer(preview, reply_markup=review_preview_keyboard(), parse_mode='HTML')
+
+    await state.set_state(ReviewFSM.waiting_confirm)
+
+@router.callback_query(F.data == "review:submit", ReviewFSM.waiting_confirm)
+async def submit_review_handler(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    data = await state.get_data()
+
+    order_item_id = data.get('review_order_item_id')
+    order_id = data.get('review_order_id')
+    product_id = data.get('review_product_id')
+    rating = data.get('review_rating', 5)
+    text = data.get('review_text', '')
+    origin = data.get('review_origin', 'm')
+
+    result = await get_eligible_order_item_for_review(call.from_user.id, order_item_id)
+    if not result:
+        await call.answer("Item no longer eligible.", show_alert=True)
+        return
+
+    from bot.database.methods.read import get_review_by_order_item
+    existing = await get_review_by_order_item(order_item_id)
+    if existing:
+        await call.answer("Review already exists.", show_alert=True)
+        return
+
+    await create_review(
+        user_id=call.from_user.id,
+        product_id=product_id,
+        order_id=order_id,
+        order_item_id=order_item_id,
+        item_name=data.get('review_product_name'),
+        rating=rating,
+        comment=text if text else None
+    )
+
+    await log_audit("review_submit_received", user_id=call.from_user.id, resource_type="Review", resource_id=str(order_item_id))
+
+    await review_return_to_source(call, state, origin, order_id)
     await state.clear()
 
+@router.callback_query(F.data == "review:cancel", ReviewFSM.waiting_rating)
+@router.callback_query(F.data == "review:cancel", ReviewFSM.waiting_text)
+@router.callback_query(F.data == "review:cancel", ReviewFSM.waiting_confirm)
+async def cancel_review_handler(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    data = await state.get_data()
+    origin = data.get('review_origin', 'm')
+    order_id = data.get('review_order_id')
+
+    await log_audit("review_cancelled", user_id=call.from_user.id, resource_type="ReviewFlow", resource_id=str(order_id))
+
+    await review_return_to_source(call, state, origin, order_id)
+    await state.clear()
+
+async def review_return_to_source(call: CallbackQuery, state: FSMContext, origin: str, order_id: int):
+    if not order_id:
+        await safe_edit_or_send(call, "Done.", reply_markup=back("back_to_menu"))
+        return
+
+    if origin == "p":
+        from bot.handlers.user.renderers import render_purchase_success_from_order
+        text, kb = await render_purchase_success_from_order(call.message, order_id)
+        if text and kb:
+            await safe_edit_or_send(call, text, reply_markup=kb, parse_mode='HTML')
+    else:
+        call.data = f"orders:view:{order_id}:{origin}"
+        from bot.handlers.user.orders import order_view_handler
+        await order_view_handler(call)
 
 
+
+# --- View Single Review ---
+
+@router.callback_query(F.data.startswith("review_view:"))
+async def review_view_handler(call: CallbackQuery):
+    await call.answer()
+    try:
+        order_item_id = int(call.data.split(":")[1])
+    except (IndexError, ValueError):
+        await call.message.answer("Invalid review data.")
+        return
+
+    from bot.database.methods.read import get_review_by_order_item
+    review = await get_review_by_order_item(order_item_id)
+    if not review:
+        await safe_edit_or_send(call, localize("review.list_empty"))
+        return
+
+    stars = "⭐" * review.rating + "☆" * (5 - review.rating)
+    lines = [
+        f"<b>{localize('orders.verified_purchase')}</b>",
+        f"📦 {sanitize_html(review.item_name or 'Product')}",
+        f"{stars} ({review.rating}/5)",
+    ]
+    if review.comment:
+        lines.append(f"\n💬 {sanitize_html(review.comment)}")
+    lines.append(f"\n🕐 {review.created_at.strftime('%Y-%m-%d %H:%M')}")
+    if review.status == "pending":
+        lines.append(f"⏳ {localize('orders.awaiting_approval')}")
+    if review.admin_reply:
+        lines.append(f"\n💼 <b>{localize('orders.admin_reply')}</b>:\n{sanitize_html(review.admin_reply)}")
+
+    from bot.keyboards.inline import back
+    await safe_edit_or_send(call, "\n".join(lines), reply_markup=back("back_to_menu"), parse_mode="HTML")
 
 
 # --- View Reviews ---
