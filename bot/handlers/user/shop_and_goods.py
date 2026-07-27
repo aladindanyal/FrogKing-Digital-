@@ -827,13 +827,18 @@ async def remove_promo_handler(call: CallbackQuery, state: FSMContext):
 
 # --- Balance Promo Redemption (from profile) ---
 
-@router.callback_query(F.data == "redeem_promo")
+@router.callback_query(F.data.startswith("redeem_promo"))
 async def redeem_promo_handler(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
+
+    parts = call.data.split(":")
+    source = parts[1] if len(parts) > 1 else "profile"
+
     from bot.handlers.user.main import delete_main_menu_hero_safe
     await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
-    await safe_edit_or_send(call, localize("promo.enter_redeem_code"), reply_markup=back("profile"))
+    await safe_edit_or_send(call, localize("promo.enter_redeem_code"), reply_markup=back(source))
     await state.set_state(PromoFSM.waiting_redeem_code)
+    await state.update_data(promo_source=source)
 
 
 @router.message(PromoFSM.waiting_redeem_code, F.text)
@@ -841,17 +846,20 @@ async def redeem_promo_code_handler(message: Message, state: FSMContext):
     code = (message.text or "").strip().upper()
     success, error_key, amount = await redeem_balance_promo(code, message.from_user.id)
 
+    data = await state.get_data()
+    source = data.get("promo_source", "profile")
+
     if success:
         await message.answer(
             localize("promo.balance_redeemed", code=code, amount=amount, currency=EnvKeys.PAY_CURRENCY),
-            reply_markup=back("profile"),
+            reply_markup=back(source),
         )
         await log_audit(
             "promo_redeem", user_id=message.from_user.id,
             resource_type="PromoCode", resource_id=code,
         )
     else:
-        await message.answer(localize(error_key), reply_markup=back("profile"))
+        await message.answer(localize(error_key), reply_markup=back(source))
 
     await state.clear()
 

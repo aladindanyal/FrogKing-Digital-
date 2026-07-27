@@ -90,7 +90,8 @@ class TestProfileKeyboard:
         markup = profile_keyboard()
         cbs = _all_callback_data(markup)
         assert "orders:list:0" in cbs
-        assert "operation_history" in cbs
+        assert "rules" in cbs
+        assert "support_none" in cbs
         assert "back_to_menu" in cbs
 
 
@@ -99,6 +100,7 @@ class TestWalletKeyboard:
         markup = wallet_keyboard(referral_percent=0)
         cbs = _all_callback_data(markup)
         assert "replenish_balance" in cbs
+        assert "operation_history" in cbs
 
     def test_referral_button_when_percent_nonzero(self):
         markup = wallet_keyboard(referral_percent=10)

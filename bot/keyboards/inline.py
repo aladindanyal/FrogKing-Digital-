@@ -21,14 +21,14 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
         "support": f"tg://user?id={helper}" if helper else "support_none",
         "language": "language",
         "terms": "rules",
-        "promo": "redeem_promo",
+        "promo": "redeem_promo:back_to_menu",
         "admin": "console"
     }
 
     fallback_en = {
         "shop": "🛒 Shop",
-        "wallet": "💳 Wallet",
-        "profile": "👤 Profile",
+        "wallet": "💳 Add Funds",
+        "profile": "👑 My Account",
         "support": "🆘 Support",
         "language": "🌐 Language",
         "terms": "📜 Terms",
@@ -38,8 +38,8 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
 
     fallback_ar = {
         "shop": "🛒 المتجر",
-        "wallet": "💳 المحفظة",
-        "profile": "👤 حسابي",
+        "wallet": "💳 إضافة رصيد",
+        "profile": "👑 حسابي",
         "support": "🆘 الدعم",
         "language": "🌐 اللغة",
         "terms": "📜 الشروط",
@@ -98,8 +98,7 @@ def wallet_keyboard(referral_percent: int) -> InlineKeyboardMarkup:
     """
     kb = InlineKeyboardBuilder()
     kb.button(text=localize("btn.replenish"), callback_data="replenish_balance")
-    kb.button(text=localize("btn.redeem_promo"), callback_data="redeem_promo")
-    kb.button(text=localize("btn.operation_history"), callback_data="operation_history")
+    kb.button(text=localize("wallet.history", default="📋 Wallet History"), callback_data="operation_history")
     if referral_percent != 0:
         kb.button(text=localize("btn.referral"), callback_data="referral_system")
     kb.button(text="🏠 Home", callback_data="back_to_menu")
@@ -107,13 +106,17 @@ def wallet_keyboard(referral_percent: int) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def profile_keyboard() -> InlineKeyboardMarkup:
+def profile_keyboard(helper: str | None = None) -> InlineKeyboardMarkup:
     """
     My Account keyboard.
     """
     kb = InlineKeyboardBuilder()
     kb.button(text=localize("orders.my_orders", default="📦 My Orders"), callback_data="orders:list:0")
-    kb.button(text=localize("btn.wallet_history", default="💳 Wallet History"), callback_data="operation_history")
+    kb.button(text=localize("btn.terms", default="📜 Terms"), callback_data="rules")
+    if helper:
+        kb.button(text=localize("btn.support", default="🆘 Support"), url=f"tg://user?id={helper}")
+    else:
+        kb.button(text=localize("btn.support", default="🆘 Support"), callback_data="support_none")
     kb.button(text="🏠 Home", callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()

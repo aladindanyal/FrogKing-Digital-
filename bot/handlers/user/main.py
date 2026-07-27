@@ -242,7 +242,7 @@ async def rules_callback_handler(call: CallbackQuery, state: FSMContext):
     """
     rules_data = EnvKeys.RULES
     if rules_data:
-        await safe_edit_or_send(call, rules_data, reply_markup=back("back_to_menu"))
+        await safe_edit_or_send(call, rules_data, reply_markup=back("profile"))
     else:
         await answer_callback_safe(call, localize("rules.not_set"))
     await state.clear()
@@ -264,7 +264,7 @@ async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
     overall_balance = sum(operations) if operations else 0
     items = await select_user_items(user_id)
     referral = EnvKeys.REFERRAL_PERCENT
-    markup = profile_keyboard()
+    markup = profile_keyboard(helper=EnvKeys.HELPER_ID)
     text = (
         f"{localize('profile.caption', name=tg_user.first_name, id=user_id)}\n"
         f"{localize('profile.id', id=user_id)}\n"
@@ -327,7 +327,7 @@ async def _show_operations_page(call: CallbackQuery, state: FSMContext, user_id:
     if not items:
         await call.message.edit_text(
             localize("history.title") + "\n\n" + localize("history.empty"),
-            reply_markup=back("profile"),
+            reply_markup=back("wallet"),
         )
         return
 
@@ -360,7 +360,7 @@ async def _show_operations_page(call: CallbackQuery, state: FSMContext, user_id:
         nav_buttons.append(InlineKeyboardButton(text="▶️", callback_data=f"ops-page_{page + 1}"))
     if nav_buttons:
         kb.row(*nav_buttons)
-    kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data="profile"))
+    kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data="wallet"))
 
     await safe_edit_or_send(call, "\n".join(lines), reply_markup=kb.as_markup())
 

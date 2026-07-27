@@ -4,7 +4,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "ru": {
         # === Common Buttons ===
         "btn.shop": "🛒 Shop",
-        "btn.rules": "📜 Terms",
+        "btn.terms": "📜 Условия",
         "btn.profile": "👤 Profile",
         "btn.support": "🆘 Support",
         "btn.channel": "ℹ News channel",
@@ -481,6 +481,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # === Operation History ===
         "btn.operation_history": "📋 История операций",
+        "wallet.history": "📋 История Кошелька",
         "history.title": "📋 <b>История операций</b>",
         "history.empty": "История операций пуста.",
         "history.topup": "💰 Пополнение: +{amount} {currency}",
@@ -578,7 +579,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         # === Common Buttons ===
         "btn.shop": "🛒 Shop",
-        "btn.rules": "📜 Terms",
+        "btn.terms": "📜 Terms",
         "btn.profile": "👤 Profile",
         "btn.support": "🆘 Support",
         "btn.channel": "ℹ News channel",
@@ -1073,6 +1074,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # === Operation History ===
         "btn.operation_history": "📋 Operation History",
+        "wallet.history": "📋 Wallet History",
         "history.title": "📋 <b>Operation History</b>",
         "history.empty": "Operation history is empty.",
         "history.topup": "💰 Top-up: +{amount} {currency}",
@@ -1175,6 +1177,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.view_product": "🛒 View Product",
     },
     "ar": {
+        "btn.terms": "📜 الشروط والأحكام",
+        "wallet.history": "📋 سجل المحفظة",
         "transaction_error": "تعذر إكمال طلبك، ولم يتم خصم أي مبلغ من رصيدك. حاول مرة أخرى.",
         "outbox.verify.text": (
             "🔐 مطلوب رمز التحقق\n\n"
