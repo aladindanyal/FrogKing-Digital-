@@ -351,12 +351,13 @@ class GoodsBaseForm(Form):
         super().process(formdata, obj, data, **kwargs)
 
 class GoodsAdmin(AuditModelView, model=Goods):
-    column_list = [Goods.id, Goods.name, Goods.price, Goods.category_id, Goods.fulfillment_mode]
+    column_list = [Goods.id, Goods.name, Goods.price, Goods.category_id, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
     column_searchable_list = [Goods.name]
-    column_sortable_list = [Goods.id, Goods.name, Goods.price, Goods.fulfillment_mode]
+    column_sortable_list = [Goods.id, Goods.name, Goods.price, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
     form_columns = [
         Goods.name, Goods.price, Goods.description, Goods.category,
-        Goods.fulfillment_mode, Goods.fulfillment_eta_minutes
+        Goods.fulfillment_mode, Goods.fulfillment_eta_minutes,
+        Goods.is_popular_deal, Goods.popular_deal_order
     ]
     form_base_class = GoodsBaseForm
     create_template = "admin/goods_create.html"
@@ -413,6 +414,11 @@ class GoodsAdmin(AuditModelView, model=Goods):
             model.fulfillment_eta_minutes = int(preset)
         elif not preset:
             model.fulfillment_eta_minutes = None
+
+        popular_order = getattr(model, "popular_deal_order", None)
+        if popular_order is not None and popular_order < 0:
+            from starlette.exceptions import HTTPException
+            raise HTTPException(status_code=400, detail="Popular Deal Order cannot be negative.")
 
         if getattr(super(), "on_model_change", None):
             await super().on_model_change(data, model, is_created, request)

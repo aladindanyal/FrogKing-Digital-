@@ -211,10 +211,14 @@ class Goods(Database.BASE):
     fulfillment_eta_minutes = Column(Integer, nullable=True)
     manual_instructions_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
     customer_input_intro_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
+    is_popular_deal = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    popular_deal_order = Column(Integer, nullable=True)
 
     __table_args__ = (
         CheckConstraint("fulfillment_mode IN ('instant', 'manual')", name='ck_goods_fulfillment_mode'),
         CheckConstraint('fulfillment_eta_minutes IS NULL OR fulfillment_eta_minutes > 0', name='ck_goods_fulfillment_eta_positive'),
+        CheckConstraint('popular_deal_order IS NULL OR popular_deal_order >= 0', name='ck_goods_popular_deal_order'),
+        Index('ix_goods_is_popular_deal', 'is_popular_deal'),
     )
 
     category = relationship("Categories", back_populates="items", lazy='raise')

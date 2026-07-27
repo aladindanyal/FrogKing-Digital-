@@ -72,7 +72,13 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
         cb_data = action_map.get(btn.action_key, btn.action_key)
 
         button = None
-        style = ButtonStyle.SUCCESS if btn.action_key == "shop" else None
+        if btn.action_key == "shop":
+            style = ButtonStyle.SUCCESS
+        elif btn.action_key == "popular_deals":
+            style = ButtonStyle.PRIMARY
+        else:
+            style = None
+
         if btn.action_key == "support" and helper:
             button = InlineKeyboardButton(text=label, url=cb_data, style=style)
         else:
