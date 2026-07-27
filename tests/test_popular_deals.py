@@ -165,6 +165,8 @@ async def test_sqladmin_real_integration():
             res_get = client.get(f"/admin/goods/edit/{goods_id}")
             assert res_get.status_code == 200
             text = res_get.text
+            import re
+            inputs = re.findall(r'name="([^"]+)"', text)
             # 4. Assert fields exist
             assert 'name="is_popular_deal"' in text
             assert 'name="popular_deal_order"' in text
@@ -174,10 +176,11 @@ async def test_sqladmin_real_integration():
                 "name": goods_name,
                 "price": "10.0",
                 "description": "desc",
-                "category_id": str(cat_id),
+                "category": str(cat_id),
                 "fulfillment_mode": "manual",
                 "is_popular_deal": "on",
-                "popular_deal_order": "1"
+                "popular_deal_order": "1",
+                "has_discount": "y"
             }
             res_post = client.post(f"/admin/goods/edit/{goods_id}", data=post_data, follow_redirects=True)
             # 6. Assert successful redirect/response
@@ -241,36 +244,64 @@ def test_popular_deals_localization():
     # Assert Arabic exists
     assert "العروض المميزة" in ar_title
 
-def test_main_menu_button_styles():
+def test_main_menu_button_styles_popular_deals():
     from bot.keyboards.inline import main_menu
     from bot.database.models import MainMenuButtonSettings
+    from aiogram.enums import ButtonStyle
 
     # Fake config
     config = [
-        MainMenuButtonSettings(id=1, action_key="shop", is_enabled=True, row_order=1, column_order=1),
-        MainMenuButtonSettings(id=2, action_key="popular_deals", is_enabled=True, row_order=2, column_order=1),
+        MainMenuButtonSettings(id=1, action_key="popular_deals", is_enabled=True, row_order=1, column_order=1),
     ]
 
     kb = main_menu(role=0, buttons_config=config, locale="en")
     inline_keyboard = kb.inline_keyboard
 
-    # Find buttons
-    shop_btn = None
     popular_deals_btn = None
     popular_deals_count = 0
 
     for row in inline_keyboard:
         for btn in row:
-            if btn.callback_data == "shop":
-                shop_btn = btn
-            elif btn.callback_data == "popular_deals":
+            if btn.callback_data == "popular_deals":
                 popular_deals_btn = btn
                 popular_deals_count += 1
-
-    from aiogram.enums import ButtonStyle
-    assert shop_btn is not None
-    assert getattr(shop_btn, "style", None) == ButtonStyle.SUCCESS
 
     assert popular_deals_btn is not None
     assert getattr(popular_deals_btn, "style", None) == ButtonStyle.PRIMARY
     assert popular_deals_count == 1
+
+def test_main_menu_button_styles_shop():
+    from bot.keyboards.inline import main_menu
+    from bot.database.models import MainMenuButtonSettings
+    from aiogram.enums import ButtonStyle
+
+    # Fake config
+    config = [
+        MainMenuButtonSettings(id=1, action_key="shop", is_enabled=True, row_order=1, column_order=1),
+    ]
+
+    kb = main_menu(role=0, buttons_config=config, locale="en")
+    inline_keyboard = kb.inline_keyboard
+
+    shop_btn = None
+
+    for row in inline_keyboard:
+        for btn in row:
+            if btn.callback_data == "shop":
+                shop_btn = btn
+
+    assert shop_btn is not None
+    assert getattr(shop_btn, "style", None) == ButtonStyle.SUCCESS
+
+@pytest.mark.asyncio
+async def test_popular_deal_order_constraint(category_factory, item_factory):
+    from sqlalchemy.exc import IntegrityError
+
+    await category_factory(name="DealsCat3")
+    await item_factory(name="Deal 4", category="DealsCat3")
+
+    with pytest.raises(IntegrityError):
+        async with Database().session() as db_session:
+            goods = (await db_session.execute(select(Goods).where(Goods.name == "Deal 4"))).scalar_one()
+            goods.popular_deal_order = -1
+            await db_session.commit()
