@@ -371,6 +371,124 @@ async def item_info_callback_handler(call: CallbackQuery, state: FSMContext):
 
     await _render_item_page(call, state, item_name, back_data, user_id=call.from_user.id)
 
+
+async def _render_popular_deals_page(call: CallbackQuery, state: FSMContext, page: int):
+    await answer_callback_safe(call)
+
+    from bot.database.methods.lazy_queries import query_popular_deals
+    query_func = partial(query_popular_deals, include_fulfillment_mode=True)
+    paginator = LazyPaginator(query_func, per_page=10)
+
+    page_items = await paginator.get_page(page)
+    item_ids = [item[0] for item in page_items]
+    from bot.database.methods.read import get_stock_for_items
+    stock_by_item_id = await get_stock_for_items(item_ids)
+
+    items_index = {item[0]: i for i, item in enumerate(page_items)}
+    await state.update_data(goods_page_items=list(page_items))
+
+    display_text = f"<b>🔥 {localize('shop.popular_deals', default='Popular Deals')}</b>\n\n{localize('shop.popular_deals_desc', default='Here are our hottest products right now!')}"
+
+    if not page_items and page == 0:
+        display_text = f"<b>🔥 {localize('shop.popular_deals', default='Popular Deals')}</b>\n\n{localize('shop.no_deals', default='There are no popular deals available at the moment.')}"
+
+    settings = await get_store_settings()
+
+    def _format_goods_button_text(item: tuple, stock: int) -> str:
+        item_name = item[1]
+        fulfillment_mode = item[2] if len(item) > 2 else "instant"
+        name = item_name if len(item_name) <= 40 else item_name[:37] + "..."
+        if fulfillment_mode == "manual":
+            if EnvKeys.MANUAL_CHECKOUT_ENABLED:
+                return f"{name} · ♾️ {localize('shop.goods.available')}"
+            else:
+                return f"{name} · ⛔ {localize('shop.goods.sold_out')}"
+
+        if stock == 0:
+            return f"{name} · ⛔ {localize('shop.goods.sold_out')}"
+        elif stock == -1:
+            return f"{name} · ♾️ {localize('shop.goods.available')}"
+        else:
+            return f"{name} · 📦 {stock}"
+
+    def _get_item_style(item: tuple, stock: int) -> ButtonStyle:
+        fulfillment_mode = item[2] if len(item) > 2 else "instant"
+        if fulfillment_mode == "manual":
+            return ButtonStyle.PRIMARY if EnvKeys.MANUAL_CHECKOUT_ENABLED else ButtonStyle.DANGER
+        return ButtonStyle.PRIMARY if stock != 0 else ButtonStyle.DANGER
+
+    markup = await lazy_paginated_keyboard(
+        paginator=paginator,
+        item_text=lambda item: _format_goods_button_text(item, stock_by_item_id.get(item[0], 0)),
+        item_callback=lambda item: f"pdtm:{items_index[item[0]]}:{page}",
+        page=page,
+        back_cb="back_to_menu",
+        nav_cb_prefix="pd_",
+        row_width=1,
+        item_style=lambda item: _get_item_style(item, stock_by_item_id.get(item[0], 0))
+    )
+
+    await _edit_message_safe(call, call.message, display_text, markup)
+    await state.set_state(ShopStates.viewing_goods)
+
+
+@router.callback_query(F.data == 'popular_deals')
+async def popular_deals_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
+    from bot.handlers.user.main import delete_main_menu_hero_safe
+    await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
+
+    metrics = get_metrics()
+    if metrics:
+        metrics.track_conversion("purchase_funnel", "view_popular_deals", call.from_user.id)
+    await _render_popular_deals_page(call, state, page=0)
+
+
+@router.callback_query(F.data.startswith('pd_'), ShopStates.viewing_goods)
+async def navigate_popular_deals(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
+    current_index = int(call.data[3:])
+    await _render_popular_deals_page(call, state, page=current_index)
+
+
+@router.callback_query(F.data.startswith('pdtm:'))
+async def pd_item_info_callback_handler(call: CallbackQuery, state: FSMContext):
+    await answer_callback_safe(call)
+    parts = call.data.split(':')
+    idx = int(parts[1])
+    goods_page = int(parts[2]) if len(parts) > 2 else 0
+
+    data = await state.get_data()
+    goods_page_items = data.get('goods_page_items', [])
+
+    if idx < 0 or idx >= len(goods_page_items):
+        await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
+        return
+
+    item_tuple = goods_page_items[idx]
+    if isinstance(item_tuple, (list, tuple)):
+        item_id = item_tuple[0]
+        item_name = item_tuple[1]
+    else:
+        item_name = item_tuple
+        item_id = None
+
+    back_data = f"pd_{goods_page}"
+
+    metrics = get_metrics()
+    if metrics:
+        metrics.track_conversion("purchase_funnel", "view_item", call.from_user.id)
+
+    # Save item name, back_data and reset quantity in state
+    await state.update_data(
+        csrf_item=item_name,
+        item_id=item_id,
+        item_back_data=back_data,
+        item_quantity=1
+    )
+
+    await _render_item_page(call, state, item_name, back_data, user_id=call.from_user.id)
+
 # --- Quantity Selection ---
 
 @router.callback_query(F.data.startswith("qty:quick:"))

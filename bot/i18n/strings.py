@@ -355,6 +355,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "payments.processing_error": "Ошибка при обработке платежа. Попробуйте позже.",
 
         # === Shop Browsing (Categories / Goods / Item Page) ===
+        "shop.popular_deals": "🔥 Popular Deals",
+        "shop.popular_deals_desc": "A curated selection of our best offers. Open any product to see its current price and availability.",
         "shop.categories.title": "🏪 Категории магазина",
         "shop.goods.choose": "🏪 Выберите нужный товар",
         "shop.item.not_found": "Товар не найден",
@@ -945,6 +947,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "payments.processing_error": "Payment processing error. Please try again later.",
 
         # === Shop Browsing (Categories / Goods / Item Page) ===
+        "shop.popular_deals": "🔥 Popular Deals",
+        "shop.popular_deals_desc": "A curated selection of our best offers. Open any product to see its current price and availability.",
         "shop.categories.title": "🏪 Shop categories",
         "shop.goods.choose": "🏪 Choose a product",
         "shop.item.not_found": "Item not found",
@@ -1242,6 +1246,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "orders.buy_again": "🔁 شراء مرة أخرى",
         "orders.copied": "تم نسخ رقم الطلب!",
         "orders.legacy_redirect": "سجل المشتريات القديم لم يعد متاحًا. يرجى استخدام طلباتي.",
+        "shop.popular_deals": "🔥 العروض المميزة",
+        "shop.popular_deals_desc": "مجموعة مختارة من أفضل عروضنا. افتح أي منتج لمعرفة السعر والتوفر الحالي.",
         "shop.goods.available": "متوفر",
         "shop.goods.sold_out": "نفد المخزون",
 

@@ -64,6 +64,27 @@ async def query_items_in_category(category_id: int, offset: int = 0, limit: int 
         return [(row.id, row.name) for row in result.all()]
 
 
+async def query_popular_deals(offset: int = 0, limit: int = 10, count_only: bool = False, include_fulfillment_mode: bool = False) -> Any:
+    """Query popular deals with pagination"""
+    async with Database().session() as s:
+        if include_fulfillment_mode:
+            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.is_popular_deal == True)
+        else:
+            query = select(Goods.id, Goods.name).where(Goods.is_popular_deal == True)
+
+        if count_only:
+            count_result = await s.execute(select(func.count()).select_from(query.subquery()))
+            return count_result.scalar() or 0
+
+        result = await s.execute(
+            query.order_by(Goods.popular_deal_order.asc().nulls_last(), Goods.name.asc()).offset(offset).limit(limit)
+        )
+
+        if include_fulfillment_mode:
+            return [(row.id, row.name, row.fulfillment_mode) for row in result.all()]
+        return [(row.id, row.name) for row in result.all()]
+
+
 async def query_user_bought_items(user_id: int, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:
     """Query user's bought items with pagination"""
     async with Database().session() as s:
