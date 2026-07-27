@@ -131,65 +131,90 @@ from decimal import Decimal
 
 
 @pytest.mark.asyncio
-async def test_sqladmin_real_integration(category_factory, item_factory):
+async def test_sqladmin_real_integration():
     from bot.database.main import Database
     from sqlalchemy import select
+    import uuid
+    
+    unique_name = str(uuid.uuid4())
+    cat_name = f"Cat_{unique_name}"
+    goods_name = f"Goods_{unique_name}"
+    
+    async with Database().session() as session:
+        cat = Categories(name=cat_name)
+        session.add(cat)
+        await session.commit()
+        await session.refresh(cat)
+        cat_id = cat.id
 
-    cat = await category_factory()
-    goods = await item_factory(name="Real Test", price=Decimal("10.0"), description="desc", category_id=cat.id, fulfillment_mode="manual")
-    goods_id = goods.id
+        goods = Goods(name=goods_name, price=Decimal("10.0"), description="desc", category_id=cat_id, fulfillment_mode="manual")
+        session.add(goods)
+        await session.commit()
+        await session.refresh(goods)
+        goods_id = goods.id
+    
+    try:
+        app = create_admin_app()
+        with TestClient(app) as client:
+            # 1. Authenticate
+            login_data = {"username": EnvKeys.ADMIN_USERNAME, "password": EnvKeys.ADMIN_PASSWORD}
+            res_login = client.post("/admin/login", data=login_data, follow_redirects=True)
+            assert res_login.status_code == 200
+    
+            # 2. GET edit page
+            res_get = client.get(f"/admin/goods/edit/{goods_id}")
+            assert res_get.status_code == 200
+            text = res_get.text
+            # 4. Assert fields exist
+            assert 'name="is_popular_deal"' in text
+            assert 'name="popular_deal_order"' in text
+    
+            # 5. POST valid
+            post_data = {
+                "name": goods_name,
+                "price": "10.0",
+                "description": "desc",
+                "category_id": str(cat_id),
+                "fulfillment_mode": "manual",
+                "is_popular_deal": "on",
+                "popular_deal_order": "1"
+            }
+            res_post = client.post(f"/admin/goods/edit/{goods_id}", data=post_data, follow_redirects=True)
+            # 6. Assert successful redirect/response
+            assert res_post.status_code == 200
+    
+        # 7. Re-query
+        async with Database().session() as session2:
+            goods_reloaded = (await session2.execute(select(Goods).where(Goods.id == goods_id))).scalar_one()
+            # 8. Confirm values persisted
+            assert goods_reloaded.is_popular_deal is True
+            assert goods_reloaded.popular_deal_order == 1
+    
+        # 9. POST negative
+        with TestClient(app) as client:
+            login_data = {"username": EnvKeys.ADMIN_USERNAME, "password": EnvKeys.ADMIN_PASSWORD}
+            client.post("/admin/login", data=login_data, follow_redirects=True)
+            
+            post_data["popular_deal_order"] = "-1"
+            res_post_neg = client.post(f"/admin/goods/edit/{goods_id}", data=post_data, follow_redirects=True)
+            # 10. Confirm validation failure
+            assert res_post_neg.status_code == 400
+            assert "popular_deal_order" in res_post_neg.text
+            
+        # 11. Confirm row valid and session didn't leak
+        async with Database().session() as session3:
+            goods_final = (await session3.execute(select(Goods).where(Goods.id == goods_id))).scalar_one()
+            assert goods_final.popular_deal_order == 1
 
-    app = create_admin_app()
-    with TestClient(app) as client:
-        # 1. Authenticate
-        login_data = {"username": EnvKeys.ADMIN_USERNAME, "password": EnvKeys.ADMIN_PASSWORD}
-        res_login = client.post("/admin/login", data=login_data, follow_redirects=True)
-        assert res_login.status_code == 200
-
-        # 2. GET edit page
-        res_get = client.get(f"/admin/goods/edit/{goods_id}")
-        assert res_get.status_code == 200
-        text = res_get.text
-        # 4. Assert fields exist
-        assert 'name="is_popular_deal"' in text
-        assert 'name="popular_deal_order"' in text
-
-        # 5. POST valid
-        post_data = {
-            "name": "Real Test",
-            "price": "10.0",
-            "description": "desc",
-            "category_id": str(cat.id),
-            "fulfillment_mode": "manual",
-            "is_popular_deal": "on",
-            "popular_deal_order": "1"
-        }
-        res_post = client.post(f"/admin/goods/edit/{goods_id}", data=post_data, follow_redirects=True)
-        # 6. Assert successful redirect/response
-        assert res_post.status_code == 200
-
-    # 7. Re-query
-    async with Database().session() as session2:
-        goods_reloaded = (await session2.execute(select(Goods).where(Goods.id == goods_id))).scalar_one()
-        # 8. Confirm values persisted
-        assert goods_reloaded.is_popular_deal is True
-        assert goods_reloaded.popular_deal_order == 1
-
-    # 9. POST negative
-    with TestClient(app) as client:
-        login_data = {"username": EnvKeys.ADMIN_USERNAME, "password": EnvKeys.ADMIN_PASSWORD}
-        client.post("/admin/login", data=login_data, follow_redirects=True)
-
-        post_data["popular_deal_order"] = "-1"
-        res_post_neg = client.post(f"/admin/goods/edit/{goods_id}", data=post_data, follow_redirects=True)
-        # 10. Confirm validation failure
-        assert res_post_neg.status_code == 400
-        assert "popular_deal_order" in res_post_neg.text
-
-    # 11. Confirm row valid and session didn't leak
-    async with Database().session() as session3:
-        goods_final = (await session3.execute(select(Goods).where(Goods.id == goods_id))).scalar_one()
-        assert goods_final.popular_deal_order == 1
+    finally:
+        async with Database().session() as session_cleanup:
+            goods_del = await session_cleanup.get(Goods, goods_id)
+            if goods_del:
+                await session_cleanup.delete(goods_del)
+            cat_del = await session_cleanup.get(Categories, cat_id)
+            if cat_del:
+                await session_cleanup.delete(cat_del)
+            await session_cleanup.commit()
 
 def test_popular_deals_localization():
     from bot.i18n.main import localize, current_locale
