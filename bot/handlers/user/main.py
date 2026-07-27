@@ -349,6 +349,7 @@ async def _show_operations_page(call: CallbackQuery, state: FSMContext, user_id:
 
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from aiogram.types import InlineKeyboardButton
+    from aiogram.enums import ButtonStyle
     kb = InlineKeyboardBuilder()
     nav_buttons = []
     if page > 0:

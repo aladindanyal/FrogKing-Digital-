@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from aiogram import Router, F
+from aiogram.enums import ButtonStyle
 from aiogram.types import CallbackQuery
 from bot.misc.utils import answer_callback_safe
 from aiogram.fsm.context import FSMContext
@@ -69,7 +70,7 @@ async def _show_cart(call: CallbackQuery):
     buttons = []
     for item in items:
         buttons.append((f"❌ {item['item_name']}", f"cart_remove:{item['id']}"))
-    buttons.append((localize("btn.cart_checkout"), "cart_checkout"))
+    buttons.append((localize("btn.cart_checkout"), "cart_checkout", ButtonStyle.SUCCESS))
     buttons.append((localize("btn.cart_clear"), "cart_clear"))
     buttons.append((localize("btn.back"), "profile"))
 

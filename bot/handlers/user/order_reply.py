@@ -129,6 +129,7 @@ async def on_reply_to_order(call: CallbackQuery):
         await session.commit()
 
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        from aiogram.enums import ButtonStyle
         from bot.i18n.main import localize
         from bot.logger_mesh import logger
         import logging
@@ -331,6 +332,7 @@ async def back_to_source(call: CallbackQuery):
             interaction = interaction_res.scalar_one_or_none()
 
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        from aiogram.enums import ButtonStyle
         from bot.i18n.main import get_locale
         locale = get_locale()
         is_ar = (locale == "ar")
@@ -345,7 +347,7 @@ async def back_to_source(call: CallbackQuery):
         )
         fb_kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="View Order", callback_data=f"orders:view:{order.id}:{source_kind}:{source_id}"),
+                InlineKeyboardButton(text="View Order", callback_data=f"orders:view:{order.id}:{source_kind}:{source_id}", style=ButtonStyle.PRIMARY),
                 InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
             ]
         ])
@@ -354,7 +356,7 @@ async def back_to_source(call: CallbackQuery):
             view_callback = f"orders:view:{order.id}:{source_kind}:{source_id}"
             if active_session:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     note = "\n\n✅ المحادثة فعّالة الآن. أرسل الكود مباشرة داخل المحادثة."
@@ -364,8 +366,8 @@ async def back_to_source(call: CallbackQuery):
                     text = f"🔐 Verification Required\n\nWe have started processing your Order.\nPlease send the verification code you received to continue processing your Order.\n\n⚠️ To start:\nTap “Reply to this Order” once, then send the code.\n\nAfter that, you can send any additional messages directly without pressing Reply again.{note}"
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{order.id}_{job.id}")],
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                    [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{order.id}_{job.id}", style=ButtonStyle.PRIMARY)],
+                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     text = f"🔐 مطلوب رمز التحقق\n\nبدأنا بمعالجة طلبك.\nيرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n⚠️ للبدء:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم أرسل الكود.\n\nبعد ذلك يمكنك إرسال أي رسائل إضافية مباشرة دون الضغط على زر الرد مرة أخرى."
@@ -375,7 +377,7 @@ async def back_to_source(call: CallbackQuery):
         elif source_kind == "m" and interaction:
             view_callback = f"orders:view:{order.id}:{source_kind}:{source_id}"
             kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
             ])
             text = f"💬 Message About Your Order\n\nOrder ID:\n{order.public_id}\n\n{interaction.safe_preview}"
 
@@ -383,7 +385,7 @@ async def back_to_source(call: CallbackQuery):
             view_callback = f"orders:view:{order.id}:{source_kind}:{source_id}"
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="View Order", callback_data=view_callback),
+                    InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY),
                     InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
                 ]
             ])

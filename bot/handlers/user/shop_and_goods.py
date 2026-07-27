@@ -3,7 +3,8 @@ from decimal import Decimal
 from functools import partial
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.enums import ButtonStyle
+from aiogram.types import CallbackQuery, Message, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Filter
@@ -90,7 +91,7 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     user_identifier = user_id
     if not user_identifier and hasattr(target, 'from_user'):
         user_identifier = target.from_user.id
-        
+
     has_active_sub = False
     if stock == 0 and user_identifier and item_id:
         from bot.database.methods.restock_subscriptions import is_restock_subscription_active
@@ -249,7 +250,7 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
     await state.update_data(current_category_id=category_id)
 
     from bot.database.methods.lazy_queries import query_items_in_category
-    query_func = partial(query_items_in_category, category_id)
+    query_func = partial(query_items_in_category, category_id, include_fulfillment_mode=True)
     paginator = LazyPaginator(query_func, per_page=10)
 
     page_items = await paginator.get_page(page)
@@ -274,8 +275,16 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
 
     settings = await get_store_settings()
 
-    def _format_goods_button_text(item_name: str, stock: int) -> str:
+    def _format_goods_button_text(item: tuple, stock: int) -> str:
+        item_name = item[1]
+        fulfillment_mode = item[2] if len(item) > 2 else "instant"
         name = item_name if len(item_name) <= 40 else item_name[:37] + "..."
+        if fulfillment_mode == "manual":
+            if EnvKeys.MANUAL_CHECKOUT_ENABLED:
+                return f"{name} · ♾️ {localize('shop.goods.available')}"
+            else:
+                return f"{name} · ⛔ {localize('shop.goods.sold_out')}"
+
         if stock == 0:
             return f"{name} · ⛔ {localize('shop.goods.sold_out')}"
         elif stock == -1:
@@ -283,14 +292,21 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
         else:
             return f"{name} · 📦 {stock}"
 
+    def _get_item_style(item: tuple, stock: int) -> ButtonStyle:
+        fulfillment_mode = item[2] if len(item) > 2 else "instant"
+        if fulfillment_mode == "manual":
+            return ButtonStyle.PRIMARY if EnvKeys.MANUAL_CHECKOUT_ENABLED else ButtonStyle.DANGER
+        return ButtonStyle.PRIMARY if stock != 0 else ButtonStyle.DANGER
+
     markup = await lazy_paginated_keyboard(
         paginator=paginator,
-        item_text=lambda item: _format_goods_button_text(item[1], stock_by_item_id.get(item[0], 0)),
+        item_text=lambda item: _format_goods_button_text(item, stock_by_item_id.get(item[0], 0)),
         item_callback=lambda item: f"itm:{items_index[item[0]]}:{page}",
         page=page,
         back_cb=back_cb,
         nav_cb_prefix="gp_",
-        row_width=1
+        row_width=1,
+        item_style=lambda item: _get_item_style(item, stock_by_item_id.get(item[0], 0))
     )
 
     await _edit_message_safe(call, call.message, display_text, markup)
@@ -998,6 +1014,7 @@ async def view_reviews_handler(call: CallbackQuery, state: FSMContext):
     # Navigation
     from aiogram.utils.keyboard import InlineKeyboardBuilder
     from aiogram.types import InlineKeyboardButton
+    from aiogram.enums import ButtonStyle
     kb = InlineKeyboardBuilder()
     nav_buttons = []
     if page > 0:
@@ -1037,7 +1054,7 @@ async def refresh_goods_handler(call: CallbackQuery, state: FSMContext):
     parts = call.data.split(':')
     category_id = int(parts[2])
     page = int(parts[3])
-    
+
     await _render_goods_page(call, state, category_id, page)
 
 @router.callback_query(F.data.startswith('refresh:item:'))
@@ -1045,20 +1062,20 @@ async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
     item_id_str = call.data.split(':')[2]
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    
+
     if not item_name or str(data.get('item_id')) != item_id_str:
         await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
         return
-        
+
     from bot.database.methods.read import invalidate_item_cache, select_item_values_amount, check_value
     await invalidate_item_cache(item_name)
-    
+
     quantity = await select_item_values_amount(item_name)
     has_infinite = await check_value(item_name)
     stock = -1 if has_infinite else quantity
-    
+
     current_quantity = data.get('item_quantity', 1)
-    
+
     alert_text = None
     if stock == 0:
         await state.update_data(item_quantity=1, keypad_value='0')
@@ -1067,12 +1084,12 @@ async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
     elif stock != -1 and current_quantity > stock:
         await state.update_data(item_quantity=stock, keypad_value=str(stock))
         alert_text = f"Stock changed. Selected quantity was adjusted to {stock}."
-        
+
     if alert_text:
         await answer_callback_safe(call, alert_text, show_alert=True)
     else:
         await answer_callback_safe(call)
-        
+
     await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
 
@@ -1080,17 +1097,17 @@ async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
 async def restock_subscribe_handler(call: CallbackQuery, state: FSMContext):
     item_id_str = call.data.split(':')[2]
     item_id = int(item_id_str)
-    
+
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    
+
     if not item_name or str(data.get('item_id')) != item_id_str:
         await answer_callback_safe(call, localize("shop.item.not_found"), show_alert=True)
         return
 
     from bot.database.methods.restock_subscriptions import subscribe_to_restock
     result = await subscribe_to_restock(call.from_user.id, item_id)
-    
+
     if result == "available_now":
         await answer_callback_safe(call, localize("shop.restock.available_now", default="This product is available now."), show_alert=True)
     elif result in ("subscribed", "already_active"):
@@ -1101,7 +1118,7 @@ async def restock_subscribe_handler(call: CallbackQuery, state: FSMContext):
         await answer_callback_safe(call, localize("shop.restock.available_now", default="This product is available now."), show_alert=True)
     else:
         await answer_callback_safe(call, localize("shop.restock.error", default="Unable to update the alert right now."), show_alert=True)
-        
+
     await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
 
@@ -1109,15 +1126,15 @@ async def restock_subscribe_handler(call: CallbackQuery, state: FSMContext):
 async def restock_cancel_handler(call: CallbackQuery, state: FSMContext):
     item_id_str = call.data.split(':')[2]
     item_id = int(item_id_str)
-    
+
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    
+
     from bot.database.methods.restock_subscriptions import cancel_restock_subscription
     await cancel_restock_subscription(call.from_user.id, item_id)
-    
+
     await answer_callback_safe(call, localize("shop.restock.cancelled", default="Restock alert cancelled."), show_alert=True)
-    
+
     if item_name and str(data.get('item_id')) == item_id_str:
         await _render_item_page(call, state, item_name, user_id=call.from_user.id)
 
@@ -1129,11 +1146,11 @@ async def buy_again_handler(call: CallbackQuery, state: FSMContext):
     item_id_str = call.data.split(':')[1]
     data = await state.get_data()
     item_name = data.get('csrf_item')
-    
+
     if not item_name or str(data.get('item_id')) != item_id_str:
         await safe_edit_or_send(call, localize("shop.item.not_found"), reply_markup=back("back_to_menu"))
         return
-        
+
     await answer_callback_safe(call)
     await state.update_data(item_quantity=1, keypad_value='0')
     await _render_item_page(call, state, item_name, user_id=call.from_user.id)
@@ -1212,7 +1229,7 @@ async def _render_item_page_by_id(event, state: FSMContext, item_id: int, *, bac
         else:
             await event.answer(localize("shop.item.not_found"), reply_markup=back(back_data))
         return
-        
+
     await state.update_data(item_quantity=1, keypad_value='0', item_id=item_id, csrf_item=item['name'], item_back_data=back_data)
     await _render_item_page(event, state, item['name'], back_data=back_data, user_id=user_id, send_new=send_new)
 

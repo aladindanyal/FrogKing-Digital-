@@ -98,6 +98,7 @@ class OutboxDispatcher:
         notif_type = parts[0]
 
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        from aiogram.enums import ButtonStyle
         from bot.database.models.main import ManualOrderInteraction, ManualOrderConversationSession
         from sqlalchemy import select
 
@@ -133,7 +134,7 @@ class OutboxDispatcher:
 
             from bot.i18n.main import localize
             buttons = [
-                [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
             ]
 
             # The 'comp' type is canonical for completed manual fulfillment.
@@ -153,7 +154,7 @@ class OutboxDispatcher:
 
             if is_active:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     note = "\n\n✅ المحادثة فعّالة الآن. أرسل الكود مباشرة داخل المحادثة."
@@ -164,7 +165,7 @@ class OutboxDispatcher:
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{notif.order_id}_{notif.fulfillment_job_id}")],
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     message_text = f"🔐 مطلوب رمز التحقق\n\nبدأنا بمعالجة طلبك.\nيرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n⚠️ للبدء:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم أرسل الكود.\n\nبعد ذلك يمكنك إرسال أي رسائل إضافية مباشرة دون الضغط على زر الرد مرة أخرى."
@@ -177,7 +178,7 @@ class OutboxDispatcher:
 
             if is_active:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     message_text = f"💬 رسالة حول طلبك\n\nرقم الطلب:\n{public_id}\n\n{interaction.safe_preview}\n\n✅ المحادثة فعّالة الآن. يمكنك الرد مباشرة."
@@ -186,7 +187,7 @@ class OutboxDispatcher:
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{notif.order_id}_{notif.fulfillment_job_id}")],
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback)]
+                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     message_text = f"💬 رسالة حول طلبك\n\nرقم الطلب:\n{public_id}\n\n{interaction.safe_preview}\n\n⚠️ للرد:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم اكتب رسالتك."
