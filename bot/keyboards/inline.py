@@ -5,6 +5,7 @@ from bot.i18n import localize
 from bot.database.models import Permission
 from bot.misc import LazyPaginator # noqa: F401
 from bot.misc.utils import get_quick_quantities
+from aiogram.enums import ButtonStyle
 
 
 def main_menu(role: int, buttons_config: list, locale: str, helper: str | None = None) -> InlineKeyboardMarkup:
@@ -71,10 +72,11 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
         cb_data = action_map.get(btn.action_key, btn.action_key)
 
         button = None
+        style = ButtonStyle.SUCCESS if btn.action_key == "shop" else None
         if btn.action_key == "support" and helper:
-            button = InlineKeyboardButton(text=label, url=cb_data)
+            button = InlineKeyboardButton(text=label, url=cb_data, style=style)
         else:
-            button = InlineKeyboardButton(text=label, callback_data=cb_data)
+            button = InlineKeyboardButton(text=label, callback_data=cb_data, style=style)
 
         rows.setdefault(btn.row_order, []).append(button)
 
@@ -136,13 +138,16 @@ def admin_console_keyboard(maintenance_mode: bool = False, role: int = 127) -> I
     return kb.as_markup()
 
 
-def simple_buttons(buttons: Iterable[Tuple[str, str]], per_row: int = 1) -> InlineKeyboardMarkup:
+def simple_buttons(buttons: Iterable[tuple], per_row: int = 1) -> InlineKeyboardMarkup:
     """
-    Universal button assembly from (text, callback_data)
+    Universal button assembly from (text, callback_data) or (text, callback_data, style)
     """
     kb = InlineKeyboardBuilder()
-    for text, cb in buttons:
-        kb.button(text=text, callback_data=cb)
+    for item in buttons:
+        if len(item) == 3:
+            kb.button(text=item[0], callback_data=item[1], style=item[2])
+        else:
+            kb.button(text=item[0], callback_data=item[1])
     kb.adjust(per_row)
     return kb.as_markup()
 
@@ -176,6 +181,7 @@ async def lazy_paginated_keyboard(
         back_text: str | None = None,
         row_width: int = 1,
         refresh_cb: str | None = None,
+        item_style: Callable[[object], ButtonStyle | None] = None,
 ) -> InlineKeyboardMarkup:
     """
     Lazy pagination keyboard with data loading on demand
@@ -186,7 +192,8 @@ async def lazy_paginated_keyboard(
     items = await paginator.get_page(page)
 
     for item in items:
-        kb.button(text=item_text(item), callback_data=item_callback(item))
+        style = item_style(item) if item_style else None
+        kb.button(text=item_text(item), callback_data=item_callback(item), style=style)
     kb.adjust(row_width)
 
     # Navigation
@@ -251,7 +258,7 @@ def item_info(
 
         # Custom Amount & Continue
         kb.row(InlineKeyboardButton(text="✏️ Custom Quantity", callback_data=f"qty:keypad:{item_id}"))
-        kb.row(InlineKeyboardButton(text="🛒 Continue", callback_data=f"checkout:{item_id}"))
+        kb.row(InlineKeyboardButton(text="🛒 Continue", callback_data=f"checkout:{item_id}", style=ButtonStyle.SUCCESS))
         kb.row(InlineKeyboardButton(text="🔄 Refresh Stock", callback_data=f"refresh:item:{item_id}"))
 
     kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data=back_data),
@@ -285,7 +292,7 @@ def numeric_keypad(item_id: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="0", callback_data=f"qty:digit:{item_id}:0"),
         InlineKeyboardButton(text="↺ Clear", callback_data=f"qty:clear:{item_id}")
     )
-    kb.row(InlineKeyboardButton(text="✅ Continue", callback_data=f"qty:keypad_continue:{item_id}"))
+    kb.row(InlineKeyboardButton(text="✅ Continue", callback_data=f"qty:keypad_continue:{item_id}", style=ButtonStyle.SUCCESS))
     kb.row(
         InlineKeyboardButton(text="⬅️ Back", callback_data=f"qty:keypad_back:{item_id}"),
         InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
@@ -300,7 +307,7 @@ def checkout_confirmation_keyboard(item_id: int, can_purchase: bool, applied_pro
     kb = InlineKeyboardBuilder()
 
     if can_purchase:
-        kb.row(InlineKeyboardButton(text="✅ Confirm Purchase", callback_data=f"confirm_purchase:{item_id}"))
+        kb.row(InlineKeyboardButton(text="✅ Confirm Purchase", callback_data=f"confirm_purchase:{item_id}", style=ButtonStyle.SUCCESS))
     else:
         kb.row(InlineKeyboardButton(text=localize("btn.replenish"), callback_data="replenish_balance"))
 
@@ -324,7 +331,7 @@ def payment_menu(pay_url: str) -> InlineKeyboardMarkup:
     Buttons under the invoice (CryptoPay, etc.).
     """
     kb = InlineKeyboardBuilder()
-    kb.button(text=localize("btn.pay"), url=pay_url)
+    kb.button(text=localize("btn.pay"), url=pay_url, style=ButtonStyle.SUCCESS)
     kb.button(text=localize("btn.check_payment"), callback_data="check")
     kb.button(text=localize("btn.back"), callback_data="profile")
     kb.adjust(1)
@@ -412,7 +419,7 @@ def review_text_keyboard() -> InlineKeyboardMarkup:
 
 def review_preview_keyboard() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text=localize("btn.submit", default="✅ Submit Review"), callback_data="review:submit")
+    kb.button(text=localize("btn.submit", default="✅ Submit Review"), callback_data="review:submit", style=ButtonStyle.SUCCESS)
     kb.button(text=localize("btn.edit_text", default="📝 Edit Comment"), callback_data="review:edit")
     kb.button(text=localize("btn.change_rating", default="⭐ Change Rating"), callback_data="review:change_rating")
     kb.button(text=localize("btn.cancel", default="❌ Cancel"), callback_data="review:cancel")

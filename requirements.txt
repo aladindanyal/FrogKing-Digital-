@@ -1,6 +1,6 @@
 # Core
 python-dotenv~=1.0.1
-aiogram~=3.22.0
+aiogram==3.30.0
 SQLAlchemy~=2.0.43
 alembic~=1.16.4
 aiohttp~=3.12.14

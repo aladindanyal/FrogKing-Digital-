@@ -17,10 +17,10 @@ async def query_categories(parent_id: int | None = None, offset: int = 0, limit:
             query = query.where(Categories.parent_id.is_(None))
         else:
             query = query.where(Categories.parent_id == parent_id)
-            
+
         if count_only:
             return (await s.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
-            
+
         result = await s.execute(
             query.order_by(Categories.name.asc())
             .offset(offset)
@@ -43,16 +43,24 @@ async def get_category_parent_id(category_id: int) -> int | None:
         return result.scalar()
 
 
-async def query_items_in_category(category_id: int, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:
-    """Query items in category with pagination, returning (id, name) tuples"""
+async def query_items_in_category(category_id: int, offset: int = 0, limit: int = 10, count_only: bool = False, include_fulfillment_mode: bool = False) -> Any:
+    """Query items in category with pagination, returning (id, name) or (id, name, fulfillment_mode) tuples"""
     async with Database().session() as s:
-        query = select(Goods.id, Goods.name).where(Goods.category_id == category_id)
+        if include_fulfillment_mode:
+            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.category_id == category_id)
+        else:
+            query = select(Goods.id, Goods.name).where(Goods.category_id == category_id)
+
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))
             return count_result.scalar() or 0
+
         result = await s.execute(
             query.order_by(Goods.name.asc()).offset(offset).limit(limit)
         )
+
+        if include_fulfillment_mode:
+            return [(row.id, row.name, row.fulfillment_mode) for row in result.all()]
         return [(row.id, row.name) for row in result.all()]
 
 

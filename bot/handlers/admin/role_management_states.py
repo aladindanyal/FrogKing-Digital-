@@ -1,6 +1,7 @@
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.enums import ButtonStyle
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
@@ -45,7 +46,7 @@ def _build_perms_keyboard(current_perms: int, caller_perms: int) -> InlineKeyboa
         checked = "✓" if (current_perms & bit) else "  "
         kb.button(text=f"[{checked}] {label}", callback_data=f"rp_t_{bit}")
     kb.adjust(2)
-    kb.row(InlineKeyboardButton(text=localize('admin.roles.confirm'), callback_data='rp_done'))
+    kb.row(InlineKeyboardButton(text=localize('admin.roles.confirm'), callback_data='rp_done', style=ButtonStyle.SUCCESS))
     kb.row(InlineKeyboardButton(text=localize('btn.back'), callback_data='role_mgmt'))
     return kb.as_markup()
 

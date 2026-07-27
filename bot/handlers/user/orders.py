@@ -396,6 +396,7 @@ async def render_order_receipt(session: AsyncSession, order_id: int) -> tuple[st
     from bot.misc.validators import sanitize_html
     from bot.misc.env import EnvKeys
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from aiogram.enums import ButtonStyle
 
     order = (await session.execute(
         select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
@@ -425,6 +426,7 @@ async def render_order_receipt(session: AsyncSession, order_id: int) -> tuple[st
     )
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from aiogram.enums import ButtonStyle
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=localize("intake.btn.view_order", default="View Order"), callback_data=f"orders:view:{order.id}:r")],
         [InlineKeyboardButton(text=localize("btn.to_menu", default="🏠 Home"), callback_data="back_to_menu")]
@@ -459,6 +461,7 @@ async def order_active_warning_handler(call: CallbackQuery):
             f"{localize('intake.active_order.body', order_id=order.public_id, default=default_msg)}"
         )
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        from aiogram.enums import ButtonStyle
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=localize("intake.btn.view_order", default="View Existing Order"), callback_data=f"orders:view:{order.id}:a")],
             [InlineKeyboardButton(text=localize("intake.btn.buy_another", default="Buy Another"), callback_data="intake_buy_another")],

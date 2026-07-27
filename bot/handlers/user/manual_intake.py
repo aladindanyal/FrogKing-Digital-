@@ -3,6 +3,7 @@ from typing import Optional
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.enums import ButtonStyle
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -28,13 +29,13 @@ class ManualIntakeStates(StatesGroup):
 
 def get_intake_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=localize("intake.btn.cancel_draft", default="❌ Cancel"), callback_data="intake_cancel")]
+        [InlineKeyboardButton(text=localize("intake.btn.cancel_draft", default="❌ Cancel"), callback_data="intake_cancel", style=ButtonStyle.DANGER)]
     ])
 
 def get_intake_skip_cancel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=localize("intake.btn.skip", default="⏭ Skip"), callback_data="intake_skip")],
-        [InlineKeyboardButton(text=localize("intake.btn.cancel_draft", default="❌ Cancel"), callback_data="intake_cancel")]
+        [InlineKeyboardButton(text=localize("intake.btn.cancel_draft", default="❌ Cancel"), callback_data="intake_cancel", style=ButtonStyle.DANGER)]
     ])
 
 def get_intake_select_keyboard(options: list, language: str) -> InlineKeyboardMarkup:
@@ -42,7 +43,7 @@ def get_intake_select_keyboard(options: list, language: str) -> InlineKeyboardMa
     for opt in options:
         label = get_localized_label(opt.get("label_i18n", {}), language) or opt.get("key", "Unknown")
         buttons.append([InlineKeyboardButton(text=label, callback_data=f"intake_sel:{opt['key']}")])
-    buttons.append([InlineKeyboardButton(text=localize("intake.btn.cancel_draft", default="❌ Cancel"), callback_data="intake_cancel")])
+    buttons.append([InlineKeyboardButton(text=localize("intake.btn.cancel_draft", default="❌ Cancel"), callback_data="intake_cancel", style=ButtonStyle.DANGER)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 async def _render_step(message, state: FSMContext, draft, active_fields, quantity: int, language: str, is_new: bool = False, item_name: str = "", intro_text: str = ""):
@@ -123,8 +124,8 @@ async def _render_review(message, state: FSMContext, draft, steps, language: str
         text += localize('intake.review.item', label=label, value=val) + "\n"
         
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=localize("intake.btn.confirm_pay"), callback_data="intake_confirm")],
-        [InlineKeyboardButton(text=localize("intake.btn.cancel_draft"), callback_data="intake_cancel")]
+        [InlineKeyboardButton(text=localize("intake.btn.confirm_pay"), callback_data="intake_confirm", style=ButtonStyle.SUCCESS)],
+        [InlineKeyboardButton(text=localize("intake.btn.cancel_draft"), callback_data="intake_cancel", style=ButtonStyle.DANGER)]
     ])
     
     await message.answer(text, reply_markup=kb, parse_mode="HTML")
@@ -206,7 +207,7 @@ async def start_manual_intake(event: CallbackQuery | Message, state: FSMContext,
         # Resume or Start Over
         msg = f"<b>{localize('intake.resume_title')}</b>\n\n{localize('intake.resume_body', product_name=item_name)}"
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=localize("intake.btn.resume"), callback_data="intake_start")],
+            [InlineKeyboardButton(text=localize("intake.btn.resume"), callback_data="intake_start", style=ButtonStyle.PRIMARY)],
             [InlineKeyboardButton(text=localize("intake.btn.start_over"), callback_data="intake_start_over")]
         ])
         await safe_edit_or_send(event, msg, reply_markup=kb)
@@ -485,6 +486,6 @@ async def handle_intake_confirm(call: CallbackQuery, state: FSMContext):
         # Re-allow resume if it failed due to balance/stock but draft is still fine. Or show start over?
         # Actually buy_item_transaction rollbacks, so draft remains pending.
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=localize("intake.btn.resume", default="Resume Order"), callback_data="intake_start")]
+            [InlineKeyboardButton(text=localize("intake.btn.resume", default="Resume Order"), callback_data="intake_start", style=ButtonStyle.PRIMARY)]
         ])
         await safe_edit_or_send(call, localize(error_key, default=f"Error: {error_key}"), reply_markup=kb)

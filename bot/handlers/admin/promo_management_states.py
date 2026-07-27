@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton
+from aiogram.enums import ButtonStyle
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -52,7 +53,7 @@ async def promo_management_handler(call: CallbackQuery, state: FSMContext):
     # Rebuild: add Create, then Back (back always last)
     kb = InlineKeyboardBuilder()
     kb.attach(InlineKeyboardBuilder.from_markup(markup))
-    kb.row(InlineKeyboardButton(text=localize("admin.promo.create"), callback_data="promo_create"))
+    kb.row(InlineKeyboardButton(text=localize("admin.promo.create"), callback_data="promo_create", style=ButtonStyle.SUCCESS))
     kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data="console"))
     markup = kb.as_markup()
 
@@ -77,7 +78,7 @@ async def navigate_promos(call: CallbackQuery, state: FSMContext):
 
     kb = InlineKeyboardBuilder()
     kb.attach(InlineKeyboardBuilder.from_markup(markup))
-    kb.row(InlineKeyboardButton(text=localize("admin.promo.create"), callback_data="promo_create"))
+    kb.row(InlineKeyboardButton(text=localize("admin.promo.create"), callback_data="promo_create", style=ButtonStyle.SUCCESS))
     kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data="console"))
     markup = kb.as_markup()
 
