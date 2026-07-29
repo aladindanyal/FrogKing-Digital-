@@ -36,6 +36,33 @@ from bot.states.promo_state import PromoFSM
 router = Router()
 
 
+# --- Product Image Registry ---
+
+from bot.logger_mesh import logger
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+
+product_image_registry: dict[tuple[int, int], int] = {}
+
+async def store_product_image_message(chat_id: int, user_id: int, message_id: int) -> None:
+    logger.info(f"Storing product image message_id {message_id} for user {user_id} in chat {chat_id}")
+    product_image_registry[(chat_id, user_id)] = message_id
+
+async def delete_product_image_safe(bot, chat_id: int, user_id: int) -> None:
+    image_message_id = product_image_registry.get((chat_id, user_id))
+    if not image_message_id:
+        return
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=image_message_id)
+        logger.info(f"Successfully deleted product image message_id {image_message_id}")
+    except TelegramBadRequest as e:
+        logger.warning(f"TelegramBadRequest deleting product image message_id {image_message_id}: {e}")
+    except TelegramForbiddenError as e:
+        logger.warning(f"TelegramForbiddenError deleting product image message_id {image_message_id}: {e}")
+    finally:
+        product_image_registry.pop((chat_id, user_id), None)
+
+
 # --- Shared helper: render item page ---
 
 async def _render_item_page(target, state: FSMContext, item_name: str, back_data: str = None, user_id: int = None, send_new: bool = False):
@@ -118,14 +145,68 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
 
     text = "\n".join(text_lines)
 
+    async def _send_photo():
+        image_path = item_info_data.get('image_path')
+        import logging
+        from bot.misc.utils import resolve_product_image_path
+
+        full_path = resolve_product_image_path(image_path)
+        logging.info(f"Image display requested for Goods ID {item_id}. Reference exists: {bool(image_path)}. Resolution succeeded: {bool(full_path)}.")
+
+        if not full_path:
+            return
+
+        from aiogram.types import FSInputFile
+
+        bot = getattr(target, "bot", None)
+        if hasattr(target, "message"):
+            chat_id = target.message.chat.id
+            user_id = target.from_user.id
+            send_method = target.message.answer_photo
+        else:
+            chat_id = target.chat.id
+            user_id = target.from_user.id
+            send_method = target.answer_photo
+
+        if not bot:
+            return
+
+        await delete_product_image_safe(bot, chat_id, user_id)
+        photo_msg = await send_method(FSInputFile(full_path))
+        await store_product_image_message(chat_id, user_id, photo_msg.message_id)
+
     try:
         if send_new:
+            await _send_photo()
             if hasattr(target, 'message'):
                 await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
             else:
                 await target.answer(text, reply_markup=markup, parse_mode="HTML")
         elif hasattr(target, 'message') and hasattr(target.message, 'edit_text'):
-            await safe_edit_or_send(target, text, reply_markup=markup)
+            # Check if we transitioned into this item page
+            state_data = await state.get_data()
+            if state_data.get('image_sent_for') != item_name:
+                has_image = False
+                image_path = item_info_data.get('image_path')
+                if image_path:
+                    from bot.misc.utils import resolve_product_image_path
+                    full_path = resolve_product_image_path(image_path)
+                    if full_path:
+                        has_image = True
+
+                if has_image:
+                    try:
+                        await target.message.delete()
+                    except Exception:
+                        pass
+                    await _send_photo()
+                    await state.update_data(image_sent_for=item_name)
+                    await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
+                else:
+                    await state.update_data(image_sent_for=item_name)
+                    await safe_edit_or_send(target, text, reply_markup=markup)
+            else:
+                await safe_edit_or_send(target, text, reply_markup=markup)
         else:
             await target.answer(text, reply_markup=markup)
     except TelegramBadRequest as e:
@@ -173,6 +254,8 @@ async def _edit_message_safe(call: CallbackQuery, message, text: str, reply_mark
 
 async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_id: int | None, page: int):
     await answer_callback_safe(call)
+    await state.update_data(image_sent_for=None)
+    await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
     paginator = LazyPaginator(partial(query_categories, parent_id), per_page=10)
     page_items = await paginator.get_page(page)
 
@@ -247,6 +330,8 @@ async def category_selected_handler(call: CallbackQuery, state: FSMContext):
 
 async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id: int, page: int):
     await answer_callback_safe(call)
+    await state.update_data(image_sent_for=None)
+    await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
     await state.update_data(current_category_id=category_id)
 
     from bot.database.methods.lazy_queries import query_items_in_category
@@ -374,6 +459,8 @@ async def item_info_callback_handler(call: CallbackQuery, state: FSMContext):
 
 async def _render_popular_deals_page(call: CallbackQuery, state: FSMContext, page: int):
     await answer_callback_safe(call)
+    await state.update_data(image_sent_for=None)
+    await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
 
     from bot.database.methods.lazy_queries import query_popular_deals
     query_func = partial(query_popular_deals, include_fulfillment_mode=True)

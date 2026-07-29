@@ -65,6 +65,9 @@ class EnvKeys(ABC):
     DEBUG: Final = _get_optional("DEBUG", "0")
     REVIEWS_ENABLED: Final = _get_optional("REVIEWS_ENABLED", "1")
 
+    # Images
+    PRODUCT_IMAGES_ROOT: Final = _get_optional("PRODUCT_IMAGES_ROOT", "/app/data/product_images")
+
     # Manual Fulfillment (Phase 4C-3B)
     MANUAL_CHECKOUT_ENABLED: Final = _get_optional("MANUAL_CHECKOUT_ENABLED", "0") in ("1", "true", "True")
     CHECKOUT_INTAKE_DRAFT_TTL_HOURS: Final = int(_get_optional("CHECKOUT_INTAKE_DRAFT_TTL_HOURS", "24"))

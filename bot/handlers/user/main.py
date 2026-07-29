@@ -1,3 +1,4 @@
+from typing import Union
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile
 from bot.misc.utils import answer_callback_safe
@@ -35,7 +36,7 @@ async def delete_main_menu_hero_safe(bot, chat_id: int, user_id: int) -> None:
     if not hero_message_id:
         logger.info(f"No tracked hero message for user {user_id} in chat {chat_id} to delete.")
         return
-        
+
     logger.info(f"Attempting to delete tracked hero message_id {hero_message_id} for user {user_id} in chat {chat_id}.")
     try:
         await bot.delete_message(chat_id=chat_id, message_id=hero_message_id)
@@ -53,7 +54,7 @@ def build_main_menu_text(settings) -> str:
     title = settings.main_menu_title if settings and settings.main_menu_title else localize("menu.title")
     desc = settings.main_menu_description if settings and settings.main_menu_description else ""
     footer = settings.main_menu_footer if settings and settings.main_menu_footer else ""
-    
+
     text = f"<blockquote><b>{html.escape(title)}</b></blockquote>"
     if desc:
         text += f"\n\n{html.escape(desc)}"
@@ -71,13 +72,16 @@ async def send_fresh_main_menu(
 ) -> None:
     settings = await get_store_settings()
     text = build_main_menu_text(settings)
-    
+
     from bot.database.methods.read import get_main_menu_buttons
     from bot.i18n.main import current_locale
-    
+    from bot.handlers.user.shop_and_goods import delete_product_image_safe
+
+    await delete_product_image_safe(call.bot, user_id, user_id)
+
     buttons = await get_main_menu_buttons()
     markup = main_menu(role=role_data, buttons_config=buttons, locale=current_locale.get(), helper=EnvKeys.HELPER_ID)
-    
+
     msg = call.message
     if delete_source_if_safe and msg:
         can_delete = True
@@ -87,7 +91,7 @@ async def send_fresh_main_menu(
             can_delete = False
         elif msg.text and ("Receipt" in msg.text or "Order Reference" in msg.text):
             can_delete = False
-            
+
         if can_delete:
             try:
                 await msg.delete()
@@ -106,15 +110,15 @@ async def send_fresh_main_menu(
 async def render_main_menu(message: Message, role_data: int, channel_username: str, user_id: int, *, include_image: bool = False):
     settings = await get_store_settings()
     text = build_main_menu_text(settings)
-    
+
     from bot.database.methods.read import get_main_menu_buttons
     from bot.i18n.main import current_locale
     import os
-    
+
     buttons = await get_main_menu_buttons()
     markup = main_menu(role=role_data, buttons_config=buttons, locale=current_locale.get(), helper=EnvKeys.HELPER_ID)
     image_path = settings.main_menu_image_path if settings else None
-    
+
     if image_path and not os.path.exists(image_path):
         logger.warning(f"Main menu image path exists but file is missing: {image_path}")
         image_path = None
@@ -371,12 +375,12 @@ async def wallet_command_handler(message: Message, state: FSMContext):
     """Command /wallet"""
     user_id = message.from_user.id
     user_info = await check_user_cached(user_id)
-    
+
     balance = user_info.get('balance') if user_info else 0
     operations = await select_user_operations(user_id)
     overall_balance = sum(operations) if operations else 0
     referral = EnvKeys.REFERRAL_PERCENT
-    
+
     from bot.keyboards.inline import wallet_keyboard
     markup = wallet_keyboard(referral)
     text = (
@@ -397,12 +401,12 @@ async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
     await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     user_id = call.from_user.id
     user_info = await check_user_cached(user_id)
-    
+
     balance = user_info.get('balance') if user_info else 0
     operations = await select_user_operations(user_id)
     overall_balance = sum(operations) if operations else 0
     referral = EnvKeys.REFERRAL_PERCENT
-    
+
     markup = wallet_keyboard(referral)
     text = (
         f"💳 <b>{localize('btn.wallet', default='Wallet')}</b>\n\n"
@@ -410,7 +414,7 @@ async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
         f"{localize('profile.balance', amount=balance, currency=EnvKeys.PAY_CURRENCY)}\n"
         f"{localize('profile.total_topup', amount=overall_balance, currency=EnvKeys.PAY_CURRENCY)}"
     )
-    
+
     await safe_edit_or_send(call, text, reply_markup=markup, parse_mode='HTML')
     await state.clear()
 
@@ -442,7 +446,7 @@ async def language_callback(call: CallbackQuery, state: FSMContext):
         ("🇻🇳 Tiếng Việt", "set_lang_vi"),
         ("🏠 Home", "back_to_menu")
     ], per_row=2)
-    
+
     text = localize("language.choose", default="🌐 Choose your language")
     await safe_edit_or_send(call, text, reply_markup=markup, parse_mode='HTML')
 
@@ -452,10 +456,10 @@ async def set_lang_callback(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
     lang = call.data.split("_")[2]
     await state.update_data(lang=lang)
-    
+
     from bot.i18n.main import current_locale
     current_locale.set(lang)
-    
+
     lang_names = {
         "en": "English",
         "ar": "العربية",
@@ -471,13 +475,13 @@ async def set_lang_callback(call: CallbackQuery, state: FSMContext):
         "vi": "Tiếng Việt"
     }
     lang_name = lang_names.get(lang, lang.upper())
-    
+
     await answer_callback_safe(call, f"Language updated: {lang_name}")
-    
+
     user_id = call.from_user.id
     user = await check_user_cached(user_id)
     role_id = user.get('role_id') if user else 1
     channel_username = _parse_channel_username()
-    
+
     await send_fresh_main_menu(call, role_id, channel_username, user_id)
     await state.set_state(None)

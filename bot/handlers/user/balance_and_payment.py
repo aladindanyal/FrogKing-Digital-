@@ -420,6 +420,8 @@ async def legacy_buy_handler(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("confirm_purchase:"))
 async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
+    from bot.handlers.user.shop_and_goods import delete_product_image_safe
+    await delete_product_image_safe(call.bot, call.from_user.id, call.from_user.id)
     await answer_callback_safe(call)
     """Processing the purchase of goods with full transactional security."""
     try:

@@ -315,10 +315,12 @@ class MainMenuButtonSettingsAdmin(AuditModelView, model=MainMenuButtonSettings):
     icon = "fa-solid fa-bars"
 
 
-from wtforms import Form, StringField, TextAreaField, SelectField, HiddenField
+from wtforms import Form, StringField, TextAreaField, SelectField, HiddenField, FileField, BooleanField
 import json
 
 class GoodsBaseForm(Form):
+    image_upload = FileField("Product Image (Upload new)", render_kw={"class": "form-control", "accept": "image/*"})
+    remove_image = BooleanField("Remove existing image", render_kw={"class": "form-check-input"})
     manual_instr_en = TextAreaField("Manual Instructions - English", render_kw={"class": "form-control"})
     manual_instr_ar = TextAreaField("Manual Instructions - Arabic", render_kw={"class": "form-control"})
     input_intro_en = TextAreaField("Customer Input Intro - English", render_kw={"class": "form-control"})
@@ -376,10 +378,131 @@ class GoodsAdmin(AuditModelView, model=Goods):
         }
     }
 
+    async def insert_model(self, request, data: dict):
+        temp_data = getattr(request.state, "temp_form_data", {})
+        temp_data.update({
+            "manual_instr_en": data.get("manual_instr_en"),
+            "manual_instr_ar": data.get("manual_instr_ar"),
+            "input_intro_en": data.get("input_intro_en"),
+            "input_intro_ar": data.get("input_intro_ar"),
+            "eta_preset": data.get("eta_preset"),
+        })
+        request.state.temp_form_data = temp_data
+        model_data = dict(data)
+        model_data.pop("manual_instr_en", None)
+        model_data.pop("manual_instr_ar", None)
+        model_data.pop("input_intro_en", None)
+        model_data.pop("input_intro_ar", None)
+        model_data.pop("eta_preset", None)
+        model_data.pop("image_upload", None)
+        model_data.pop("remove_image", None)
+        try:
+            return await super().insert_model(request, model_data)
+        except Exception as e:
+            rollback = getattr(request.state, "product_image_to_rollback", None)
+            if rollback:
+                import os
+                if os.path.isfile(rollback):
+                    os.remove(rollback)
+            raise e
+    async def update_model(self, request, pk: str, data: dict):
+        temp_data = getattr(request.state, "temp_form_data", {})
+        temp_data.update({
+            "manual_instr_en": data.get("manual_instr_en"),
+            "manual_instr_ar": data.get("manual_instr_ar"),
+            "input_intro_en": data.get("input_intro_en"),
+            "input_intro_ar": data.get("input_intro_ar"),
+            "eta_preset": data.get("eta_preset"),
+        })
+        request.state.temp_form_data = temp_data
+        model_data = dict(data)
+        model_data.pop("manual_instr_en", None)
+        model_data.pop("manual_instr_ar", None)
+        model_data.pop("input_intro_en", None)
+        model_data.pop("input_intro_ar", None)
+        model_data.pop("eta_preset", None)
+        model_data.pop("image_upload", None)
+        model_data.pop("remove_image", None)
+        try:
+            return await super().update_model(request, pk, model_data)
+        except Exception as e:
+            rollback = getattr(request.state, "product_image_to_rollback", None)
+            if rollback:
+                import os
+                if os.path.isfile(rollback):
+                    os.remove(rollback)
+            raise e
     async def on_model_change(self, data, model, is_created, request):
+        from starlette.datastructures import UploadFile
+        import os
+        import uuid
+        import logging
+        from bot.misc.env import EnvKeys
+        from starlette.exceptions import HTTPException
+        temp_data = getattr(request.state, "temp_form_data", {})
+        image_upload = temp_data.get("image_upload")
+        if image_upload is None:
+            image_upload = data.pop("image_upload", None)
+        remove_image = temp_data.get("remove_image", False)
+        if not remove_image:
+            remove_image = data.pop("remove_image", False)
+        old_image_path = getattr(model, "image_path", None)
+        request.state.product_image_to_delete = None
+        request.state.product_image_to_rollback = None
+        base_dir = os.path.abspath(EnvKeys.PRODUCT_IMAGES_ROOT)
+        try:
+            os.makedirs(base_dir, exist_ok=True)
+        except OSError as e:
+            logging.error(f"Failed to create product images directory: {e}")
+            raise HTTPException(status_code=400, detail="Product image storage is not writable.")
+        content = None
+        if image_upload and getattr(image_upload, "filename", None):
+            content = await image_upload.read()
+            logging.info(f"UPLOAD CONTENT LENGTH: {len(content)}")
+        if content:
+            from PIL import Image
+            import io
+            if len(content) > 5 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Image exceeds 5MB size limit.")
+            try:
+                img = Image.open(io.BytesIO(content))
+                img.verify()
+                # Reopen after verify() because verify() can leave the file pointer at EOF
+                img = Image.open(io.BytesIO(content))
+                # Strip EXIF and metadata by creating a new image without it
+                img_data = list(img.getdata())
+                img_clean = Image.new(img.mode, img.size)
+                img_clean.putdata(img_data)
+                format_to_save = img.format if img.format in ["JPEG", "PNG", "WEBP"] else "WEBP"
+                if format_to_save == "JPEG" and img.mode in ("RGBA", "P"):
+                    img_clean = img_clean.convert("RGB")
+                ext_map = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+                ext = ext_map.get(format_to_save, ".webp")
+                new_filename = f"{uuid.uuid4()}{ext}"
+                new_full_path = os.path.join(base_dir, new_filename)
+            except Exception as e:
+                logging.error(f"Image processing error: {e}")
+                raise HTTPException(status_code=400, detail="Invalid image file uploaded.")
+            try:
+                img_clean.save(new_full_path, format=format_to_save)
+            except OSError as e:
+                logging.error(f"Failed to save product image: {e}")
+                raise HTTPException(status_code=400, detail="Product image storage is not writable.")
+            model.image_path = f"product_images/{new_filename}"
+            if old_image_path:
+                request.state.product_image_to_delete = old_image_path
+            request.state.product_image_to_rollback = new_full_path
+        elif remove_image:
+            model.image_path = None
+            if old_image_path:
+                request.state.product_image_to_delete = old_image_path
         existing_manual = dict(getattr(model, "manual_instructions_i18n", {}) or {})
-        en_instr = data.pop("manual_instr_en", None)
-        ar_instr = data.pop("manual_instr_ar", None)
+        en_instr = temp_data.get("manual_instr_en")
+        if en_instr is None:
+            en_instr = data.pop("manual_instr_en", None)
+        ar_instr = temp_data.get("manual_instr_ar")
+        if ar_instr is None:
+            ar_instr = data.pop("manual_instr_ar", None)
 
         if en_instr:
             existing_manual["en"] = en_instr
@@ -394,8 +517,12 @@ class GoodsAdmin(AuditModelView, model=Goods):
         model.manual_instructions_i18n = existing_manual if existing_manual else None
 
         existing_intro = dict(getattr(model, "customer_input_intro_i18n", {}) or {})
-        en_intro = data.pop("input_intro_en", None)
-        ar_intro = data.pop("input_intro_ar", None)
+        en_intro = temp_data.get("input_intro_en")
+        if en_intro is None:
+            en_intro = data.pop("input_intro_en", None)
+        ar_intro = temp_data.get("input_intro_ar")
+        if ar_intro is None:
+            ar_intro = data.pop("input_intro_ar", None)
 
         if en_intro:
             existing_intro["en"] = en_intro
@@ -409,7 +536,9 @@ class GoodsAdmin(AuditModelView, model=Goods):
 
         model.customer_input_intro_i18n = existing_intro if existing_intro else None
 
-        preset = data.pop("eta_preset", None)
+        preset = temp_data.get("eta_preset")
+        if preset is None:
+            preset = data.pop("eta_preset", None)
         if preset and preset != "custom":
             model.fulfillment_eta_minutes = int(preset)
         elif not preset:
@@ -423,6 +552,23 @@ class GoodsAdmin(AuditModelView, model=Goods):
         if getattr(super(), "on_model_change", None):
             await super().on_model_change(data, model, is_created, request)
 
+    async def after_model_change(self, data, model, is_created, request):
+        import os
+        from bot.misc.env import EnvKeys
+        base_dir = os.path.abspath(EnvKeys.PRODUCT_IMAGES_ROOT)
+        old_image = getattr(request.state, "product_image_to_delete", None)
+        if old_image:
+            from bot.misc.utils import resolve_product_image_path
+            import os
+            old_full = resolve_product_image_path(old_image)
+            if old_full:
+                try:
+                    os.remove(old_full)
+                except Exception:
+                    from bot.logger_mesh import logger
+                    logger.warning(f"Failed to delete old image {old_full}")
+        if getattr(super(), "after_model_change", None):
+            await super().after_model_change(data, model, is_created, request)
     async def on_model_delete(self, model, request):
         from bot.database import Database
         from bot.database.models import OrderItem, BoughtGoods
@@ -461,6 +607,21 @@ class GoodsAdmin(AuditModelView, model=Goods):
             await super().on_model_delete(model, request)
 
 
+    async def after_model_delete(self, model, request):
+        # Clean up product image from disk only after successful DB deletion
+        image_path = getattr(model, 'image_path', None)
+        if image_path:
+            from bot.misc.utils import resolve_product_image_path
+            import os
+            try:
+                full_path = resolve_product_image_path(image_path)
+                if full_path:
+                    os.remove(full_path)
+            except Exception as e:
+                from bot.logger_mesh import logger
+                logger.warning(f"Failed to delete orphaned product image for product {model.id}: {e}")
+        if getattr(super(), "after_model_delete", None):
+            await super().after_model_delete(model, request)
 class CustomerFieldBaseForm(Form):
     preset = SelectField("Preset", choices=[
         ("", "Custom Field"),
@@ -1045,6 +1206,22 @@ async def metrics_json(request: Request) -> JSONResponse:
     return JSONResponse(metrics.get_metrics_summary(), status_code=200)
 
 
+from starlette.datastructures import FormData
+class ShopAdmin(Admin):
+    async def _handle_form_data(self, request: Request, obj: Any = None) -> FormData:
+        is_goods = isinstance(obj, Goods) or (obj is None and "/goods/create" in request.url.path)
+        if is_goods:
+            form = await request.form()
+            temp_data = getattr(request.state, "temp_form_data", {})
+            temp_data["image_upload"] = form.get("image_upload")
+            temp_data["remove_image"] = form.get("remove_image") == "y"
+            request.state.temp_form_data = temp_data
+            new_items = []
+            for k, v in form.multi_items():
+                if k not in ("image_upload", "remove_image"):
+                    new_items.append((k, v))
+            request._form = FormData(new_items)
+        return await super()._handle_form_data(request, obj)
 # App Factory
 def create_admin_app() -> Starlette:
 
@@ -1061,7 +1238,7 @@ def create_admin_app() -> Starlette:
     app.add_middleware(SessionMiddleware, secret_key=EnvKeys.SECRET_KEY, max_age=1800)
 
     auth_backend = AdminAuth(secret_key=EnvKeys.SECRET_KEY)
-    admin = Admin(
+    admin = ShopAdmin(
         app,
         engine=Database().engine,
         authentication_backend=auth_backend,

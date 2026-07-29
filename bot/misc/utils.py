@@ -98,3 +98,28 @@ def get_quick_quantities(stock: int, is_infinity: bool) -> list[tuple[str, int]]
         result.append((f"📦 All {stock}", stock))
 
     return result
+
+def resolve_product_image_path(stored_path: str | None) -> str | None:
+    """
+    Safely resolves a stored relative image path into an absolute file path.
+    Rejects invalid, unsafe, or non-existent files.
+    """
+    if not stored_path or not stored_path.startswith("product_images/"):
+        return None
+
+    relative_path = stored_path[len("product_images/"):]
+    if ".." in relative_path or "\\" in relative_path or "/" in relative_path:
+        return None
+
+    import os
+    from bot.misc.env import EnvKeys
+    root_dir = os.path.abspath(EnvKeys.PRODUCT_IMAGES_ROOT)
+    final_path = os.path.abspath(os.path.join(root_dir, relative_path))
+
+    if not final_path.startswith(root_dir):
+        return None
+
+    if not os.path.isfile(final_path):
+        return None
+
+    return final_path

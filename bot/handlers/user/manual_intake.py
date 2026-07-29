@@ -235,6 +235,8 @@ async def handle_intake_buy_another(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "intake_start")
 async def handle_intake_start(call: CallbackQuery, state: FSMContext):
+    from bot.handlers.user.shop_and_goods import delete_product_image_safe
+    await delete_product_image_safe(call.bot, call.from_user.id, call.from_user.id)
     await answer_callback_safe(call)
     data = await state.get_data()
     item_name = data.get('intake_item_name')

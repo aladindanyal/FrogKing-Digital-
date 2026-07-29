@@ -213,6 +213,7 @@ class Goods(Database.BASE):
     customer_input_intro_i18n = Column(JSON().with_variant(JSONB, 'postgresql'), nullable=True)
     is_popular_deal = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     popular_deal_order = Column(Integer, nullable=True)
+    image_path = Column(String(255), nullable=True)
 
     __table_args__ = (
         CheckConstraint("fulfillment_mode IN ('instant', 'manual')", name='ck_goods_fulfillment_mode'),

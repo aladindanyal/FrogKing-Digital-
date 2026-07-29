@@ -6,11 +6,19 @@ from bot.states import ShopStates
 @pytest.fixture
 def make_callback_query():
     def _make(data, user_id=123):
-        call = AsyncMock(spec=CallbackQuery)
+        call = AsyncMock()
         call.data = data
         call.from_user = MagicMock(id=user_id)
-        call.message = AsyncMock(spec=Message)
+        call.message = AsyncMock()
+        call.message.chat = MagicMock(id=12345)
+        call.message.photo = None
+        call.message.video = None
+        call.message.document = None
         call.message.edit_text = AsyncMock()
+        call.bot = AsyncMock()
+        call.bot.send_message = AsyncMock()
+        call.bot.send_photo = AsyncMock()
+        call.bot.delete_message = AsyncMock()
         call.answer = AsyncMock()
         return call
     return _make
