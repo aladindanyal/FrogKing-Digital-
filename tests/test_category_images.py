@@ -186,16 +186,16 @@ async def test_missing_image_render_fallback():
          patch('bot.handlers.user.shop_and_goods.get_store_settings', new_callable=AsyncMock), \
          patch('bot.handlers.user.shop_and_goods.get_category_parent_id', new_callable=AsyncMock), \
          patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock) as mock_del_img:
-        
+
         mock_get_cat.return_value = {
             "name": "Test Category",
             "description": "desc",
             "image_path": "category_images/does_not_exist.jpg"
         }
         mock_paginator.return_value = []
-        
+
         await _render_category_page(call, state, parent_id=1, page=0)
-        
+
         # Should edit message because no image exists
         call.message.edit_text.assert_called_once()
         mock_del_img.assert_called_once()
@@ -361,16 +361,16 @@ async def test_existing_image_render(managed_root):
          patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock) as mock_del_img, \
          patch('bot.handlers.user.shop_and_goods.store_product_image_message', new_callable=AsyncMock) as mock_store_img, \
          patch('bot.misc.utils.resolve_category_image_path', return_value=valid_file):
-        
+
         mock_get_cat.return_value = {
             "name": "Test Category",
             "description": "desc",
             "image_path": f"category_images/{valid_uuid}"
         }
         mock_paginator.return_value = []
-        
+
         await _render_category_page(call, state, parent_id=1, page=0)
-        
+
         call.message.answer_photo.assert_called_once()
         call.message.answer.assert_called_once()
         mock_store_img.assert_called_once()
@@ -483,23 +483,23 @@ async def test_image_order_transition():
          patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock) as mock_del_img, \
          patch('bot.handlers.user.shop_and_goods.store_product_image_message', new_callable=AsyncMock) as mock_store_img, \
          patch('bot.misc.utils.resolve_category_image_path', return_value="/fake/path.jpg"):
-        
+
         mock_get_cat.return_value = {
             "name": "Test Category",
             "description": "desc",
             "image_path": "path"
         }
         mock_paginator.return_value = []
-        
+
         await _render_category_page(call, state, parent_id=1, page=0)
-        
+
         # When sending photo + text, we delete the previous message
         call.bot.delete_message.assert_called_once()
         call.message.answer_photo.assert_called_once()
         call.message.answer.assert_called_once()
-        
-        # We can't verify relative order of call.bot and call.message easily like mock_calls 
-        # on a single object because they are separate objects. But calling them both 
+
+        # We can't verify relative order of call.bot and call.message easily like mock_calls
+        # on a single object because they are separate objects. But calling them both
         # is the important part of the lifecycle verification here.
 
 
@@ -530,7 +530,7 @@ async def test_subcategory_image_rendering_and_navigation():
     call.bot = MagicMock()
     call.from_user = MagicMock()
     call.from_user.id = 123
-    
+
     with patch('bot.handlers.user.shop_and_goods.check_category_has_subcategories', new_callable=AsyncMock) as mock_has_subcats, \
          patch('bot.handlers.user.shop_and_goods.get_category_by_id', new_callable=AsyncMock) as mock_get_cat, \
          patch('bot.handlers.user.shop_and_goods.get_category_parent_id', new_callable=AsyncMock) as mock_get_parent, \
@@ -540,31 +540,31 @@ async def test_subcategory_image_rendering_and_navigation():
          patch('bot.database.methods.read.get_stock_for_items', new_callable=AsyncMock) as mock_get_stock, \
          patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock), \
          patch('bot.misc.utils.resolve_category_image_path') as mock_resolve:
-        
+
         # Subcategory 6 has NO subcategories of its own
         mock_has_subcats.return_value = False
-        
+
         # We simulate category ID 6 info
         mock_get_cat.return_value = {
             "name": "Test Subcategory",
             "description": "Sub desc",
             "image_path": "category_images/child.jpg"
         }
-        
+
         # Its parent is 1
         mock_get_parent.return_value = 1
-        
+
         mock_paginator.return_value = []
         mock_get_stock.return_value = {}
         mock_resolve.return_value = "/full/path/to/child.jpg"
-        
+
         await category_selected_handler(call, state)
-        
+
         # Assert child image is sent
         call.message.answer_photo.assert_called_once()
         # Assert parent image is not sent, because we only fetched image for ID 6
         mock_get_cat.assert_called_with(6)
-        
+
         # Assert Back callback targets parent ID 1 (by checking the markup args)
         args, kwargs = call.message.answer.call_args
         assert "cpage:1:0" in str(kwargs.get("reply_markup"))
@@ -591,10 +591,10 @@ async def test_category_telegram_bad_request_fallback():
     call.message.photo = None
     call.message.video = None
     call.message.document = None
-    
+
     # Mock answer_photo to raise TelegramBadRequest
     call.message.answer_photo = AsyncMock(side_effect=TelegramBadRequest(method="sendPhoto", message="Bad Request: IMAGE_PROCESS_FAILED"))
-    
+
     call.message.edit_text = AsyncMock()
     call.message.answer = AsyncMock()
     call.bot = MagicMock()
@@ -602,7 +602,7 @@ async def test_category_telegram_bad_request_fallback():
     call.bot.delete_message = AsyncMock()
     call.from_user = MagicMock()
     call.from_user.id = 123
-    
+
     with patch('bot.handlers.user.shop_and_goods.check_category_has_subcategories', new_callable=AsyncMock) as mock_has_subcats, \
          patch('bot.handlers.user.shop_and_goods.get_category_by_id', new_callable=AsyncMock) as mock_get_cat, \
          patch('bot.handlers.user.shop_and_goods.get_category_parent_id', new_callable=AsyncMock) as mock_get_parent, \
@@ -613,23 +613,23 @@ async def test_category_telegram_bad_request_fallback():
          patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock), \
          patch('bot.handlers.user.shop_and_goods._edit_message_safe', new_callable=AsyncMock) as mock_edit_safe, \
          patch('bot.misc.utils.resolve_category_image_path') as mock_resolve:
-        
+
         # Subcategory 6 has NO subcategories of its own
         mock_has_subcats.return_value = False
-        
+
         mock_get_cat.return_value = {
             "name": "Test Subcategory",
             "description": "Sub desc",
             "image_path": "category_images/child.jpg"
         }
-        
+
         mock_get_parent.return_value = 1
         mock_paginator.return_value = []
         mock_get_stock.return_value = {}
         mock_resolve.return_value = "/full/path/to/child.jpg"
-        
+
         await category_selected_handler(call, state)
-        
+
         # Should catch TelegramBadRequest and fallback to _edit_message_safe
         mock_edit_safe.assert_called_once()
         assert not call.message.answer.called # because it fell back to edit
