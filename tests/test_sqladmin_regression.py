@@ -52,7 +52,7 @@ async def test_product_without_image_saves_normally(app, mock_admin_auth, db_ses
         }
         resp = client.post("/admin/goods/create", data=data, follow_redirects=False)
         assert resp.status_code in (302, 303)
-        
+
         result = await db_session.execute(select(Goods).where(Goods.name == "New Product No Image"))
         goods = result.scalars().first()
         assert goods is not None
@@ -76,7 +76,7 @@ async def test_save_with_no_changes_succeeds_with_existing_image(app, mock_admin
         }
         resp = client.post(f"/admin/goods/edit/{goods.id}", data=data, follow_redirects=False)
         assert resp.status_code in (302, 303)
-        
+
         await db_session.refresh(goods)
         assert goods.image_path == "product_images/old.jpg"
 
@@ -97,7 +97,7 @@ async def test_name_only_edit_succeeds_and_preserves_image(app, mock_admin_auth,
         }
         resp = client.post(f"/admin/goods/edit/{goods.id}", data=data, follow_redirects=False)
         assert resp.status_code in (302, 303)
-        
+
         await db_session.refresh(goods)
         assert goods.name == "New Name"
         assert goods.image_path == "product_images/old.jpg"
@@ -119,7 +119,7 @@ async def test_price_only_edit_succeeds_and_preserves_image(app, mock_admin_auth
         }
         resp = client.post(f"/admin/goods/edit/{goods.id}", data=data, follow_redirects=False)
         assert resp.status_code in (302, 303)
-        
+
         await db_session.refresh(goods)
         assert goods.price == 200.0
         assert goods.image_path == "product_images/old.jpg"
@@ -141,7 +141,7 @@ async def test_remove_image_succeeds(app, mock_admin_auth, db_session, test_cate
         }
         resp = client.post(f"/admin/goods/edit/{goods.id}", data=data, follow_redirects=False)
         assert resp.status_code in (302, 303)
-        
+
         await db_session.refresh(goods)
         assert goods.image_path is None
 
@@ -153,7 +153,7 @@ async def test_replacement_succeeds(app, mock_admin_auth, db_session, test_categ
 
     from PIL import Image
     import io
-    
+
     img = Image.new('RGB', (10, 10), color='red')
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='JPEG')
@@ -172,14 +172,14 @@ async def test_replacement_succeeds(app, mock_admin_auth, db_session, test_categ
         }
         files = {"image_upload": ("dummy.jpg", img_bytes, "image/jpeg")}
         resp = client.post(f"/admin/goods/edit/{goods.id}", data=data, files=files, follow_redirects=False)
-        
+
         assert resp.status_code in (302, 303)
-        
+
         await db_session.refresh(goods)
         assert goods.image_path is not None
         assert goods.image_path != "product_images/old.jpg"
         assert goods.image_path.endswith(".jpg")
-    
+
     os.remove("dummy.jpg")
 
 @pytest.mark.asyncio
@@ -187,18 +187,18 @@ async def test_failed_persistence_preserves_previous_image(app, mock_admin_auth,
     goods = Goods(name="Fail Persist", price=100.0, description="desc", category_id=test_category.id, fulfillment_mode="instant", image_path="product_images/old.jpg")
     db_session.add(goods)
     await db_session.commit()
-    
+
     from bot.web.admin import GoodsAdmin
     original_update = GoodsAdmin.update_model
-    
+
     async def failing_update(*args, **kwargs):
         raise ValueError("Simulated DB failure")
-        
+
     monkeypatch.setattr(GoodsAdmin, "update_model", failing_update)
 
     from PIL import Image
     import io
-    
+
     img = Image.new('RGB', (10, 10), color='blue')
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='JPEG')
@@ -220,8 +220,8 @@ async def test_failed_persistence_preserves_previous_image(app, mock_admin_auth,
             client.post(f"/admin/goods/edit/{goods.id}", data=data, files=files, follow_redirects=False)
         except ValueError:
             pass
-        
+
         await db_session.refresh(goods)
         assert goods.image_path == "product_images/old.jpg"
-        
+
     os.remove("dummy_fail.jpg")
