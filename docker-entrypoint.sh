@@ -38,6 +38,9 @@ fi
 # Ensure directories exist
 mkdir -p /app/logs /app/data
 
+# Ensure product_images is correctly owned and writable before dropping privileges
+install -d -m 0775 -o "$PUID" -g "$PGID" /app/data/product_images
+
 # Set ownership on mounted directories (these are the critical ones)
 chown botuser:botgroup /app/logs /app/data
 
