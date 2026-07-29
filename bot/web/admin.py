@@ -499,10 +499,10 @@ class GoodsAdmin(AuditModelView, model=Goods):
         existing_manual = dict(getattr(model, "manual_instructions_i18n", {}) or {})
         en_instr = temp_data.get("manual_instr_en")
         if en_instr is None:
-        en_instr = data.pop("manual_instr_en", None)
+            en_instr = data.pop("manual_instr_en", None)
         ar_instr = temp_data.get("manual_instr_ar")
         if ar_instr is None:
-        ar_instr = data.pop("manual_instr_ar", None)
+            ar_instr = data.pop("manual_instr_ar", None)
 
         if en_instr:
             existing_manual["en"] = en_instr
@@ -519,10 +519,10 @@ class GoodsAdmin(AuditModelView, model=Goods):
         existing_intro = dict(getattr(model, "customer_input_intro_i18n", {}) or {})
         en_intro = temp_data.get("input_intro_en")
         if en_intro is None:
-        en_intro = data.pop("input_intro_en", None)
+            en_intro = data.pop("input_intro_en", None)
         ar_intro = temp_data.get("input_intro_ar")
         if ar_intro is None:
-        ar_intro = data.pop("input_intro_ar", None)
+            ar_intro = data.pop("input_intro_ar", None)
 
         if en_intro:
             existing_intro["en"] = en_intro
@@ -538,7 +538,7 @@ class GoodsAdmin(AuditModelView, model=Goods):
 
         preset = temp_data.get("eta_preset")
         if preset is None:
-        preset = data.pop("eta_preset", None)
+            preset = data.pop("eta_preset", None)
         if preset and preset != "custom":
             model.fulfillment_eta_minutes = int(preset)
         elif not preset:
