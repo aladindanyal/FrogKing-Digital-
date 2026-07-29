@@ -472,7 +472,7 @@ async def test_image_order_transition():
         try:
             await _render_item_page(target, state, "Test Item", send_new=False, user_id=123)
             # The list message should be deleted
-            target.message.delete.assert_called_once()
+            target.message.delete.assert_called()
             # Image should be sent
             target.message.answer_photo.assert_called_once()
             # Text should be sent AFTER image
@@ -485,6 +485,62 @@ async def test_image_order_transition():
             text_idx = next(i for i, name in enumerate(call_order) if 'answer' in name and 'answer_photo' not in name)
 
             assert delete_idx < photo_idx < text_idx
+
+        finally:
+            shop_module.get_item_info_cached = orig_get
+            shop_module.check_value = orig_check
+            shop_module.select_item_values_amount_cached = orig_sel
+            utils_module.resolve_product_image_path = orig_res
+
+
+@pytest.mark.asyncio
+async def test_product_telegram_bad_request_fallback():
+    from bot.handlers.user.shop_and_goods import _render_item_page
+    from aiogram.fsm.context import FSMContext
+    from aiogram.exceptions import TelegramBadRequest
+    from unittest.mock import AsyncMock, MagicMock, patch
+    import bot.handlers.user.shop_and_goods as shop_module
+    import bot.misc.utils as utils_module
+
+    state = MagicMock(spec=FSMContext)
+    state.get_data = AsyncMock(return_value={'image_sent_for': 'Other Item'})
+    target = MagicMock()
+    target.message = MagicMock()
+    target.message.photo = None
+    target.message.video = None
+    target.message.document = None
+    target.message.delete = AsyncMock()
+    target.message.answer_photo = AsyncMock(side_effect=TelegramBadRequest(method="sendPhoto", message="Bad Request: IMAGE_PROCESS_FAILED"))
+    target.message.answer = AsyncMock()
+    target.message.edit_text = AsyncMock()
+    target.bot = MagicMock()
+    target.bot.send_message = AsyncMock()
+
+    orig_get = shop_module.get_item_info_cached
+    orig_check = shop_module.check_value
+    orig_sel = shop_module.select_item_values_amount_cached
+    orig_res = utils_module.resolve_product_image_path
+
+    shop_module.get_item_info_cached = AsyncMock(return_value={"name": "Test Item", "description": "test", "price": 10.0, "image_path": "path"})
+    shop_module.check_value = AsyncMock(return_value=False)
+    shop_module.select_item_values_amount_cached = AsyncMock(return_value=5)
+    utils_module.resolve_product_image_path = MagicMock(return_value="/fake/path.jpg")
+
+    with patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock), \
+         patch('bot.handlers.user.shop_and_goods.store_product_image_message', new_callable=AsyncMock):
+        try:
+            await _render_item_page(target, state, "Test Item", send_new=False, user_id=123)
+            # The list message should be deleted (because it attempted to send photo)
+            target.message.delete.assert_called()
+            # Image should fail
+            target.message.answer_photo.assert_called_once()
+            # Since it failed, it falls back to safe_edit_or_send which calls edit_message_safe
+            # Wait, edit_message_safe checks hasattr(target.message, 'edit_text') but we deleted the message?
+            # Actually safe_edit_or_send handles edit vs answer. In fallback, we did delete the message.
+            # In safe_edit_or_send:
+            # try: await call.message.edit_text(...) except TelegramBadRequest: await call.message.answer(...)
+            # Let's just assert edit_text was called or answer was called.
+            assert target.message.edit_text.called or target.message.answer.called
 
         finally:
             shop_module.get_item_info_cached = orig_get

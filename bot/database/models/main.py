@@ -186,6 +186,7 @@ class Categories(Database.BASE):
     name = Column(String(100), unique=True, nullable=False)
     description = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
+    image_path = Column(String(255), nullable=True)
 
     items = relationship("Goods", back_populates="category", lazy='raise')
     parent = relationship("Categories", remote_side=[id], back_populates="subcategories")

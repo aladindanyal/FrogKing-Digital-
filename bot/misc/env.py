@@ -67,6 +67,7 @@ class EnvKeys(ABC):
 
     # Images
     PRODUCT_IMAGES_ROOT: Final = _get_optional("PRODUCT_IMAGES_ROOT", "/app/data/product_images")
+    CATEGORY_IMAGES_ROOT: Final = _get_optional("CATEGORY_IMAGES_ROOT", "/app/data/category_images")
 
     # Manual Fulfillment (Phase 4C-3B)
     MANUAL_CHECKOUT_ENABLED: Final = _get_optional("MANUAL_CHECKOUT_ENABLED", "0") in ("1", "true", "True")

@@ -1,0 +1,22 @@
+{% extends "edit.html" %}
+
+{% block content %}
+  <div style="margin-bottom: 1rem;">
+    {% if obj.image_path or (model and model.image_path) or (request.state.get and request.state.get('obj', None)) %}
+    {% endif %}
+    {# In SQLAdmin, the instance is usually 'obj' or 'model'. Let's use 'model.image_path' and 'obj.image_path' #}
+    {% if obj and obj.image_path %}
+      <span class="badge bg-success" style="font-size: 14px; padding: 8px;">Current image: Yes</span>
+    {% elif model and model.image_path %}
+      <span class="badge bg-success" style="font-size: 14px; padding: 8px;">Current image: Yes</span>
+    {% else %}
+      <span class="badge bg-secondary" style="font-size: 14px; padding: 8px;">Current image: None</span>
+    {% endif %}
+  </div>
+  {{ super() }}
+{% endblock %}
+
+{% block tail %}
+{{ super() }}
+{% include 'admin/goods_script.html' %}
+{% endblock %}
