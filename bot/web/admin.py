@@ -1,4 +1,4 @@
-from wtforms import ValidationError
+from wtforms import ValidationError, Form, StringField, TextAreaField, SelectField, HiddenField, FileField, BooleanField
 import logging
 import time
 from typing import Any
@@ -152,8 +152,8 @@ class AuditModelView(ModelView):
 class UserAdmin(AuditModelView, model=User):
     column_list = [User.telegram_id, User.telegram_username, User.first_name, User.last_name, User.balance, User.role_id, User.registration_date, User.is_blocked]
     column_details_list = [
-        User.telegram_id, User.telegram_username, User.first_name, User.last_name, 
-        User.profile_updated_at, User.role_id, User.balance, User.referral_id, 
+        User.telegram_id, User.telegram_username, User.first_name, User.last_name,
+        User.profile_updated_at, User.role_id, User.balance, User.referral_id,
         User.registration_date, User.is_blocked
     ]
     column_searchable_list = [User.telegram_id, User.telegram_username, User.first_name, User.last_name]
@@ -239,6 +239,10 @@ class RoleAdmin(AuditModelView, model=Role):
     }
 
 
+class CategoryBaseForm(Form):
+    image_upload = FileField("Category Image (Upload new)", render_kw={"class": "form-control", "accept": "image/*"})
+    remove_image = BooleanField("Remove existing image", render_kw={"class": "form-check-input"})
+
 class CategoryAdmin(AuditModelView, model=Categories):
     column_list = [Categories.id, Categories.name, Categories.description, Categories.parent_id]
     column_searchable_list = [Categories.name]
@@ -247,6 +251,90 @@ class CategoryAdmin(AuditModelView, model=Categories):
     name_plural = "Categories"
     icon = "fa-solid fa-folder"
     form_columns = [Categories.name, Categories.description, Categories.parent]
+    form_base_class = CategoryBaseForm
+    edit_template = "admin/category_edit.html"
+
+    async def insert_model(self, request, data: dict):
+        temp_data = getattr(request.state, "temp_form_data", {})
+        request.state.temp_form_data = temp_data
+        model_data = dict(data)
+        model_data.pop("image_upload", None)
+        model_data.pop("remove_image", None)
+        try:
+            return await super().insert_model(request, model_data)
+        except Exception as e:
+            rollback = getattr(request.state, "category_image_to_rollback", None)
+            if rollback:
+                import os
+                if os.path.isfile(rollback):
+                    os.remove(rollback)
+            raise e
+
+    async def update_model(self, request, pk: str, data: dict):
+        temp_data = getattr(request.state, "temp_form_data", {})
+        request.state.temp_form_data = temp_data
+        model_data = dict(data)
+        model_data.pop("image_upload", None)
+        model_data.pop("remove_image", None)
+        try:
+            return await super().update_model(request, pk, model_data)
+        except Exception as e:
+            rollback = getattr(request.state, "category_image_to_rollback", None)
+            if rollback:
+                import os
+                if os.path.isfile(rollback):
+                    os.remove(rollback)
+            raise e
+
+    async def on_model_change(self, data, model, is_created, request):
+        import os
+        from bot.misc.env import EnvKeys
+
+        temp_data = getattr(request.state, "temp_form_data", {})
+        image_upload = temp_data.get("image_upload")
+        if image_upload is None:
+            image_upload = data.pop("image_upload", None)
+        remove_image = temp_data.get("remove_image", False)
+        if not remove_image:
+            remove_image = data.pop("remove_image", False)
+
+        old_image_path = getattr(model, "image_path", None)
+        request.state.category_image_to_delete = None
+        request.state.category_image_to_rollback = None
+        base_dir = os.path.abspath(EnvKeys.CATEGORY_IMAGES_ROOT)
+
+        relative_path, absolute_path = await handle_managed_image_upload(
+            image_upload, base_dir, "category_images"
+        )
+
+        if relative_path:
+            model.image_path = relative_path
+            if old_image_path:
+                request.state.category_image_to_delete = old_image_path
+            request.state.category_image_to_rollback = absolute_path
+        elif remove_image:
+            model.image_path = None
+            if old_image_path:
+                request.state.category_image_to_delete = old_image_path
+
+        if getattr(super(), "on_model_change", None):
+            await super().on_model_change(data, model, is_created, request)
+
+    async def after_model_change(self, data, model, is_created, request):
+        old_image = getattr(request.state, "category_image_to_delete", None)
+        if old_image:
+            from bot.misc.utils import resolve_category_image_path
+            cleanup_orphaned_image(old_image, resolve_category_image_path)
+        if getattr(super(), "after_model_change", None):
+            await super().after_model_change(data, model, is_created, request)
+
+    async def after_model_delete(self, model, request):
+        image_path = getattr(model, 'image_path', None)
+        if image_path:
+            from bot.misc.utils import resolve_category_image_path
+            cleanup_orphaned_image(image_path, resolve_category_image_path)
+        if getattr(super(), "after_model_delete", None):
+            await super().after_model_delete(model, request)
 
 
 class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
@@ -315,8 +403,78 @@ class MainMenuButtonSettingsAdmin(AuditModelView, model=MainMenuButtonSettings):
     icon = "fa-solid fa-bars"
 
 
-from wtforms import Form, StringField, TextAreaField, SelectField, HiddenField, FileField, BooleanField
+
 import json
+import os
+import uuid
+import io
+from PIL import Image
+from starlette.exceptions import HTTPException
+
+async def handle_managed_image_upload(
+    image_upload,
+    base_dir: str,
+    prefix_dir_name: str
+) -> tuple[str | None, str | None]:
+    """
+    Validates, strips metadata, and stores an uploaded image.
+    Returns (relative_path, absolute_path) if successful, or (None, None) if no file.
+    """
+    try:
+        os.makedirs(base_dir, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Failed to create images directory: {e}")
+        type_str = "Category " if "category" in prefix_dir_name else "Product "
+        raise HTTPException(status_code=400, detail=f"{type_str}image storage is not writable.")
+
+    content = None
+    if image_upload and getattr(image_upload, "filename", None):
+        content = await image_upload.read()
+
+    if not content:
+        return None, None
+
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image exceeds 5MB size limit.")
+
+    try:
+        img = Image.open(io.BytesIO(content))
+        img.verify()
+        # Reopen after verify() because verify() can leave the file pointer at EOF
+        img = Image.open(io.BytesIO(content))
+        # Strip EXIF and metadata by creating a new image without it
+        img_data = list(img.getdata())
+        img_clean = Image.new(img.mode, img.size)
+        img_clean.putdata(img_data)
+        format_to_save = img.format if img.format in ["JPEG", "PNG", "WEBP"] else "WEBP"
+        if format_to_save == "JPEG" and img.mode in ("RGBA", "P"):
+            img_clean = img_clean.convert("RGB")
+        ext_map = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+        ext = ext_map.get(format_to_save, ".webp")
+        new_filename = f"{uuid.uuid4()}{ext}"
+        new_full_path = os.path.join(base_dir, new_filename)
+    except Exception as e:
+        logger.error(f"Image processing error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid image file uploaded.")
+
+    try:
+        img_clean.save(new_full_path, format=format_to_save)
+    except OSError as e:
+        logger.error(f"Failed to save image: {e}")
+        type_str = "Category " if "category" in prefix_dir_name else "Product "
+        raise HTTPException(status_code=400, detail=f"{type_str}image storage is not writable.")
+
+    return f"{prefix_dir_name}/{new_filename}", new_full_path
+
+def cleanup_orphaned_image(image_path: str, resolve_func):
+    if not image_path:
+        return
+    try:
+        full_path = resolve_func(image_path)
+        if full_path:
+            os.remove(full_path)
+    except Exception as e:
+        logger.warning(f"Failed to delete old image {image_path}: {e}")
 
 class GoodsBaseForm(Form):
     image_upload = FileField("Product Image (Upload new)", render_kw={"class": "form-control", "accept": "image/*"})
@@ -450,48 +608,16 @@ class GoodsAdmin(AuditModelView, model=Goods):
         request.state.product_image_to_delete = None
         request.state.product_image_to_rollback = None
         base_dir = os.path.abspath(EnvKeys.PRODUCT_IMAGES_ROOT)
-        try:
-            os.makedirs(base_dir, exist_ok=True)
-        except OSError as e:
-            logging.error(f"Failed to create product images directory: {e}")
-            raise HTTPException(status_code=400, detail="Product image storage is not writable.")
-        content = None
-        if image_upload and getattr(image_upload, "filename", None):
-            content = await image_upload.read()
-            logging.info(f"UPLOAD CONTENT LENGTH: {len(content)}")
-        if content:
-            from PIL import Image
-            import io
-            if len(content) > 5 * 1024 * 1024:
-                raise HTTPException(status_code=400, detail="Image exceeds 5MB size limit.")
-            try:
-                img = Image.open(io.BytesIO(content))
-                img.verify()
-                # Reopen after verify() because verify() can leave the file pointer at EOF
-                img = Image.open(io.BytesIO(content))
-                # Strip EXIF and metadata by creating a new image without it
-                img_data = list(img.getdata())
-                img_clean = Image.new(img.mode, img.size)
-                img_clean.putdata(img_data)
-                format_to_save = img.format if img.format in ["JPEG", "PNG", "WEBP"] else "WEBP"
-                if format_to_save == "JPEG" and img.mode in ("RGBA", "P"):
-                    img_clean = img_clean.convert("RGB")
-                ext_map = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
-                ext = ext_map.get(format_to_save, ".webp")
-                new_filename = f"{uuid.uuid4()}{ext}"
-                new_full_path = os.path.join(base_dir, new_filename)
-            except Exception as e:
-                logging.error(f"Image processing error: {e}")
-                raise HTTPException(status_code=400, detail="Invalid image file uploaded.")
-            try:
-                img_clean.save(new_full_path, format=format_to_save)
-            except OSError as e:
-                logging.error(f"Failed to save product image: {e}")
-                raise HTTPException(status_code=400, detail="Product image storage is not writable.")
-            model.image_path = f"product_images/{new_filename}"
+
+        relative_path, absolute_path = await handle_managed_image_upload(
+            image_upload, base_dir, "product_images"
+        )
+
+        if relative_path:
+            model.image_path = relative_path
             if old_image_path:
                 request.state.product_image_to_delete = old_image_path
-            request.state.product_image_to_rollback = new_full_path
+            request.state.product_image_to_rollback = absolute_path
         elif remove_image:
             model.image_path = None
             if old_image_path:
@@ -553,20 +679,10 @@ class GoodsAdmin(AuditModelView, model=Goods):
             await super().on_model_change(data, model, is_created, request)
 
     async def after_model_change(self, data, model, is_created, request):
-        import os
-        from bot.misc.env import EnvKeys
-        base_dir = os.path.abspath(EnvKeys.PRODUCT_IMAGES_ROOT)
         old_image = getattr(request.state, "product_image_to_delete", None)
         if old_image:
             from bot.misc.utils import resolve_product_image_path
-            import os
-            old_full = resolve_product_image_path(old_image)
-            if old_full:
-                try:
-                    os.remove(old_full)
-                except Exception:
-                    from bot.logger_mesh import logger
-                    logger.warning(f"Failed to delete old image {old_full}")
+            cleanup_orphaned_image(old_image, resolve_product_image_path)
         if getattr(super(), "after_model_change", None):
             await super().after_model_change(data, model, is_created, request)
     async def on_model_delete(self, model, request):
@@ -612,14 +728,7 @@ class GoodsAdmin(AuditModelView, model=Goods):
         image_path = getattr(model, 'image_path', None)
         if image_path:
             from bot.misc.utils import resolve_product_image_path
-            import os
-            try:
-                full_path = resolve_product_image_path(image_path)
-                if full_path:
-                    os.remove(full_path)
-            except Exception as e:
-                from bot.logger_mesh import logger
-                logger.warning(f"Failed to delete orphaned product image for product {model.id}: {e}")
+            cleanup_orphaned_image(image_path, resolve_product_image_path)
         if getattr(super(), "after_model_delete", None):
             await super().after_model_delete(model, request)
 class CustomerFieldBaseForm(Form):
@@ -1210,11 +1319,13 @@ from starlette.datastructures import FormData
 class ShopAdmin(Admin):
     async def _handle_form_data(self, request: Request, obj: Any = None) -> FormData:
         is_goods = isinstance(obj, Goods) or (obj is None and "/goods/create" in request.url.path)
-        if is_goods:
+        is_category = isinstance(obj, Categories) or (obj is None and "/category/create" in request.url.path)
+        if is_goods or is_category:
             form = await request.form()
             temp_data = getattr(request.state, "temp_form_data", {})
             temp_data["image_upload"] = form.get("image_upload")
-            temp_data["remove_image"] = form.get("remove_image") == "y"
+            if "remove_image" in form:
+                temp_data["remove_image"] = form.get("remove_image")
             request.state.temp_form_data = temp_data
             new_items = []
             for k, v in form.multi_items():

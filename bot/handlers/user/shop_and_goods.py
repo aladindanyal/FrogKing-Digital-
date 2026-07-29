@@ -171,13 +171,20 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
         if not bot:
             return
 
-        await delete_product_image_safe(bot, chat_id, user_id)
-        photo_msg = await send_method(FSInputFile(full_path))
-        await store_product_image_message(chat_id, user_id, photo_msg.message_id)
+        try:
+            await delete_product_image_safe(bot, chat_id, user_id)
+            photo_msg = await send_method(FSInputFile(full_path))
+            await store_product_image_message(chat_id, user_id, photo_msg.message_id)
+            return True
+        except TelegramBadRequest as e:
+            import logging
+            logging.warning(f"Failed to send product image for item ID {item_id}: {e}. Falling back to text-only.")
+            await delete_product_image_safe(bot, chat_id, user_id)
+            return False
 
     try:
         if send_new:
-            await _send_photo()
+            success = await _send_photo()
             if hasattr(target, 'message'):
                 await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
             else:
@@ -199,9 +206,13 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
                         await target.message.delete()
                     except Exception:
                         pass
-                    await _send_photo()
-                    await state.update_data(image_sent_for=item_name)
-                    await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
+                    success = await _send_photo()
+                    if success:
+                        await state.update_data(image_sent_for=item_name)
+                        await target.message.answer(text, reply_markup=markup, parse_mode="HTML")
+                    else:
+                        await state.update_data(image_sent_for=item_name)
+                        await safe_edit_or_send(target, text, reply_markup=markup)
                 else:
                     await state.update_data(image_sent_for=item_name)
                     await safe_edit_or_send(target, text, reply_markup=markup)
@@ -255,11 +266,13 @@ async def _edit_message_safe(call: CallbackQuery, message, text: str, reply_mark
 async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_id: int | None, page: int):
     await answer_callback_safe(call)
     await state.update_data(image_sent_for=None)
-    await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
     paginator = LazyPaginator(partial(query_categories, parent_id), per_page=10)
     page_items = await paginator.get_page(page)
 
     settings = await get_store_settings()
+
+    has_image = False
+    image_path = None
 
     if parent_id is None:
         back_cb = "back_to_menu"
@@ -279,6 +292,12 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
             display_text = f"<b>{cat_info['name']}</b>"
             if cat_info.get("description"):
                 display_text += f"\n\n{cat_info['description']}"
+            image_path = cat_info.get("image_path")
+            if image_path:
+                from bot.misc.utils import resolve_category_image_path
+                full_path = resolve_category_image_path(image_path)
+                if full_path:
+                    has_image = True
         else:
             display_text = localize("shop.categories.title")
 
@@ -307,7 +326,63 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
         home_cb="back_to_menu"
     )
 
-    await _edit_message_safe(call, call.message, display_text, markup)
+    async def _send_photo():
+        if not has_image:
+            return False
+        from bot.misc.utils import resolve_category_image_path
+        from aiogram.types import FSInputFile
+        from aiogram.exceptions import TelegramBadRequest
+        import logging
+
+        full_path = resolve_category_image_path(image_path)
+        logging.info(f"Category image display requested: category_id={parent_id} image reference exists={bool(image_path)} resolution succeeded={bool(full_path)}")
+        if not full_path:
+            return False
+
+        bot = call.bot
+        chat_id = call.message.chat.id
+        user_id = call.from_user.id
+        send_method = call.message.answer_photo
+
+        try:
+            await delete_product_image_safe(bot, chat_id, user_id)
+            photo_msg = await send_method(FSInputFile(full_path))
+            await store_product_image_message(chat_id, user_id, photo_msg.message_id)
+            return True
+        except TelegramBadRequest as e:
+            logging.warning(f"Failed to send category image for category ID {parent_id}: {e}. Falling back to text-only.")
+            await delete_product_image_safe(bot, chat_id, user_id)
+            return False
+
+    try:
+        # Category view typically uses edit_message_safe.
+        # To handle photos, if there is a photo, we need to send a new message with the photo
+        # and delete the previous message.
+        state_data = await state.get_data()
+        current_state = await state.get_state()
+
+        # If we already have a category image sent for this specific category, we might edit the text
+        # But for simplicity in category pages, we can just delete the old image (handled inside delete_product_image_safe)
+        if has_image:
+            success = await _send_photo()
+            if success:
+                await call.message.answer(display_text, reply_markup=markup, parse_mode="HTML")
+                await state.update_data(image_sent_for=f"cat_{parent_id}")
+                # delete the old message since we sent a new one
+                try:
+                    await call.bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                except Exception:
+                    pass
+            else:
+                await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
+                await _edit_message_safe(call, call.message, display_text, markup)
+        else:
+            await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
+            await _edit_message_safe(call, call.message, display_text, markup)
+    except Exception as e:
+        logger.error(f"Error rendering category page: {e}")
+        await _edit_message_safe(call, call.message, display_text, markup)
+
     await state.set_state(ShopStates.viewing_categories)
 
 
@@ -351,10 +426,18 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
 
     # Category text
     cat_info = await get_category_by_id(category_id)
+    has_image = False
+    image_path = None
     if cat_info:
         display_text = f"<b>{cat_info['name']}</b>"
         if cat_info.get("description"):
             display_text += f"\n\n{cat_info['description']}"
+        image_path = cat_info.get("image_path")
+        if image_path:
+            from bot.misc.utils import resolve_category_image_path
+            full_path = resolve_category_image_path(image_path)
+            if full_path:
+                has_image = True
     else:
         display_text = localize("shop.goods.choose")
 
@@ -394,7 +477,57 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
         item_style=lambda item: _get_item_style(item, stock_by_item_id.get(item[0], 0))
     )
 
-    await _edit_message_safe(call, call.message, display_text, markup)
+    async def _send_photo():
+        if not has_image:
+            return False
+        from bot.misc.utils import resolve_category_image_path
+        from aiogram.types import FSInputFile
+        from aiogram.exceptions import TelegramBadRequest
+        import logging
+
+        full_path = resolve_category_image_path(image_path)
+        logging.info(f"Category image display requested: category_id={category_id} image reference exists={bool(image_path)} resolution succeeded={bool(full_path)}")
+        if not full_path:
+            return False
+
+        bot = call.bot
+        chat_id = call.message.chat.id
+        user_id = call.from_user.id
+        send_method = call.message.answer_photo
+
+        try:
+            await delete_product_image_safe(bot, chat_id, user_id)
+            photo_msg = await send_method(FSInputFile(full_path))
+            await store_product_image_message(chat_id, user_id, photo_msg.message_id)
+            return True
+        except TelegramBadRequest as e:
+            logging.warning(f"Failed to send category image for category ID {category_id}: {e}. Falling back to text-only.")
+            await delete_product_image_safe(bot, chat_id, user_id)
+            return False
+
+    try:
+        state_data = await state.get_data()
+
+        if has_image:
+            success = await _send_photo()
+            if success:
+                await call.message.answer(display_text, reply_markup=markup, parse_mode="HTML")
+                await state.update_data(image_sent_for=f"cat_{category_id}")
+                try:
+                    await call.bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+                except Exception:
+                    pass
+            else:
+                await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
+                await _edit_message_safe(call, call.message, display_text, markup)
+        else:
+            await delete_product_image_safe(call.bot, call.message.chat.id, call.from_user.id)
+            await _edit_message_safe(call, call.message, display_text, markup)
+    except Exception as e:
+        import logging
+        logging.error(f"Error rendering goods page: {e}")
+        await _edit_message_safe(call, call.message, display_text, markup)
+
     await state.set_state(ShopStates.viewing_goods)
 
 

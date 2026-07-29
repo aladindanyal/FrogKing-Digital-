@@ -123,3 +123,28 @@ def resolve_product_image_path(stored_path: str | None) -> str | None:
         return None
 
     return final_path
+
+def resolve_category_image_path(stored_path: str | None) -> str | None:
+    """
+    Safely resolves a stored relative category image path into an absolute file path.
+    Rejects invalid, unsafe, or non-existent files.
+    """
+    if not stored_path or not stored_path.startswith("category_images/"):
+        return None
+
+    relative_path = stored_path[len("category_images/"):]
+    if ".." in relative_path or "\\" in relative_path or "/" in relative_path:
+        return None
+
+    import os
+    from bot.misc.env import EnvKeys
+    root_dir = os.path.abspath(EnvKeys.CATEGORY_IMAGES_ROOT)
+    final_path = os.path.abspath(os.path.join(root_dir, relative_path))
+
+    if not final_path.startswith(root_dir):
+        return None
+
+    if not os.path.isfile(final_path):
+        return None
+
+    return final_path
