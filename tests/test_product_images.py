@@ -18,7 +18,7 @@ class DummyRequest:
         def __init__(self):
             self.product_image_to_rollback = None
             self.product_image_to_delete = None
-    
+
     def __init__(self):
         self.state = self.State()
         self.client = DummyClient()
@@ -30,7 +30,7 @@ class MockUploadFile(UploadFile):
         # UploadFile requires a file object
         import io
         super().__init__(file=io.BytesIO(content), filename=filename)
-        
+
     async def read(self):
         return self._content
 
@@ -74,12 +74,12 @@ async def test_valid_image_upload_success(managed_root):
     }
     model = Goods(image_path=None)
     await admin.on_model_change(data, model, False, request)
-    
+
     assert model.image_path is not None
     assert model.image_path.startswith("product_images/")
     assert request.state.product_image_to_rollback is not None
     assert request.state.product_image_to_rollback.startswith(managed_root)
-    
+
     # Simulate DB success
     await admin.after_model_change(data, model, False, request)
     assert os.path.exists(request.state.product_image_to_rollback)
@@ -96,7 +96,7 @@ async def test_failed_db_persistence_removes_staged(managed_root):
     await admin.on_model_change(data, model, False, request)
     staged = request.state.product_image_to_rollback
     assert os.path.exists(staged)
-    
+
     # Simulate DB failure during update_model
     class FailingAdmin(GoodsAdmin):
         async def update_model(self, req, pk, d):
@@ -109,7 +109,7 @@ async def test_failed_db_persistence_removes_staged(managed_root):
     f_admin = FailingAdmin()
     with pytest.raises(exc.SQLAlchemyError):
         await f_admin.update_model(request, 1, data)
-        
+
     assert not os.path.exists(staged)
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_image_removal(managed_root):
     existing_file = os.path.join(managed_root, "existing.jpg")
     with open(existing_file, "wb") as f:
         f.write(create_dummy_image())
-    
+
     model = Goods(image_path="product_images/existing.jpg")
     data = {
         "remove_image": True
@@ -128,10 +128,10 @@ async def test_image_removal(managed_root):
     await admin.on_model_change(data, model, False, request)
     assert model.image_path is None
     assert request.state.product_image_to_delete == "product_images/existing.jpg"
-    
+
     # before DB success, file still exists
     assert os.path.exists(existing_file)
-    
+
     # after DB success, file deleted
     await admin.after_model_change(data, model, False, request)
     assert not os.path.exists(existing_file)
@@ -140,14 +140,14 @@ async def test_image_removal(managed_root):
 async def test_path_traversal_rejected():
     request = DummyRequest()
     admin = GoodsAdmin()
-    
+
     model = Goods(image_path="../some_secret_file.txt")
     data = {
         "remove_image": True
     }
     await admin.on_model_change(data, model, False, request)
     assert model.image_path is None
-    
+
     # Simulate after_model_change trying to delete
     # It shouldn't crash and shouldn't delete outside
     await admin.after_model_change(data, model, False, request)
@@ -158,7 +158,7 @@ async def test_missing_image_render_fallback():
     from aiogram.fsm.context import FSMContext
     from unittest.mock import AsyncMock, MagicMock
     import bot.handlers.user.shop_and_goods as shop_module
-    
+
     state = MagicMock(spec=FSMContext)
     state.get_data = AsyncMock(return_value={})
     target = MagicMock()
@@ -169,11 +169,11 @@ async def test_missing_image_render_fallback():
     target.bot = MagicMock()
     target.from_user = MagicMock()
     target.from_user.id = 123
-    
+
     orig_get = shop_module.get_item_info_cached
     orig_check_val = shop_module.check_value
     orig_sel = shop_module.select_item_values_amount_cached
-    
+
     async def mock_get(name):
         return {
             "name": name,
@@ -184,7 +184,7 @@ async def test_missing_image_render_fallback():
     shop_module.get_item_info_cached = mock_get
     shop_module.check_value = AsyncMock(return_value=False)
     shop_module.select_item_values_amount_cached = AsyncMock(return_value=5)
-    
+
     try:
         await _render_item_page(target, state, "Test Item", send_new=True, user_id=123)
         # Should NOT have called answer_photo because file doesn't exist
@@ -224,26 +224,26 @@ async def test_telegram_navigation_cleanup_transitions():
         delete_product_image_safe,
         _render_item_page
     )
-    
+
     # We just want to assert delete_product_image_safe is called in these transitions.
     with patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock) as mock_shop_delete:
-         
+
         # Test Home (send_fresh_main_menu)
         call = AsyncMock()
         call.bot = AsyncMock()
         await send_fresh_main_menu(call, 1, 'user', 123)
         mock_shop_delete.assert_called_once_with(call.bot, 123, 123)
-        
+
         # Test Category / Shop Back
         with patch('bot.handlers.user.shop_and_goods.query_categories', AsyncMock(return_value=[{'id':1,'name':'1','description':''}])), \
              patch('bot.handlers.user.shop_and_goods.get_store_settings', AsyncMock()), \
              patch('bot.handlers.user.shop_and_goods.LazyPaginator.get_page', return_value=[]), \
              patch('bot.handlers.user.shop_and_goods.LazyPaginator.get_total_pages', return_value=1):
-             
+
             call.message.edit_text = AsyncMock()
             await _render_category_page(call, AsyncMock(), parent_id=None, page=0)
             mock_shop_delete.assert_called_with(call.bot, call.message.chat.id, call.from_user.id)
-            
+
         # Test Popular Deals Back
         with patch('bot.handlers.user.shop_and_goods.LazyPaginator.get_page', return_value=[]), \
              patch('bot.handlers.user.shop_and_goods.LazyPaginator.get_total_pages', return_value=1), \
@@ -251,7 +251,7 @@ async def test_telegram_navigation_cleanup_transitions():
             call.message.edit_text = AsyncMock()
             await _render_popular_deals_page(call, AsyncMock(), page=0)
             mock_shop_delete.assert_called_with(call.bot, call.message.chat.id, call.from_user.id)
-            
+
         # Test checkout transitions? Those are in checkout/intake handlers.
 
 
@@ -264,11 +264,11 @@ async def test_permission_error_during_save_preserves_old_image(managed_root):
         "image_upload": MockUploadFile("test.jpg", content)
     }
     model = Goods(image_path="product_images/old_image.jpg")
-    
+
     with patch("PIL.Image.Image.save", side_effect=PermissionError("Permission Denied")):
         with pytest.raises(HTTPException) as excinfo:
             await admin.on_model_change(data, model, False, request)
-    
+
     assert excinfo.value.status_code == 400
     assert "Product image storage is not writable" in excinfo.value.detail
     assert model.image_path == "product_images/old_image.jpg"
@@ -283,11 +283,11 @@ async def test_permission_error_on_makedirs(managed_root):
         "image_upload": MockUploadFile("test.jpg", content)
     }
     model = Goods(image_path="product_images/old_image.jpg")
-    
+
     with patch("os.makedirs", side_effect=PermissionError("Permission Denied")):
         with pytest.raises(HTTPException) as excinfo:
             await admin.on_model_change(data, model, False, request)
-    
+
     assert excinfo.value.status_code == 400
     assert "Product image storage is not writable" in excinfo.value.detail
     assert model.image_path == "product_images/old_image.jpg"
@@ -295,19 +295,19 @@ async def test_permission_error_on_makedirs(managed_root):
 @pytest.mark.asyncio
 async def test_canonical_path_resolver(managed_root):
     from bot.misc.utils import resolve_product_image_path
-    
+
     valid_uuid = "resolver_test.jpg"
     valid_file = os.path.join(managed_root, valid_uuid)
     with open(valid_file, "wb") as f:
         f.write(b"dummy")
-        
+
     # 1. Resolves exactly to /app/data/product_images/<uuid>.jpg
     resolved = resolve_product_image_path(f"product_images/{valid_uuid}")
     assert resolved == valid_file
-    
+
     # 2. Never resolves to /app/data/product_images/product_images/<uuid>.jpg
     assert resolved != os.path.join(managed_root, f"product_images/{valid_uuid}")
-    
+
     # 6. Absolute and traversal paths are rejected
     assert resolve_product_image_path(f"product_images/../{valid_uuid}") is None
     assert resolve_product_image_path(f"product_images/\\{valid_uuid}") is None
@@ -320,12 +320,12 @@ async def test_existing_image_render(managed_root):
     from aiogram.fsm.context import FSMContext
     from unittest.mock import AsyncMock, MagicMock
     import bot.handlers.user.shop_and_goods as shop_module
-    
+
     state = MagicMock(spec=FSMContext)
     state.get_data = AsyncMock(return_value={})
     target = MagicMock()
     target.message = MagicMock()
-    
+
     photo_mock = MagicMock()
     photo_mock.message_id = 999
     target.message.answer_photo = AsyncMock(return_value=photo_mock)
@@ -335,16 +335,16 @@ async def test_existing_image_render(managed_root):
     target.bot = MagicMock()
     target.from_user = MagicMock()
     target.from_user.id = 123
-    
+
     orig_get = shop_module.get_item_info_cached
     orig_check_val = shop_module.check_value
     orig_sel = shop_module.select_item_values_amount_cached
-    
+
     valid_uuid = "real_img.jpg"
     valid_file = os.path.join(managed_root, valid_uuid)
     with open(valid_file, "wb") as f:
         f.write(b"dummy")
-    
+
     async def mock_get(name):
         return {
             "name": name,
@@ -355,7 +355,7 @@ async def test_existing_image_render(managed_root):
     shop_module.get_item_info_cached = mock_get
     shop_module.check_value = AsyncMock(return_value=False)
     shop_module.select_item_values_amount_cached = AsyncMock(return_value=5)
-    
+
     with patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock), \
          patch('bot.handlers.user.shop_and_goods.store_product_image_message', new_callable=AsyncMock):
         try:
@@ -371,24 +371,24 @@ async def test_existing_image_render(managed_root):
 async def test_admin_existing_image_removal(managed_root):
     request = DummyRequest()
     admin = GoodsAdmin()
-    
+
     # ensure it processes without AttributeError for empty image_upload
     data = {
         "image_upload": MockUploadFile("", b""),
         "remove_image": True
     }
-    
+
     existing_file = os.path.join(managed_root, "to_remove.jpg")
     with open(existing_file, "wb") as f2:
         f2.write(create_dummy_image())
-        
+
     model = Goods(image_path="product_images/to_remove.jpg")
-    
+
     # We call update_model, which calls our overriden method and then on_model_change
     class DummyAdmin(GoodsAdmin):
         async def get_model_by_pk(self, pk):
             return model
-            
+
         async def update_model(self, request, pk, data):
             request.state.temp_form_data = {
                 "image_upload": data.pop("image_upload", None),
@@ -398,28 +398,28 @@ async def test_admin_existing_image_removal(managed_root):
             await self.on_model_change(data, model, False, request)
             await self.after_model_change(data, model, False, request)
             return model
-            
+
     d_admin = DummyAdmin()
     await d_admin.update_model(request, 1, data)
-    
+
     assert model.image_path is None
     assert not os.path.exists(existing_file)
 
 @pytest.mark.asyncio
 async def test_admin_image_replacement(managed_root):
     request = DummyRequest()
-    
+
     existing_file = os.path.join(managed_root, "to_replace.jpg")
     with open(existing_file, "wb") as f2:
         f2.write(create_dummy_image())
-        
+
     model = Goods(image_path="product_images/to_replace.jpg")
     content = create_dummy_image("png")
     data = {
         "image_upload": MockUploadFile("new.png", content),
         "remove_image": False
     }
-    
+
     class DummyAdmin(GoodsAdmin):
         async def update_model(self, request, pk, data):
             request.state.temp_form_data = {
@@ -429,10 +429,10 @@ async def test_admin_image_replacement(managed_root):
             await self.on_model_change(data, model, False, request)
             await self.after_model_change(data, model, False, request)
             return model
-            
+
     d_admin = DummyAdmin()
     await d_admin.update_model(request, 1, data)
-    
+
     assert model.image_path is not None
     assert model.image_path != "product_images/to_replace.jpg"
     assert not os.path.exists(existing_file)
@@ -445,7 +445,7 @@ async def test_image_order_transition():
     from unittest.mock import AsyncMock, MagicMock, patch
     import bot.handlers.user.shop_and_goods as shop_module
     import bot.misc.utils as utils_module
-    
+
     state = MagicMock(spec=FSMContext)
     # Different item name in state to simulate transition
     state.get_data = AsyncMock(return_value={'image_sent_for': 'Other Item'})
@@ -456,17 +456,17 @@ async def test_image_order_transition():
     target.message.answer = AsyncMock()
     target.bot = MagicMock()
     target.bot.send_message = AsyncMock()
-    
+
     orig_get = shop_module.get_item_info_cached
     orig_check = shop_module.check_value
     orig_sel = shop_module.select_item_values_amount_cached
     orig_res = utils_module.resolve_product_image_path
-    
+
     shop_module.get_item_info_cached = AsyncMock(return_value={"name": "Test Item", "description": "test", "price": 10.0, "image_path": "path"})
     shop_module.check_value = AsyncMock(return_value=False)
     shop_module.select_item_values_amount_cached = AsyncMock(return_value=5)
     utils_module.resolve_product_image_path = MagicMock(return_value="/fake/path.jpg")
-    
+
     with patch('bot.handlers.user.shop_and_goods.delete_product_image_safe', new_callable=AsyncMock), \
          patch('bot.handlers.user.shop_and_goods.store_product_image_message', new_callable=AsyncMock):
         try:
@@ -477,15 +477,15 @@ async def test_image_order_transition():
             target.message.answer_photo.assert_called_once()
             # Text should be sent AFTER image
             target.message.answer.assert_called_once()
-            
+
             # verify order of calls on target.message
             call_order = [call[0] for call in target.message.mock_calls]
             delete_idx = next(i for i, name in enumerate(call_order) if 'delete' in name)
             photo_idx = next(i for i, name in enumerate(call_order) if 'answer_photo' in name)
             text_idx = next(i for i, name in enumerate(call_order) if 'answer' in name and 'answer_photo' not in name)
-            
+
             assert delete_idx < photo_idx < text_idx
-            
+
         finally:
             shop_module.get_item_info_cached = orig_get
             shop_module.check_value = orig_check
