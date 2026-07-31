@@ -190,6 +190,7 @@ class Categories(Database.BASE):
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
     image_path = Column(String(255), nullable=True)
     children_buttons_per_row = Column(Integer, nullable=False, default=1, server_default="1")
+    display_order = Column(Integer, nullable=False, default=10, server_default="10")
 
     items = relationship("Goods", back_populates="category", lazy='raise')
     parent = relationship("Categories", remote_side=[id], back_populates="subcategories")
@@ -197,6 +198,7 @@ class Categories(Database.BASE):
 
     __table_args__ = (
         CheckConstraint('children_buttons_per_row IN (1, 2)', name='ck_categories_children_btns'),
+        CheckConstraint('display_order >= 0', name='ck_categories_display_order'),
     )
 
     def __init__(self, name: str = None, **kw: Any):

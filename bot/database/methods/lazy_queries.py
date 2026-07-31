@@ -22,7 +22,7 @@ async def query_categories(parent_id: int | None = None, offset: int = 0, limit:
             return (await s.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
 
         result = await s.execute(
-            query.order_by(Categories.name.asc())
+            query.order_by(Categories.display_order.asc(), Categories.id.asc())
             .offset(offset)
             .limit(limit)
         )

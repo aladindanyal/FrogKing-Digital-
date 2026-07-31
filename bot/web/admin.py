@@ -239,18 +239,55 @@ class RoleAdmin(AuditModelView, model=Role):
     }
 
 
+async def normalize_parent_id(raw_val: Any, current_model_id: int | None = None) -> int | None:
+    if raw_val == "" or raw_val is None:
+        return None
+
+    from bot.database.models.main import Categories
+    if isinstance(raw_val, Categories):
+        val = raw_val.id
+    else:
+        try:
+            val = int(raw_val)
+        except (ValueError, TypeError):
+            raise ValueError("Parent ID must be an integer or valid numeric string.")
+
+    if val < 0:
+        raise ValueError("Parent ID cannot be negative.")
+
+    if current_model_id is not None and val == current_model_id:
+        raise ValueError("Cannot assign a category as its own parent.")
+
+    from bot.database.main import Database
+    from sqlalchemy import select
+
+    async with Database().session() as s:
+        parent_obj = (await s.execute(select(Categories).where(Categories.id == val))).scalars().first()
+        if not parent_obj:
+            raise ValueError("The selected Parent category does not exist.")
+
+        if current_model_id is not None:
+            curr = parent_obj.parent_id
+            while curr is not None:
+                if curr == current_model_id:
+                    raise ValueError("Circular dependency detected in parent category assignment.")
+                curr = (await s.execute(select(Categories.parent_id).where(Categories.id == curr))).scalar()
+
+    return val
+
+
 class CategoryBaseForm(Form):
     image_upload = FileField("Category Image (Upload new)", render_kw={"class": "form-control", "accept": "image/*"})
     remove_image = BooleanField("Remove existing image", render_kw={"class": "form-check-input"})
 
 class CategoryAdmin(AuditModelView, model=Categories):
-    column_list = [Categories.id, Categories.name, Categories.description, Categories.parent_id]
+    column_list = [Categories.id, Categories.name, Categories.description, Categories.parent_id, Categories.display_order]
     column_searchable_list = [Categories.name]
-    column_sortable_list = [Categories.id, Categories.name]
+    column_sortable_list = [Categories.id, Categories.name, Categories.display_order]
     name = "Category"
     name_plural = "Categories"
     icon = "fa-solid fa-folder"
-    form_columns = [Categories.name, Categories.description, Categories.parent, Categories.children_buttons_per_row]
+    form_columns = [Categories.name, Categories.description, Categories.parent, Categories.children_buttons_per_row, Categories.display_order]
     form_base_class = CategoryBaseForm
     edit_template = "admin/category_edit.html"
 
@@ -302,7 +339,34 @@ class CategoryAdmin(AuditModelView, model=Categories):
     async def on_model_change(self, data, model, is_created, request):
         import os
         from bot.misc.env import EnvKeys
+        from bot.database.main import Database
+        from bot.database.methods.create import get_next_display_order
 
+        # 1. Normalize and set parent_id securely
+        raw_parent = data.pop("parent", None)
+        if raw_parent is None and "parent_id" in data:
+            raw_parent = data.pop("parent_id")
+
+        current_id = getattr(model, "id", None)
+        old_parent_id = getattr(model, "parent_id", None)
+        new_parent_id = await normalize_parent_id(raw_parent, current_id)
+
+        # Directly update the model so SQLAdmin doesn't crash on string -> object assignment
+        model.parent_id = new_parent_id
+
+        # 2. Handle auto-append for display_order
+        user_provided_order = data.get("display_order")
+        old_display_order = getattr(model, "display_order", None)
+
+        if is_created and user_provided_order is None:
+            async with Database().session() as s:
+                data["display_order"] = await get_next_display_order(new_parent_id, s)
+        elif not is_created and old_parent_id != new_parent_id:
+            if user_provided_order == old_display_order or user_provided_order is None:
+                async with Database().session() as s:
+                    data["display_order"] = await get_next_display_order(new_parent_id, s)
+
+        # 3. Handle image uploads
         temp_data = getattr(request.state, "temp_form_data", {})
         image_upload = temp_data.get("image_upload")
         if image_upload is None:
