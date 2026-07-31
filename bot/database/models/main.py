@@ -160,11 +160,13 @@ class StoreSettings(Database.BASE):
     root_category_columns = Column(Integer, nullable=False, default=1, server_default="1")
     subcategory_columns = Column(Integer, nullable=False, default=2, server_default="2")
     product_columns = Column(Integer, nullable=False, default=1, server_default="1")
+    root_category_buttons_per_row = Column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         CheckConstraint('root_category_columns IN (1, 2)', name='ck_store_settings_root_cols'),
         CheckConstraint('subcategory_columns IN (1, 2)', name='ck_store_settings_subcat_cols'),
         CheckConstraint('product_columns IN (1, 2)', name='ck_store_settings_product_cols'),
+        CheckConstraint('root_category_buttons_per_row IN (1, 2)', name='ck_store_settings_root_btns'),
     )
 
 
@@ -187,10 +189,15 @@ class Categories(Database.BASE):
     description = Column(Text, nullable=True)
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
     image_path = Column(String(255), nullable=True)
+    children_buttons_per_row = Column(Integer, nullable=False, default=1, server_default="1")
 
     items = relationship("Goods", back_populates="category", lazy='raise')
     parent = relationship("Categories", remote_side=[id], back_populates="subcategories")
     subcategories = relationship("Categories", back_populates="parent", lazy='raise')
+
+    __table_args__ = (
+        CheckConstraint('children_buttons_per_row IN (1, 2)', name='ck_categories_children_btns'),
+    )
 
     def __init__(self, name: str = None, **kw: Any):
         super().__init__(**kw)

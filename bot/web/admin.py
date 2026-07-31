@@ -250,9 +250,22 @@ class CategoryAdmin(AuditModelView, model=Categories):
     name = "Category"
     name_plural = "Categories"
     icon = "fa-solid fa-folder"
-    form_columns = [Categories.name, Categories.description, Categories.parent]
+    form_columns = [Categories.name, Categories.description, Categories.parent, Categories.children_buttons_per_row]
     form_base_class = CategoryBaseForm
     edit_template = "admin/category_edit.html"
+
+    form_overrides = {
+        "children_buttons_per_row": SelectField
+    }
+    form_args = {
+        "children_buttons_per_row": {
+            "choices": [(1, "1 button per row"), (2, "2 buttons per row")],
+            "coerce": int,
+            "description": "Controls only direct child subcategories.",
+            "label": "Subcategory buttons per row",
+            "default": 1
+        }
+    }
 
     async def insert_model(self, request, data: dict):
         temp_data = getattr(request.state, "temp_form_data", {})
@@ -359,18 +372,27 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
         StoreSettings.main_menu_footer,
         StoreSettings.main_menu_image_path,
         StoreSettings.main_menu_image_url,
+        StoreSettings.root_category_buttons_per_row,
         StoreSettings.root_category_columns,
         StoreSettings.subcategory_columns,
         StoreSettings.product_columns
     ]
 
     form_overrides = {
+        "root_category_buttons_per_row": SelectField,
         "root_category_columns": SelectField,
         "subcategory_columns": SelectField,
         "product_columns": SelectField,
     }
 
     form_args = {
+        "root_category_buttons_per_row": {
+            "choices": [(1, "1 button per row"), (2, "2 buttons per row")],
+            "coerce": int,
+            "description": "Number of buttons per row for top-level categories.",
+            "label": "Root category buttons per row",
+            "default": 1
+        },
         "root_category_columns": {
             "choices": [(1, "1 — One button per row"), (2, "2 — Two buttons per row")],
             "coerce": int,

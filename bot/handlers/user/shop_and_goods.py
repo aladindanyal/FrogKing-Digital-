@@ -302,17 +302,18 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
             display_text = localize("shop.categories.title")
 
     # determine row_width based on settings and context
-    root_columns = (
-        settings.root_category_columns
-        if settings and settings.root_category_columns in (1, 2)
-        else 1
-    )
-    subcategory_columns = (
-        settings.subcategory_columns
-        if settings and settings.subcategory_columns in (1, 2)
-        else 2
-    )
-    row_width = root_columns if parent_id is None else subcategory_columns
+    if parent_id is None:
+        row_width = (
+            settings.root_category_buttons_per_row
+            if settings and getattr(settings, 'root_category_buttons_per_row', None) in (1, 2)
+            else 1
+        )
+    else:
+        row_width = (
+            cat_info.get("children_buttons_per_row", 1)
+            if cat_info and cat_info.get("children_buttons_per_row") in (1, 2)
+            else 1
+        )
 
     # item is (id, name)
     markup = await lazy_paginated_keyboard(
