@@ -225,3 +225,35 @@ async def test_failed_persistence_preserves_previous_image(app, mock_admin_auth,
         assert goods.image_path == "product_images/old.jpg"
 
     os.remove("dummy_fail.jpg")
+
+
+@pytest.mark.asyncio
+async def test_category_parent_string_persistence(app, mock_admin_auth, db_session, test_category):
+    with TestClient(app) as client:
+        # 1. Create with Parent submitted as numeric string
+        data = {
+            "name": "Sub of Test",
+            "parent": str(test_category.id),
+        }
+        res = client.post("/admin/categories/create", data=data, follow_redirects=False)
+        assert res.status_code in (302, 303)
+
+        cats = (await db_session.execute(select(Categories).where(Categories.name == "Sub of Test"))).scalars().all()
+        assert len(cats) == 1
+        assert cats[0].parent_id == test_category.id
+
+@pytest.mark.asyncio
+async def test_failed_create_does_not_persist(app, mock_admin_auth, db_session):
+    with TestClient(app) as client:
+        # Invalid parent string
+        data = {
+            "name": "Should Fail",
+            "parent": "abc",
+        }
+        try:
+            client.post("/admin/categories/create", data=data, follow_redirects=False)
+        except ValueError:
+            pass
+
+        cats = (await db_session.execute(select(Categories).where(Categories.name == "Should Fail"))).scalars().all()
+        assert len(cats) == 0

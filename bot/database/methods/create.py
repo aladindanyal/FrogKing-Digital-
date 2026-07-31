@@ -96,13 +96,35 @@ async def add_values_to_item(item_name: str, value: str, is_infinity: bool) -> b
             return False
 
 
-async def create_category(category_name: str) -> None:
+async def get_next_display_order(parent_id: int | None, s) -> int:
+    """Calculate the next display order for a category within its parent group."""
+    from bot.database.models.main import Categories
+    from sqlalchemy import func, select
+
+    query = select(func.max(Categories.display_order))
+    if parent_id is None:
+        query = query.where(Categories.parent_id.is_(None))
+    else:
+        query = query.where(Categories.parent_id == parent_id)
+
+    result = await s.execute(query)
+    max_order = result.scalar()
+
+    if max_order is None:
+        return 10
+    return max_order + 10
+
+
+async def create_category(category_name: str, parent_id: int | None = None) -> None:
     """Insert category; commit."""
     async with Database().session() as s:
         result = await s.execute(select(exists().where(Categories.name == category_name)))
         if result.scalar():
             return
-        s.add(Categories(name=category_name))
+
+        display_order = await get_next_display_order(parent_id, s)
+        s.add(Categories(name=category_name, parent_id=parent_id, display_order=display_order))
+        await s.commit()
 
     safe_create_task(invalidate_stats_cache())
 
