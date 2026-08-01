@@ -324,7 +324,8 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
         back_cb=back_cb,
         nav_cb_prefix=f"cpage:{parent_id}:",
         row_width=row_width,
-        home_cb="back_to_menu"
+        home_cb="back_to_menu",
+        item_style=lambda _: ButtonStyle.SUCCESS if parent_id is None else ButtonStyle.PRIMARY
     )
 
     async def _send_photo():
