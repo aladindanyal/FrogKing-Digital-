@@ -7,7 +7,7 @@ from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Route, Mount
 from sqlalchemy import text
@@ -579,6 +579,8 @@ class GoodsBaseForm(Form):
         ("2880", "48 hours"),
         ("custom", "Custom")
     ], validate_choice=False, render_kw={"class": "form-select", "id": "eta_preset"})
+    is_enabled = BooleanField("Enabled in Shop", render_kw={"class": "form-check-input"})
+
 
     def process(self, formdata=None, obj=None, data=None, **kwargs):
         if obj and not formdata:
@@ -597,14 +599,16 @@ class GoodsBaseForm(Form):
         super().process(formdata, obj, data, **kwargs)
 
 class GoodsAdmin(AuditModelView, model=Goods):
-    column_list = [Goods.id, Goods.name, Goods.price, Goods.category_id, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
+    column_list = [Goods.id, Goods.name, Goods.price, Goods.is_enabled, Goods.category_id, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
     column_searchable_list = [Goods.name]
-    column_sortable_list = [Goods.id, Goods.name, Goods.price, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
+    column_sortable_list = [Goods.id, Goods.name, Goods.price, Goods.is_enabled, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
     form_columns = [
         Goods.name, Goods.price, Goods.description, Goods.category,
+        Goods.is_enabled,
         Goods.fulfillment_mode, Goods.fulfillment_eta_minutes,
         Goods.is_popular_deal, Goods.popular_deal_order
     ]
+
     form_base_class = GoodsBaseForm
     create_template = "admin/goods_create.html"
     edit_template = "admin/goods_edit.html"
@@ -630,7 +634,9 @@ class GoodsAdmin(AuditModelView, model=Goods):
             "input_intro_en": data.get("input_intro_en"),
             "input_intro_ar": data.get("input_intro_ar"),
             "eta_preset": data.get("eta_preset"),
+            "is_enabled": data.get("is_enabled"),
         })
+
         request.state.temp_form_data = temp_data
         model_data = dict(data)
         model_data.pop("manual_instr_en", None)
@@ -640,6 +646,13 @@ class GoodsAdmin(AuditModelView, model=Goods):
         model_data.pop("eta_preset", None)
         model_data.pop("image_upload", None)
         model_data.pop("remove_image", None)
+
+        is_enabled = temp_data.get("is_enabled")
+        if is_enabled is None:
+            is_enabled = data.pop("is_enabled", None)
+        if is_enabled is not None:
+            model_data["is_enabled"] = is_enabled
+
         try:
             return await super().insert_model(request, model_data)
         except Exception as e:
@@ -657,7 +670,9 @@ class GoodsAdmin(AuditModelView, model=Goods):
             "input_intro_en": data.get("input_intro_en"),
             "input_intro_ar": data.get("input_intro_ar"),
             "eta_preset": data.get("eta_preset"),
+            "is_enabled": data.get("is_enabled"),
         })
+
         request.state.temp_form_data = temp_data
         model_data = dict(data)
         model_data.pop("manual_instr_en", None)
@@ -667,7 +682,15 @@ class GoodsAdmin(AuditModelView, model=Goods):
         model_data.pop("eta_preset", None)
         model_data.pop("image_upload", None)
         model_data.pop("remove_image", None)
+
+        is_enabled = temp_data.get("is_enabled")
+        if is_enabled is None:
+            is_enabled = data.pop("is_enabled", None)
+        if is_enabled is not None:
+            model_data["is_enabled"] = is_enabled
+
         try:
+
             return await super().update_model(request, pk, model_data)
         except Exception as e:
             rollback = getattr(request.state, "product_image_to_rollback", None)
@@ -797,7 +820,7 @@ class GoodsAdmin(AuditModelView, model=Goods):
 
             # 2. Block if referenced by commercial history
             if has_order_item or has_bought_goods or has_consumed_draft:
-                raise HTTPException(status_code=400, detail="Cannot delete product: it is referenced by existing commercial history (orders or purchases).")
+                raise HTTPException(status_code=400, detail="Cannot delete this product because it is referenced by historical orders. Disable the product instead to hide it from the shop.")
 
             # 3. Clean up temporary records that don't cascade natively
             await session.execute(
@@ -1419,6 +1442,41 @@ class ShopAdmin(Admin):
                     new_items.append((k, v))
             request._form = FormData(new_items)
         return await super()._handle_form_data(request, obj)
+
+    async def delete(self, request: Request) -> Response:
+        identity = request.path_params.get("identity")
+        if identity == "goods":
+            params = request.query_params.get("pks", "")
+            pks = params.split(",") if params else []
+            if len(pks) > 1:
+                from bot.database import Database
+                from bot.database.models import OrderItem, BoughtGoods
+                from bot.database.models.main import CheckoutIntakeDraft
+                from sqlalchemy import select
+                from starlette.exceptions import HTTPException
+                model_view = self._find_model_view(identity)
+                async with Database().session() as session:
+                    for pk in pks:
+                        model = await model_view.get_object_for_delete(pk)
+                        if not model:
+                            continue
+                        has_order_item = (await session.execute(
+                            select(OrderItem).where(OrderItem.item_id == model.id).limit(1)
+                        )).scalar_one_or_none()
+                        has_bought_goods = (await session.execute(
+                            select(BoughtGoods).where(BoughtGoods.item_name == model.name).limit(1)
+                        )).scalar_one_or_none()
+                        has_consumed_draft = (await session.execute(
+                            select(CheckoutIntakeDraft).where(
+                                CheckoutIntakeDraft.goods_id == model.id,
+                                CheckoutIntakeDraft.status == 'consumed'
+                            ).limit(1)
+                        )).scalar_one_or_none()
+
+                        if has_order_item or has_bought_goods or has_consumed_draft:
+                            raise HTTPException(status_code=400, detail="Cannot delete products: at least one selected product is referenced by existing commercial history (orders or purchases). Disable the product instead to hide it from the shop.")
+        return await super().delete(request)
+
 # App Factory
 def create_admin_app() -> Starlette:
 
@@ -1432,6 +1490,16 @@ def create_admin_app() -> Starlette:
     ] + fulfillment_routes + export_routes
 
     app = Starlette(routes=routes)
+
+    from starlette.exceptions import HTTPException
+    from starlette.responses import PlainTextResponse
+
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        return PlainTextResponse(str(exc.detail), status_code=exc.status_code)
+
+    app.add_exception_handler(HTTPException, http_exception_handler)
+
+
     app.add_middleware(SessionMiddleware, secret_key=EnvKeys.SECRET_KEY, max_age=1800)
 
     auth_backend = AdminAuth(secret_key=EnvKeys.SECRET_KEY)
@@ -1442,6 +1510,7 @@ def create_admin_app() -> Starlette:
         title="Telegram Shop Admin",
         templates_dir="bot/web/templates",
     )
+    admin.admin.add_exception_handler(HTTPException, http_exception_handler)
     app.state.admin = admin
 
     admin.add_view(UserAdmin)
