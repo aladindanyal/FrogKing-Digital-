@@ -47,9 +47,9 @@ async def query_items_in_category(category_id: int, offset: int = 0, limit: int 
     """Query items in category with pagination, returning (id, name) or (id, name, fulfillment_mode) tuples"""
     async with Database().session() as s:
         if include_fulfillment_mode:
-            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.category_id == category_id)
+            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.category_id == category_id, Goods.is_enabled == True)
         else:
-            query = select(Goods.id, Goods.name).where(Goods.category_id == category_id)
+            query = select(Goods.id, Goods.name).where(Goods.category_id == category_id, Goods.is_enabled == True)
 
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))
@@ -68,9 +68,9 @@ async def query_popular_deals(offset: int = 0, limit: int = 10, count_only: bool
     """Query popular deals with pagination"""
     async with Database().session() as s:
         if include_fulfillment_mode:
-            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.is_popular_deal == True)
+            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.is_popular_deal == True, Goods.is_enabled == True)
         else:
-            query = select(Goods.id, Goods.name).where(Goods.is_popular_deal == True)
+            query = select(Goods.id, Goods.name).where(Goods.is_popular_deal == True, Goods.is_enabled == True)
 
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))

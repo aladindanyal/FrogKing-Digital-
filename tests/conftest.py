@@ -122,34 +122,40 @@ async def dispose_test_database(setup_test_database):
     if Database._instance and hasattr(Database._instance, "engine"):
         await Database().dispose()
 
+async def _purge_test_database():
+    from bot.database.main import Database
+    db = Database()
+
+    if db.engine.name != "sqlite":
+        raise RuntimeError("Database cleanup is only permitted on SQLite test databases.")
+
+    async with db.session() as s:
+        await s.rollback()
+
+    async with db.engine.begin() as conn:
+        from sqlalchemy import text
+        for table in reversed(Database.BASE.metadata.sorted_tables):
+            if table.name == "roles":
+                await conn.execute(text("DELETE FROM roles WHERE name NOT IN ('USER', 'ADMIN', 'OWNER')"))
+            else:
+                await conn.execute(table.delete())
+
+        try:
+            await conn.execute(text("DELETE FROM sqlite_sequence"))
+        except Exception:
+            pass
+
 @pytest.fixture(autouse=True)
 async def db_cleanup(setup_test_database):
     """
     Clean all data between tests by deleting rows from all tables
-    (except roles which are session-scoped).
+    (except built-in roles).
     """
-    yield
-
-    from bot.database.main import Database
-    from bot.database.models.main import (
-        ReferralEarnings, BoughtGoods, Operations, Payments,
-        ItemValues, Goods, Categories, User, Role, ProductCustomerField
-    )
-
-    db = Database()
-    async with db.session() as s:
-        # Delete in FK order
-        await s.execute(delete(ReferralEarnings))
-        await s.execute(delete(BoughtGoods))
-        await s.execute(delete(Operations))
-        await s.execute(delete(Payments))
-        await s.execute(delete(ItemValues))
-        await s.execute(delete(ProductCustomerField))
-        await s.execute(delete(Goods))
-        await s.execute(delete(Categories))
-        await s.execute(delete(User))
-        # Delete custom roles (keep built-in)
-        await s.execute(delete(Role).where(Role.name.notin_(['USER', 'ADMIN', 'OWNER'])))
+    await _purge_test_database()
+    try:
+        yield
+    finally:
+        await _purge_test_database()
 
 
 @pytest.fixture(autouse=True)

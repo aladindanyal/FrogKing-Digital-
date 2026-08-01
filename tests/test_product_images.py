@@ -43,13 +43,19 @@ def create_dummy_image(ext="jpg"):
     return buf.getvalue()
 
 @pytest.fixture
-def managed_root():
-    path = "/app/data/product_images"
-    os.makedirs(path, exist_ok=True)
-    yield path
-    # cleanup after tests
-    for f in os.listdir(path):
-        os.remove(os.path.join(path, f))
+def managed_root(monkeypatch):
+    import tempfile
+    from bot.misc.env import EnvKeys
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Patch the environment key where the app reads the path
+        monkeypatch.setattr(EnvKeys, "PRODUCT_IMAGES_ROOT", tmpdirname)
+
+        if EnvKeys.PRODUCT_IMAGES_ROOT.startswith("/app/data"):
+            raise RuntimeError("Test path still points to /app/data!")
+
+        yield tmpdirname
+
 
 @pytest.mark.asyncio
 async def test_invalid_image_upload_rejected():

@@ -76,7 +76,7 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     current_quantity = data.get('item_quantity', 1)
 
     item_info_data = await get_item_info_cached(item_name)
-    if not item_info_data:
+    if not item_info_data or not item_info_data.get("is_enabled", True):
         if isinstance(target, CallbackQuery):
             await target.answer(localize("shop.item.not_found"), show_alert=True)
         else:

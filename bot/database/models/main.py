@@ -224,6 +224,8 @@ class Goods(Database.BASE):
     is_popular_deal = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     popular_deal_order = Column(Integer, nullable=True)
     image_path = Column(String(255), nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+
 
     __table_args__ = (
         CheckConstraint("fulfillment_mode IN ('instant', 'manual')", name='ck_goods_fulfillment_mode'),
