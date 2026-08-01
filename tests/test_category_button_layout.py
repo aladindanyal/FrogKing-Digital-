@@ -4,6 +4,7 @@ from bot.database.main import Database
 from bot.database.models import Categories
 from bot.database.models.main import StoreSettings
 from unittest.mock import AsyncMock, patch, MagicMock
+from aiogram.enums import ButtonStyle
 
 @pytest.fixture
 def make_callback_query():
@@ -112,8 +113,10 @@ async def test_root_shop_layout(make_callback_query, mock_fsm):
             # Row width 1 -> 2 items + nav rows
             assert len(kb.inline_keyboard[0]) == 1
             assert kb.inline_keyboard[0][0].text == "Cat A"
+            assert kb.inline_keyboard[0][0].style == ButtonStyle.SUCCESS
             assert len(kb.inline_keyboard[1]) == 1
             assert kb.inline_keyboard[1][0].text == "Cat B"
+            assert kb.inline_keyboard[1][0].style == ButtonStyle.SUCCESS
 
     call.message.edit_text.reset_mock()
 
@@ -134,9 +137,12 @@ async def test_root_shop_layout(make_callback_query, mock_fsm):
             # Row width 2 -> 2 items in row 0, 1 item in row 1
             assert len(kb.inline_keyboard[0]) == 2
             assert kb.inline_keyboard[0][0].text == "Cat A"
+            assert kb.inline_keyboard[0][0].style == ButtonStyle.SUCCESS
             assert kb.inline_keyboard[0][1].text == "Cat B"
+            assert kb.inline_keyboard[0][1].style == ButtonStyle.SUCCESS
             assert len(kb.inline_keyboard[1]) == 1
             assert kb.inline_keyboard[1][0].text == "Cat C"
+            assert kb.inline_keyboard[1][0].style == ButtonStyle.SUCCESS
 
 @pytest.mark.asyncio
 async def test_nested_subcategories_layout(make_callback_query, mock_fsm):
@@ -164,9 +170,12 @@ async def test_nested_subcategories_layout(make_callback_query, mock_fsm):
 
                     assert len(kb.inline_keyboard[0]) == 2
                     assert kb.inline_keyboard[0][0].text == "Sub A"
+                    assert kb.inline_keyboard[0][0].style == ButtonStyle.PRIMARY
                     assert kb.inline_keyboard[0][1].text == "Sub B"
+                    assert kb.inline_keyboard[0][1].style == ButtonStyle.PRIMARY
                     assert len(kb.inline_keyboard[1]) == 1
                     assert kb.inline_keyboard[1][0].text == "Sub C"
+                    assert kb.inline_keyboard[1][0].style == ButtonStyle.PRIMARY
 
 @pytest.mark.asyncio
 async def test_products_and_mixed_layout(make_callback_query, mock_fsm):
