@@ -160,6 +160,18 @@ class StoreSettings(Database.BASE):
     main_menu_image_path = Column(String(500), nullable=True)
     main_menu_image_url = Column(String(500), nullable=True)
     main_menu_footer = Column(String(255), nullable=True)
+
+    shop_root_title_en = Column(String(255), nullable=True)
+    shop_root_title_ar = Column(String(255), nullable=True)
+    shop_root_description_en = Column(Text, nullable=True)
+    shop_root_description_ar = Column(Text, nullable=True)
+    main_menu_title_en = Column(String(255), nullable=True)
+    main_menu_title_ar = Column(String(255), nullable=True)
+    main_menu_description_en = Column(Text, nullable=True)
+    main_menu_description_ar = Column(Text, nullable=True)
+    main_menu_footer_en = Column(String(255), nullable=True)
+    main_menu_footer_ar = Column(String(255), nullable=True)
+
     root_category_columns = Column(Integer, nullable=False, default=1, server_default="1")
     subcategory_columns = Column(Integer, nullable=False, default=2, server_default="2")
     product_columns = Column(Integer, nullable=False, default=1, server_default="1")
@@ -190,6 +202,12 @@ class Categories(Database.BASE):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True, nullable=False)
     description = Column(Text, nullable=True)
+
+    name_en = Column(String(100), nullable=True)
+    name_ar = Column(String(100), nullable=True)
+    description_en = Column(Text, nullable=True)
+    description_ar = Column(Text, nullable=True)
+
     parent_id = Column(Integer, ForeignKey('categories.id', ondelete="SET NULL"), nullable=True, index=True)
     image_path = Column(String(255), nullable=True)
     children_buttons_per_row = Column(Integer, nullable=False, default=1, server_default="1")
@@ -219,6 +237,12 @@ class Goods(Database.BASE):
     name = Column(String(100), unique=True, nullable=False)
     price = Column(Numeric(12, 2), nullable=False)
     description = Column(Text, nullable=False)
+
+    name_en = Column(String(100), nullable=True)
+    name_ar = Column(String(100), nullable=True)
+    description_en = Column(Text, nullable=True)
+    description_ar = Column(Text, nullable=True)
+
     category_id = Column(Integer, ForeignKey('categories.id', ondelete="CASCADE"), nullable=False, index=True)
     fulfillment_mode = Column(String(20), nullable=False, default="instant", server_default="instant")
     fulfillment_eta_minutes = Column(Integer, nullable=True)
