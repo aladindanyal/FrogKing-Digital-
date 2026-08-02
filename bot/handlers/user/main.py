@@ -453,11 +453,26 @@ async def language_callback(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("set_lang_"))
 async def set_lang_callback(call: CallbackQuery, state: FSMContext):
-    await answer_callback_safe(call)
-    lang = call.data.split("_")[2]
+    from bot.i18n.main import current_locale, normalize_locale, is_supported
+    from bot.database.methods import update_user_language
+    
+    raw_lang = call.data.split("_")[2]
+    lang = normalize_locale(raw_lang)
+    
+    if not lang or not is_supported(lang):
+        await answer_callback_safe(call, localize("language.unsupported", default="Language not supported!"), show_alert=True)
+        return
+
+    # Update DB
+    success = await update_user_language(call.from_user.id, lang)
+    if not success:
+        await answer_callback_safe(call, localize("errors.general", default="An error occurred!"), show_alert=True)
+        return
+
+    # Legacy FSM update
     await state.update_data(lang=lang)
 
-    from bot.i18n.main import current_locale
+    # Immediately update context
     current_locale.set(lang)
 
     lang_names = {

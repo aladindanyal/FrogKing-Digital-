@@ -148,3 +148,17 @@ async def toggle_promo_code(promo_id: int) -> bool | None:
             return None
         promo.is_active = not promo.is_active
         return promo.is_active
+
+
+async def update_user_language(telegram_id: int, language_code: str | None) -> bool:
+    """Update user's language code and commit."""
+    async with Database().session() as s:
+        result = await s.execute(select(User).where(User.telegram_id == telegram_id))
+        user = result.scalars().first()
+        if user:
+            user.language_code = language_code
+            safe_create_task(invalidate_user_cache(telegram_id))
+            from bot.database.methods.read import invalidate_lang_cache
+            safe_create_task(invalidate_lang_cache(telegram_id))
+            return True
+        return False
