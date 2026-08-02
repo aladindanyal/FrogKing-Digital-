@@ -108,6 +108,7 @@ class User(Database.BASE):
     referral_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
     registration_date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     is_blocked = Column(Boolean, default=False, index=True)
+    language_code = Column(String(16), nullable=True)
     user_operations = relationship("Operations", back_populates="user_telegram_id", lazy='raise')
     user_goods = relationship("BoughtGoods", back_populates="user_telegram_id", lazy='raise')
 
@@ -130,7 +131,7 @@ class User(Database.BASE):
     )
 
     def __init__(self, telegram_id: int = None, registration_date: datetime.datetime = None, balance=None,
-                 referral_id=None, role_id: int = None, **kw: Any):
+                 referral_id=None, role_id: int = None, language_code: str = None, **kw: Any):
         super().__init__(**kw)
         if telegram_id is not None:
             self.telegram_id = telegram_id
@@ -142,6 +143,8 @@ class User(Database.BASE):
             self.referral_id = referral_id
         if registration_date is not None:
             self.registration_date = registration_date
+        if language_code is not None:
+            self.language_code = language_code
 
     def __str__(self):
         return str(self.telegram_id)

@@ -44,10 +44,23 @@ def _day_window(date_str: str) -> tuple[datetime.datetime, datetime.datetime]:
     end = start + datetime.timedelta(days=1)
     return start, end
 
+@async_cached(ttl=3600, key_prefix="lang")
+async def get_user_language_cached(telegram_id: int) -> str | None:
+    """Fetch user's language_code from the DB."""
+    async with Database().session() as s:
+        result = await s.execute(select(User.language_code).where(User.telegram_id == telegram_id))
+        return result.scalar_one_or_none()
+
 
 def _obj_to_dict(obj, model) -> dict:
     """Convert an ORM object to a dict of column values."""
     return {c.key: getattr(obj, c.key) for c in model.__table__.columns}
+
+
+async def invalidate_lang_cache(telegram_id: int) -> None:
+    cache = get_cache_manager()
+    if cache:
+        await cache.delete(f"lang:{telegram_id}")
 
 
 # --- Async implementations ---
