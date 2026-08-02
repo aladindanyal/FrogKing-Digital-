@@ -287,7 +287,38 @@ class CategoryAdmin(AuditModelView, model=Categories):
     name = "Category"
     name_plural = "Categories"
     icon = "fa-solid fa-folder"
-    form_columns = [Categories.name, Categories.description, Categories.parent, Categories.children_buttons_per_row, Categories.display_order]
+
+    column_details_list = [
+        Categories.id,
+        Categories.name,
+        Categories.name_en,
+        Categories.name_ar,
+        Categories.description,
+        Categories.description_en,
+        Categories.description_ar,
+        Categories.parent_id,
+        Categories.image_path,
+        Categories.children_buttons_per_row,
+        Categories.display_order,
+    ]
+    column_labels = {
+        Categories.name_en: "Name (English)",
+        Categories.name_ar: "Name (Arabic)",
+        Categories.description_en: "Description (English)",
+        Categories.description_ar: "Description (Arabic)",
+    }
+    form_columns = [
+        Categories.name,
+        Categories.name_en,
+        Categories.name_ar,
+        Categories.description,
+        Categories.description_en,
+        Categories.description_ar,
+        Categories.parent,
+        Categories.children_buttons_per_row,
+        Categories.display_order,
+    ]
+
     form_base_class = CategoryBaseForm
     edit_template = "admin/category_edit.html"
 
@@ -422,25 +453,67 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
     can_create = False
     can_delete = False
 
-    from sqladmin.fields import FileField
-    from starlette.datastructures import UploadFile
-    import os
-    import shutil
-    import uuid
-
+    column_details_list = [
+        StoreSettings.id,
+        StoreSettings.shop_root_title,
+        StoreSettings.shop_root_title_en,
+        StoreSettings.shop_root_title_ar,
+        StoreSettings.shop_root_description,
+        StoreSettings.shop_root_description_en,
+        StoreSettings.shop_root_description_ar,
+        StoreSettings.main_menu_title,
+        StoreSettings.main_menu_title_en,
+        StoreSettings.main_menu_title_ar,
+        StoreSettings.main_menu_description,
+        StoreSettings.main_menu_description_en,
+        StoreSettings.main_menu_description_ar,
+        StoreSettings.main_menu_image_path,
+        StoreSettings.main_menu_image_url,
+        StoreSettings.main_menu_footer,
+        StoreSettings.main_menu_footer_en,
+        StoreSettings.main_menu_footer_ar,
+        StoreSettings.root_category_columns,
+        StoreSettings.subcategory_columns,
+        StoreSettings.product_columns,
+        StoreSettings.root_category_buttons_per_row,
+    ]
+    column_labels = {
+        StoreSettings.shop_root_title_en: "Shop Root Title (English)",
+        StoreSettings.shop_root_title_ar: "Shop Root Title (Arabic)",
+        StoreSettings.shop_root_description_en: "Shop Root Description (English)",
+        StoreSettings.shop_root_description_ar: "Shop Root Description (Arabic)",
+        StoreSettings.main_menu_title_en: "Main Menu Title (English)",
+        StoreSettings.main_menu_title_ar: "Main Menu Title (Arabic)",
+        StoreSettings.main_menu_description_en: "Main Menu Description (English)",
+        StoreSettings.main_menu_description_ar: "Main Menu Description (Arabic)",
+        StoreSettings.main_menu_footer_en: "Main Menu Footer (English)",
+        StoreSettings.main_menu_footer_ar: "Main Menu Footer (Arabic)",
+    }
     form_columns = [
         StoreSettings.shop_root_title,
+        StoreSettings.shop_root_title_en,
+        StoreSettings.shop_root_title_ar,
         StoreSettings.shop_root_description,
+        StoreSettings.shop_root_description_en,
+        StoreSettings.shop_root_description_ar,
         StoreSettings.main_menu_title,
+        StoreSettings.main_menu_title_en,
+        StoreSettings.main_menu_title_ar,
         StoreSettings.main_menu_description,
+        StoreSettings.main_menu_description_en,
+        StoreSettings.main_menu_description_ar,
         StoreSettings.main_menu_footer,
+        StoreSettings.main_menu_footer_en,
+        StoreSettings.main_menu_footer_ar,
         StoreSettings.main_menu_image_path,
         StoreSettings.main_menu_image_url,
         StoreSettings.root_category_buttons_per_row,
         StoreSettings.root_category_columns,
         StoreSettings.subcategory_columns,
-        StoreSettings.product_columns
+        StoreSettings.product_columns,
     ]
+
+    from sqladmin.fields import FileField
 
     form_overrides = {
         "root_category_buttons_per_row": SelectField,
@@ -602,11 +675,46 @@ class GoodsAdmin(AuditModelView, model=Goods):
     column_list = [Goods.id, Goods.name, Goods.price, Goods.is_enabled, Goods.category_id, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
     column_searchable_list = [Goods.name]
     column_sortable_list = [Goods.id, Goods.name, Goods.price, Goods.is_enabled, Goods.fulfillment_mode, Goods.is_popular_deal, Goods.popular_deal_order]
-    form_columns = [
-        Goods.name, Goods.price, Goods.description, Goods.category,
+
+    column_details_list = [
+        Goods.id,
+        Goods.name,
+        Goods.name_en,
+        Goods.name_ar,
+        Goods.price,
+        Goods.description,
+        Goods.description_en,
+        Goods.description_ar,
+        Goods.category_id,
+        Goods.fulfillment_mode,
+        Goods.fulfillment_eta_minutes,
+        Goods.manual_instructions_i18n,
+        Goods.customer_input_intro_i18n,
+        Goods.is_popular_deal,
+        Goods.popular_deal_order,
+        Goods.image_path,
         Goods.is_enabled,
-        Goods.fulfillment_mode, Goods.fulfillment_eta_minutes,
-        Goods.is_popular_deal, Goods.popular_deal_order
+    ]
+    column_labels = {
+        Goods.name_en: "Name (English)",
+        Goods.name_ar: "Name (Arabic)",
+        Goods.description_en: "Description (English)",
+        Goods.description_ar: "Description (Arabic)",
+    }
+    form_columns = [
+        Goods.name,
+        Goods.name_en,
+        Goods.name_ar,
+        Goods.price,
+        Goods.description,
+        Goods.description_en,
+        Goods.description_ar,
+        Goods.category,
+        Goods.is_enabled,
+        Goods.fulfillment_mode,
+        Goods.fulfillment_eta_minutes,
+        Goods.is_popular_deal,
+        Goods.popular_deal_order,
     ]
 
     form_base_class = GoodsBaseForm
