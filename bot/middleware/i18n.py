@@ -15,7 +15,7 @@ class I18nMiddleware(BaseMiddleware):
         user = None
         if isinstance(event, (Message, CallbackQuery)):
             user = event.from_user
-            
+
         lang = None
 
         # 1. DB User Language
@@ -42,7 +42,7 @@ class I18nMiddleware(BaseMiddleware):
         # 4. Default Locale
         if not lang:
             lang = DEFAULT_LOCALE
-            
+
         token = current_locale.set(lang)
         try:
             return await handler(event, data)

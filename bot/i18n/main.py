@@ -34,18 +34,18 @@ def get_locale() -> str:
     """
     loc = current_locale.get()
     norm_loc = normalize_locale(loc)
-    
+
     if norm_loc and norm_loc in TRANSLATIONS:
         return norm_loc
-        
+
     env_loc = normalize_locale(EnvKeys.BOT_LOCALE)
     if env_loc and env_loc in TRANSLATIONS:
         return env_loc
-        
+
     norm_default = normalize_locale(DEFAULT_LOCALE)
     if norm_default and norm_default in TRANSLATIONS:
         return norm_default
-        
+
     # Safe fallback if DEFAULT_LOCALE is misconfigured
     if TRANSLATIONS:
         return next(iter(TRANSLATIONS))
@@ -59,12 +59,12 @@ def localize(key: str, /, **kwargs: Any) -> str:
     loc = get_locale()
 
     text = TRANSLATIONS.get(loc, {}).get(key)
-    
+
     if text is None:
         norm_default = normalize_locale(DEFAULT_LOCALE)
         if norm_default in TRANSLATIONS:
             text = TRANSLATIONS.get(norm_default, {}).get(key)
-            
+
     if text is None:
         for catalog in TRANSLATIONS.values():
             if key in catalog:

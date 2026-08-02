@@ -455,10 +455,10 @@ async def language_callback(call: CallbackQuery, state: FSMContext):
 async def set_lang_callback(call: CallbackQuery, state: FSMContext):
     from bot.i18n.main import current_locale, normalize_locale, is_supported
     from bot.database.methods import update_user_language
-    
+
     raw_lang = call.data.split("_")[2]
     lang = normalize_locale(raw_lang)
-    
+
     if not lang or not is_supported(lang):
         await answer_callback_safe(call, localize("language.unsupported", default="Language not supported!"), show_alert=True)
         return
