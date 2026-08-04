@@ -203,16 +203,20 @@ async def buy_item_transaction(
 
                 # 7. Create Orders
                 from bot.database.methods.orders import create_order_with_item
+                from bot.i18n.dynamic import get_localized_field
 
                 subtotal = price * quantity
                 discount_total = (price - final_price) * quantity if discount_info else Decimal("0.00")
                 total = total_final_price
 
+                loc_product_name = get_localized_field(goods, "name") or item_name
+                loc_product_desc = get_localized_field(goods, "description")
+
                 order, order_item = await create_order_with_item(
                     session=s,
                     user_id=telegram_id,
                     item_id=goods.id,
-                    product_name=item_name,
+                    product_name=loc_product_name,
                     quantity=quantity,
                     unit_price=float(price),
                     subtotal=float(subtotal),
@@ -220,7 +224,7 @@ async def buy_item_transaction(
                     total=float(total),
                     currency=EnvKeys.PAY_CURRENCY,
                     promo_code=promo_code,
-                    product_description=goods.description
+                    product_description=loc_product_desc
                 )
 
                 order.paid_at = datetime.now(timezone.utc)
@@ -573,11 +577,17 @@ async def checkout_cart_transaction(user_id: int) -> tuple[bool, str, list | Non
                         final_price = final_price.quantize(Decimal("0.01"))
                         promos_to_record.append(promo)
 
+                    from bot.i18n.dynamic import get_localized_field
+                    loc_product_name = get_localized_field(goods, "name") or goods.name
+                    loc_product_desc = get_localized_field(goods, "description")
+
                     purchases.append({
                         'cart_item': ci,
                         'goods': goods,
                         'item_value': item_value,
                         'price': final_price,
+                        'loc_product_name': loc_product_name,
+                        'loc_product_desc': loc_product_desc,
                     })
                     total_price += final_price
 
@@ -603,7 +613,7 @@ async def checkout_cart_transaction(user_id: int) -> tuple[bool, str, list | Non
                         await s.delete(p['item_value'])
 
                     bought_item = BoughtGoods(
-                        name=p['goods'].name,
+                        name=p['loc_product_name'],
                         value=p['item_value'].value,
                         price=p['price'],
                         buyer_id=user_id,

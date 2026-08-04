@@ -26,7 +26,8 @@ async def query_categories(parent_id: int | None = None, offset: int = 0, limit:
             .offset(offset)
             .limit(limit)
         )
-        return [(row.id, row.name) for row in result.scalars().all()]
+        from bot.i18n.dynamic import NormalizedDynamicItem
+        return [NormalizedDynamicItem((row.id, row.name), row) for row in result.scalars().all()]
 
 
 async def check_category_has_subcategories(category_id: int) -> bool:
@@ -47,9 +48,9 @@ async def query_items_in_category(category_id: int, offset: int = 0, limit: int 
     """Query items in category with pagination, returning (id, name) or (id, name, fulfillment_mode) tuples"""
     async with Database().session() as s:
         if include_fulfillment_mode:
-            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.category_id == category_id, Goods.is_enabled == True)
+            query = select(Goods).where(Goods.category_id == category_id, Goods.is_enabled == True)
         else:
-            query = select(Goods.id, Goods.name).where(Goods.category_id == category_id, Goods.is_enabled == True)
+            query = select(Goods).where(Goods.category_id == category_id, Goods.is_enabled == True)
 
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))
@@ -58,19 +59,20 @@ async def query_items_in_category(category_id: int, offset: int = 0, limit: int 
         result = await s.execute(
             query.order_by(Goods.name.asc()).offset(offset).limit(limit)
         )
+        from bot.i18n.dynamic import NormalizedDynamicItem
 
         if include_fulfillment_mode:
-            return [(row.id, row.name, row.fulfillment_mode) for row in result.all()]
-        return [(row.id, row.name) for row in result.all()]
+            return [NormalizedDynamicItem((row.id, row.name, row.fulfillment_mode), row) for row in result.scalars().all()]
+        return [NormalizedDynamicItem((row.id, row.name), row) for row in result.scalars().all()]
 
 
 async def query_popular_deals(offset: int = 0, limit: int = 10, count_only: bool = False, include_fulfillment_mode: bool = False) -> Any:
     """Query popular deals with pagination"""
     async with Database().session() as s:
         if include_fulfillment_mode:
-            query = select(Goods.id, Goods.name, Goods.fulfillment_mode).where(Goods.is_popular_deal == True, Goods.is_enabled == True)
+            query = select(Goods).where(Goods.is_popular_deal == True, Goods.is_enabled == True)
         else:
-            query = select(Goods.id, Goods.name).where(Goods.is_popular_deal == True, Goods.is_enabled == True)
+            query = select(Goods).where(Goods.is_popular_deal == True, Goods.is_enabled == True)
 
         if count_only:
             count_result = await s.execute(select(func.count()).select_from(query.subquery()))
@@ -79,10 +81,11 @@ async def query_popular_deals(offset: int = 0, limit: int = 10, count_only: bool
         result = await s.execute(
             query.order_by(Goods.popular_deal_order.asc().nulls_last(), Goods.name.asc()).offset(offset).limit(limit)
         )
+        from bot.i18n.dynamic import NormalizedDynamicItem
 
         if include_fulfillment_mode:
-            return [(row.id, row.name, row.fulfillment_mode) for row in result.all()]
-        return [(row.id, row.name) for row in result.all()]
+            return [NormalizedDynamicItem((row.id, row.name, row.fulfillment_mode), row) for row in result.scalars().all()]
+        return [NormalizedDynamicItem((row.id, row.name), row) for row in result.scalars().all()]
 
 
 async def query_user_bought_items(user_id: int, offset: int = 0, limit: int = 10, count_only: bool = False) -> Any:

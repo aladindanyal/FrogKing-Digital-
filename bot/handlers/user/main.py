@@ -51,9 +51,16 @@ async def delete_main_menu_hero_safe(bot, chat_id: int, user_id: int) -> None:
 def build_main_menu_text(settings) -> str:
     import html
     from bot.i18n import localize
-    title = settings.main_menu_title if settings and settings.main_menu_title else localize("menu.title")
-    desc = settings.main_menu_description if settings and settings.main_menu_description else ""
-    footer = settings.main_menu_footer if settings and settings.main_menu_footer else ""
+    from bot.i18n.dynamic import get_localized_field
+
+    title_val = get_localized_field(settings, "main_menu_title") if settings else ""
+    title = title_val if title_val else localize("menu.title")
+
+    desc_val = get_localized_field(settings, "main_menu_description") if settings else ""
+    desc = desc_val if desc_val else ""
+
+    footer_val = get_localized_field(settings, "main_menu_footer") if settings else ""
+    footer = footer_val if footer_val else ""
 
     text = f"<blockquote><b>{html.escape(title)}</b></blockquote>"
     if desc:

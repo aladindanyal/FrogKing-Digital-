@@ -60,11 +60,13 @@ def main_menu(role: int, buttons_config: list, locale: str, helper: str | None =
         if btn.action_key == "admin" and not Permission.has_any_admin_perm(role):
             continue
 
-        label = None
-        if locale == "ar":
-            label = btn.label_ar or btn.label_en or fallback_ar.get(btn.action_key) or fallback_en.get(btn.action_key)
-        else:
-            label = btn.label_en or fallback_en.get(btn.action_key)
+        from bot.i18n.dynamic import get_localized_field
+        label = get_localized_field(btn, "label", locale)
+        if not label:
+            if locale == "ar":
+                label = fallback_ar.get(btn.action_key) or fallback_en.get(btn.action_key)
+            else:
+                label = fallback_en.get(btn.action_key)
 
         if not label:
             label = "Unknown"

@@ -133,9 +133,13 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
         has_active_restock_sub=has_active_sub
     )
 
+    from bot.i18n.dynamic import get_localized_field
+    loc_item_name = get_localized_field(item_info_data, "name") or item_name
+    loc_item_desc = get_localized_field(item_info_data, "description") or item_info_data.get('description', '')
+
     text_lines = [
-        f"📦 <b>{item_name}</b>",
-        f"📝 {item_info_data['description']}",
+        f"📦 <b>{loc_item_name}</b>",
+        f"📝 {loc_item_desc}",
         "",
         price_line,
     ]
@@ -277,9 +281,10 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
     if parent_id is None:
         back_cb = "back_to_menu"
 
-        # Root shop text
-        title = settings.shop_root_title if settings and settings.shop_root_title else localize("shop.categories.title")
-        description = settings.shop_root_description if settings and settings.shop_root_description else ""
+        from bot.i18n.dynamic import get_localized_field
+        title_val = get_localized_field(settings, "shop_root_title") if settings else ""
+        title = title_val if title_val else localize("shop.categories.title")
+        description = get_localized_field(settings, "shop_root_description") if settings else ""
 
         display_text = f"<b>{title}</b>\n\n{description}".strip()
     else:
@@ -289,9 +294,12 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
         # Subcategory text
         cat_info = await get_category_by_id(parent_id)
         if cat_info:
-            display_text = f"<b>{cat_info['name']}</b>"
-            if cat_info.get("description"):
-                display_text += f"\n\n{cat_info['description']}"
+            from bot.i18n.dynamic import get_localized_field
+            loc_cat_name = get_localized_field(cat_info, "name") or cat_info['name']
+            display_text = f"<b>{loc_cat_name}</b>"
+            loc_cat_desc = get_localized_field(cat_info, "description")
+            if loc_cat_desc:
+                display_text += f"\n\n{loc_cat_desc}"
             image_path = cat_info.get("image_path")
             if image_path:
                 from bot.misc.utils import resolve_category_image_path
@@ -315,10 +323,11 @@ async def _render_category_page(call: CallbackQuery, state: FSMContext, parent_i
             else 1
         )
 
+    from bot.i18n.dynamic import get_localized_field
     # item is (id, name)
     markup = await lazy_paginated_keyboard(
         paginator=paginator,
-        item_text=lambda cat: cat[1],
+        item_text=lambda cat: get_localized_field(cat, "name") or cat[1],
         item_callback=lambda cat: f"cat:{cat[0]}",
         page=page,
         back_cb=back_cb,
@@ -431,9 +440,12 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
     has_image = False
     image_path = None
     if cat_info:
-        display_text = f"<b>{cat_info['name']}</b>"
-        if cat_info.get("description"):
-            display_text += f"\n\n{cat_info['description']}"
+        from bot.i18n.dynamic import get_localized_field
+        loc_cat_name = get_localized_field(cat_info, "name") or cat_info['name']
+        display_text = f"<b>{loc_cat_name}</b>"
+        loc_cat_desc = get_localized_field(cat_info, "description")
+        if loc_cat_desc:
+            display_text += f"\n\n{loc_cat_desc}"
         image_path = cat_info.get("image_path")
         if image_path:
             from bot.misc.utils import resolve_category_image_path
@@ -446,7 +458,8 @@ async def _render_goods_page(call: CallbackQuery, state: FSMContext, category_id
     settings = await get_store_settings()
 
     def _format_goods_button_text(item: tuple, stock: int) -> str:
-        item_name = item[1]
+        from bot.i18n.dynamic import get_localized_field
+        item_name = get_localized_field(item, "name") or item[1]
         fulfillment_mode = item[2] if len(item) > 2 else "instant"
         name = item_name if len(item_name) <= 40 else item_name[:37] + "..."
         if fulfillment_mode == "manual":

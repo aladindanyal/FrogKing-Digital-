@@ -54,17 +54,5 @@ def get_localized_label(i18n_dict: dict, locale: str) -> str:
     """
     Fallback: requested locale -> English -> first non-empty safe value.
     """
-    if not isinstance(i18n_dict, dict) or not i18n_dict:
-        return ""
-        
-    if locale in i18n_dict and i18n_dict[locale]:
-        return str(i18n_dict[locale])
-        
-    if "en" in i18n_dict and i18n_dict["en"]:
-        return str(i18n_dict["en"])
-        
-    for k, v in i18n_dict.items():
-        if v:
-            return str(v)
-            
-    return ""
+    from bot.i18n.dynamic import get_localized_jsonb
+    return str(get_localized_jsonb(i18n_dict, locale))
