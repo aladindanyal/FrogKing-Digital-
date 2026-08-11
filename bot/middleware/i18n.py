@@ -3,7 +3,7 @@ from aiogram.types import TelegramObject, Message, CallbackQuery
 from typing import Callable, Dict, Any, Awaitable
 from bot.i18n.main import current_locale, normalize_locale, is_supported
 from bot.database.methods.read import get_user_language_cached
-from bot.i18n.strings import DEFAULT_LOCALE
+from bot.i18n.registry import DEFAULT_LOCALE
 
 class I18nMiddleware(BaseMiddleware):
     async def __call__(

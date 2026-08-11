@@ -438,21 +438,16 @@ async def language_callback(call: CallbackQuery, state: FSMContext):
     await answer_callback_safe(call)
     await delete_main_menu_hero_safe(call.bot, call.message.chat.id, call.from_user.id)
     from bot.keyboards.inline import simple_buttons
-    markup = simple_buttons([
-        ("🇺🇸 English", "set_lang_en"),
-        ("🇸🇦 العربية", "set_lang_ar"),
-        ("🇨🇳 中文", "set_lang_zh"),
-        ("🇪🇸 Español", "set_lang_es"),
-        ("🇫🇷 Français", "set_lang_fr"),
-        ("🇩🇪 Deutsch", "set_lang_de"),
-        ("🇵🇹 Português", "set_lang_pt"),
-        ("🇷🇺 Русский", "set_lang_ru"),
-        ("🇹🇷 Türkçe", "set_lang_tr"),
-        ("🇮🇳 हिन्दी", "set_lang_hi"),
-        ("🇮🇩 Bahasa Indonesia", "set_lang_id"),
-        ("🇻🇳 Tiếng Việt", "set_lang_vi"),
-        ("🏠 Home", "back_to_menu")
-    ], per_row=2)
+    from bot.i18n.registry import LOCALE_METADATA, get_enabled_locales
+
+    buttons = []
+    for code in get_enabled_locales():
+        name = LOCALE_METADATA[code]["name"]
+        buttons.append((name, f"set_lang_{code}"))
+
+    buttons.append((localize("btn.to_menu", default="🏠 Home"), "back_to_menu"))
+
+    markup = simple_buttons(buttons, per_row=2)
 
     text = localize("language.choose", default="🌐 Choose your language")
     await safe_edit_or_send(call, text, reply_markup=markup, parse_mode='HTML')
@@ -460,11 +455,12 @@ async def language_callback(call: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("set_lang_"))
 async def set_lang_callback(call: CallbackQuery, state: FSMContext):
-    from bot.i18n.main import current_locale, normalize_locale, is_supported
+    from bot.i18n.main import current_locale, is_supported
+    from bot.i18n.registry import canonicalize_locale, LOCALE_METADATA
     from bot.database.methods import update_user_language
 
-    raw_lang = call.data.split("_")[2]
-    lang = normalize_locale(raw_lang)
+    raw_lang = call.data.split("_", 2)[2]
+    lang = canonicalize_locale(raw_lang)
 
     if not lang or not is_supported(lang):
         await answer_callback_safe(call, localize("language.unsupported", default="Language not supported!"), show_alert=True)
@@ -482,21 +478,7 @@ async def set_lang_callback(call: CallbackQuery, state: FSMContext):
     # Immediately update context
     current_locale.set(lang)
 
-    lang_names = {
-        "en": "English",
-        "ar": "العربية",
-        "zh": "中文",
-        "es": "Español",
-        "fr": "Français",
-        "de": "Deutsch",
-        "pt": "Português",
-        "ru": "Русский",
-        "tr": "Türkçe",
-        "hi": "हिन्दी",
-        "id": "Bahasa Indonesia",
-        "vi": "Tiếng Việt"
-    }
-    lang_name = lang_names.get(lang, lang.upper())
+    lang_name = LOCALE_METADATA.get(lang, {}).get("name", lang.upper())
 
     await answer_callback_safe(call, f"Language updated: {lang_name}")
 

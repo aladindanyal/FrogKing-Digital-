@@ -19,7 +19,7 @@ class TestGetLocale:
             env.BOT_LOCALE = "xx"
             result = get_locale()
 
-        from bot.i18n.strings import DEFAULT_LOCALE
+        from bot.i18n.registry import DEFAULT_LOCALE
         assert result == DEFAULT_LOCALE
 
     def test_locale_stripped_and_lowered(self):

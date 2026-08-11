@@ -1,6 +1,6 @@
 import pytest
 from bot.i18n.main import get_locale, localize, normalize_locale, current_locale
-from bot.i18n.strings import DEFAULT_LOCALE
+from bot.i18n.registry import DEFAULT_LOCALE
 
 def test_default_locale_is_english():
     assert DEFAULT_LOCALE == "en", "The default locale must be strictly English (en)"

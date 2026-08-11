@@ -1,5 +1,3 @@
-DEFAULT_LOCALE = "en"
-
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "ru": {
         "btn.shop": "🛒 Shop",
@@ -1340,3 +1338,5 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.view_product": "🛒 عرض المنتج"
     }
 }
+
+from bot.i18n.registry import DEFAULT_LOCALE

@@ -1,7 +1,8 @@
 import pytest
 import string
 import re
-from bot.i18n.strings import TRANSLATIONS, DEFAULT_LOCALE
+from bot.i18n.strings import TRANSLATIONS
+from bot.i18n.registry import DEFAULT_LOCALE
 
 def extract_placeholders(text: str) -> list[tuple[str, str, str]]:
     """Extracts (field_name, format_spec, conversion) from string templates."""
