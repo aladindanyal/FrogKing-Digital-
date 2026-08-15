@@ -59,7 +59,8 @@ async def _show_cart(call: CallbackQuery):
         discounted = await _resolve_promo_price(price, item.get('promo_code'))
 
         if discounted is not None:
-            lines.append(f"🏷 <b>{item['item_name']}</b> — <s>{price}</s> {discounted} {EnvKeys.PAY_CURRENCY} ({item['promo_code']})")
+            price_str = localize("shop.item.price_discounted", original=price, discounted=discounted, currency=EnvKeys.PAY_CURRENCY, code=item['promo_code'])
+            lines.append(f"📦 <b>{item['item_name']}</b> — {price_str}")
             real_total += discounted
         else:
             lines.append(localize("cart.item", name=item['item_name'], price=price, currency=EnvKeys.PAY_CURRENCY))

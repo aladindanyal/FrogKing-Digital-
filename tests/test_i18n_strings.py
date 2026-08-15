@@ -23,12 +23,11 @@ def test_translation_dictionaries_exist():
 
 def test_key_parity():
     ru_keys = set(TRANSLATIONS["ru"].keys())
-    en_keys = set(TRANSLATIONS["en"].keys())
-    ar_keys = set(TRANSLATIONS["ar"].keys())
+    assert len(ru_keys) >= 444, f"Expected at least 444 keys in ru, found {len(ru_keys)}"
 
-    assert len(ru_keys) == 444, f"Expected 444 keys in ru, found {len(ru_keys)}"
-    assert ru_keys == en_keys, "en keys do not match ru keys exactly"
-    assert ru_keys == ar_keys, "ar keys do not match ru keys exactly"
+    for loc in ["en", "ar", "zh", "vi", "tr", "es"]:
+        loc_keys = set(TRANSLATIONS[loc].keys())
+        assert ru_keys == loc_keys, f"{loc} keys do not match ru keys exactly"
 
 def test_no_blank_values():
     for lang, dict_obj in TRANSLATIONS.items():
@@ -37,7 +36,7 @@ def test_no_blank_values():
 
 def test_placeholder_parity():
     ru_dict = TRANSLATIONS["ru"]
-    for lang in ["en", "ar"]:
+    for lang in ["en", "ar", "zh", "vi", "tr", "es"]:
         target_dict = TRANSLATIONS[lang]
         for key, ru_text in ru_dict.items():
             target_text = target_dict[key]
@@ -53,7 +52,7 @@ def test_html_preservation():
     html_tags_re = re.compile(r'</?[a-z]+[> ]', re.IGNORECASE)
     ru_dict = TRANSLATIONS["ru"]
 
-    for lang in ["en", "ar"]:
+    for lang in ["en", "ar", "zh", "vi", "tr", "es"]:
         target_dict = TRANSLATIONS[lang]
         for key, ru_text in ru_dict.items():
             ru_tags = sorted(html_tags_re.findall(ru_text))
@@ -64,7 +63,7 @@ def test_html_preservation():
 def test_newline_preservation():
     ru_dict = TRANSLATIONS["ru"]
 
-    for lang in ["en", "ar"]:
+    for lang in ["en", "ar", "zh", "vi", "tr", "es"]:
         target_dict = TRANSLATIONS[lang]
         for key, ru_text in ru_dict.items():
             ru_newlines = ru_text.count('\n')

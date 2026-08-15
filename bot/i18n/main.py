@@ -12,11 +12,16 @@ current_locale = contextvars.ContextVar("current_locale", default=None)
 # Re-export them so consumers don't break
 __all__ = ["current_locale", "normalize_locale", "is_supported", "get_locale", "localize"]
 
-def get_locale() -> str:
+def get_locale(_locale: str = None) -> str:
     """
     Get the currently resolved locale.
-    Fallback: current_locale -> BOT_LOCALE -> DEFAULT_LOCALE -> a safe available catalog.
+    Fallback: _locale -> current_locale -> BOT_LOCALE -> DEFAULT_LOCALE -> a safe available catalog.
     """
+    if _locale:
+        norm_loc = normalize_locale(_locale)
+        if norm_loc and norm_loc in TRANSLATIONS:
+            return norm_loc
+
     loc = current_locale.get()
     norm_loc = normalize_locale(loc)
 
@@ -40,7 +45,8 @@ def localize(key: str, /, **kwargs: Any) -> str:
     Get translation by key.
     Fallback: selected enabled locale dictionary -> English dictionary -> raw translation key.
     """
-    loc = get_locale()
+    _locale = kwargs.pop('_locale', None)
+    loc = get_locale(_locale)
 
     text = None
 

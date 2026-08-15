@@ -45,6 +45,7 @@ async def test_render_purchase_success_regression():
         def __init__(self):
             self.answers = []
             self.last_reply_markup = None
+            self.chat = type('Chat', (), {'id': 99998})()
             
         async def answer(self, text, reply_markup=None, parse_mode=None, show_alert=False):
             self.answers.append((text, reply_markup))

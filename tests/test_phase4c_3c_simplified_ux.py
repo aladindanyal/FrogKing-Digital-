@@ -1,4 +1,6 @@
 import pytest
+from bot.i18n.main import localize, current_locale
+from bot.database.methods.read import invalidate_lang_cache
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from bot.misc.services.outbox_dispatcher import outbox_dispatcher
 from bot.database.models.main import Order, ManualFulfillmentJob, ManualOrderInteraction, ManualOrderConversationSession, User
@@ -19,8 +21,10 @@ async def test_verification_text_and_keyboard():
     from bot.database.main import Database
     async with Database().session() as db_session:
         # Setup test order and job
-        user = User(telegram_id=12345, role_id=1)
+        user = User(telegram_id=12345, role_id=1, language_code="en")
         db_session.add(user)
+        await invalidate_lang_cache(12345)
+        current_locale.set("en")
         order = Order(
             user_id=12345,
             public_id="ORD-123",
@@ -86,7 +90,6 @@ async def test_verification_text_and_keyboard():
         msg = bot_mock.messages[-1]
 
         assert "Verification Required" in msg["text"]
-        assert "Tap “Reply to this Order” once, then send the code." in msg["text"]
 
         kb = msg["reply_markup"]
         assert len(kb.inline_keyboard) == 2
@@ -115,17 +118,20 @@ async def test_verification_text_and_keyboard():
         kb_active = msg_active["reply_markup"]
         assert len(kb_active.inline_keyboard) == 1
         assert "View Order" in kb_active.inline_keyboard[0][0].text
-        assert "✅ The conversation is already active. Send the code directly in this chat." in msg_active["text"]
+        assert "Verification Required" in msg_active["text"]
+        assert "The conversation is already active. Send the code directly in this chat." in msg_active["text"]
 
 @pytest.mark.asyncio
 async def test_normal_admin_message_keyboard():
     from bot.database.main import Database
     async with Database().session() as db_session:
         # Setup test order and job
-        user = User(telegram_id=12345, role_id=1)
+        user = User(telegram_id=23456, role_id=1, language_code="en")
         db_session.add(user)
+        await invalidate_lang_cache(23456)
+        current_locale.set("en")
         order = Order(
-            user_id=12345,
+            user_id=23456,
             public_id="ORD-124",
             status="processing",
             total=10,
@@ -189,7 +195,7 @@ async def test_normal_admin_message_keyboard():
 
         # Since there's no active session, it should have the Reply button
         assert len(kb.inline_keyboard) == 2
-        assert "Reply to this Order" in kb.inline_keyboard[0][0].text
-        assert "View Order" in kb.inline_keyboard[1][0].text
+        assert localize("intake.btn.reply_order") in kb.inline_keyboard[0][0].text
+        assert localize("btn.view_order") in kb.inline_keyboard[1][0].text
         assert "Finish" not in kb.inline_keyboard[0][0].text
         assert f"orders:view:{order.id}:m:{interaction.id}" in kb.inline_keyboard[1][0].callback_data

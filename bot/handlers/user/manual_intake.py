@@ -175,7 +175,7 @@ async def start_manual_intake(event: CallbackQuery | Message, state: FSMContext,
                 )
                 from bot.keyboards.inline import back
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=localize("intake.btn.view_order", default="View Existing Order"), callback_data=f"orders:view:{active_order.id}:a")],
+                    [InlineKeyboardButton(text=localize("btn.view_order"), callback_data=f"orders:view:{active_order.id}:a")],
                     [InlineKeyboardButton(text=localize("intake.btn.buy_another", default="Buy Another"), callback_data="intake_buy_another")],
                     [InlineKeyboardButton(text=localize("btn.back", default="Back"), callback_data="shop")]
                 ])

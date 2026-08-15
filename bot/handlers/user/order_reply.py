@@ -269,6 +269,9 @@ async def process_order_reply(message: Message, active_session_id: int):
 
 @router.callback_query(F.data.startswith("orders:source_back:"))
 async def back_to_source(call: CallbackQuery):
+    from bot.database.methods.read import get_user_language_cached
+    user_locale = await get_user_language_cached(call.message.chat.id)
+
     parts = call.data.split(":")
     if len(parts) < 5:
         await call.answer("Invalid callback data", show_alert=True)
@@ -347,8 +350,8 @@ async def back_to_source(call: CallbackQuery):
         )
         fb_kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="View Order", callback_data=f"orders:view:{order.id}:{source_kind}:{source_id}", style=ButtonStyle.PRIMARY),
-                InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
+                InlineKeyboardButton(text=localize("btn.view_order", _locale=user_locale), callback_data=f"orders:view:{order.id}:{source_kind}:{source_id}", style=ButtonStyle.PRIMARY),
+                InlineKeyboardButton(text=localize("btn.to_menu", _locale=user_locale), callback_data="back_to_menu")
             ]
         ])
 
@@ -356,28 +359,28 @@ async def back_to_source(call: CallbackQuery):
             view_callback = f"orders:view:{order.id}:{source_kind}:{source_id}"
             if active_session:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                    [InlineKeyboardButton(text=localize("btn.view_order", _locale=user_locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     note = "\n\n✅ المحادثة فعّالة الآن. أرسل الكود مباشرة داخل المحادثة."
                     text = f"🔐 مطلوب رمز التحقق\n\nبدأنا بمعالجة طلبك.\nيرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n⚠️ للبدء:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم أرسل الكود.\n\nبعد ذلك يمكنك إرسال أي رسائل إضافية مباشرة دون الضغط على زر الرد مرة أخرى.{note}"
                 else:
                     note = "\n\n✅ The conversation is already active. Send the code directly in this chat."
-                    text = f"🔐 Verification Required\n\nWe have started processing your Order.\nPlease send the verification code you received to continue processing your Order.\n\n⚠️ To start:\nTap “Reply to this Order” once, then send the code.\n\nAfter that, you can send any additional messages directly without pressing Reply again.{note}"
+                    text = localize("intake.verification_req", note=note, _locale=user_locale)
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{order.id}_{job.id}", style=ButtonStyle.PRIMARY)],
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                    [InlineKeyboardButton(text=localize("btn.view_order", _locale=user_locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
                 if is_ar:
                     text = f"🔐 مطلوب رمز التحقق\n\nبدأنا بمعالجة طلبك.\nيرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n⚠️ للبدء:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم أرسل الكود.\n\nبعد ذلك يمكنك إرسال أي رسائل إضافية مباشرة دون الضغط على زر الرد مرة أخرى."
                 else:
-                    text = f"🔐 Verification Required\n\nWe have started processing your Order.\nPlease send the verification code you received to continue processing your Order.\n\n⚠️ To start:\nTap “Reply to this Order” once, then send the code.\n\nAfter that, you can send any additional messages directly without pressing Reply again."
+                    text = localize("intake.verification_req", note="", _locale=user_locale)
 
         elif source_kind == "m" and interaction:
             view_callback = f"orders:view:{order.id}:{source_kind}:{source_id}"
             kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                [InlineKeyboardButton(text=localize("btn.view_order", _locale=user_locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
             ])
             text = f"💬 Message About Your Order\n\nOrder ID:\n{order.public_id}\n\n{interaction.safe_preview}"
 
@@ -385,11 +388,11 @@ async def back_to_source(call: CallbackQuery):
             view_callback = f"orders:view:{order.id}:{source_kind}:{source_id}"
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY),
-                    InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
+                    InlineKeyboardButton(text=localize("btn.view_order", _locale=user_locale), callback_data=view_callback, style=ButtonStyle.PRIMARY),
+                    InlineKeyboardButton(text=localize("btn.to_menu", _locale=user_locale), callback_data="back_to_menu")
                 ]
             ])
-            text = f"✅ Order Completed\n\nOrder ID:\n{order.public_id}\n\nProduct:\n{product_name}\n\nYour Order has been completed successfully."
+            text = localize("intake.order_completed", order_id=order.public_id, product_name=product_name, _locale=user_locale)
 
         else:
             text = fb_text

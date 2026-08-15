@@ -124,27 +124,27 @@ class OutboxDispatcher:
         kb = None
         message_text = ""
 
-        from bot.i18n.main import get_locale
-        locale = get_locale()
+        from bot.database.methods.read import get_user_language_cached
+        locale = await get_user_language_cached(telegram_id)
         is_ar = (locale == "ar")
+        from bot.i18n.main import localize
 
         if notif_type == 'comp':
             source_kind = "c"
             view_callback = f"orders:view:{notif.order_id}:{source_kind}:{source_id}"
 
-            from bot.i18n.main import localize
             buttons = [
-                [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                [InlineKeyboardButton(text=localize("btn.view_order", _locale=locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
             ]
 
             # The 'comp' type is canonical for completed manual fulfillment.
-            buttons.append([InlineKeyboardButton(text=localize("orders.leave_review", default="⭐ Leave a Review"), callback_data=f"review:start:{notif.job.order_item_id}:c:{notif.order_id}")])
+            buttons.append([InlineKeyboardButton(text=localize("orders.leave_review", _locale=locale, default="⭐ Leave a Review"), callback_data=f"review:start:{notif.job.order_item_id}:c:{notif.order_id}")])
 
-            buttons.append([InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")])
+            buttons.append([InlineKeyboardButton(text=localize("btn.to_menu", _locale=locale, default="🏠 Home"), callback_data="back_to_menu")])
 
             kb = InlineKeyboardMarkup(inline_keyboard=buttons)
 
-            message_text = f"✅ Order Completed\n\nOrder ID:\n{public_id}\n\nProduct:\n{product_name}\n\nYour Order has been completed successfully."
+            message_text = localize("intake.order_completed", _locale=locale, order_id=public_id, product_name=product_name)
             if interaction and interaction.safe_preview and interaction.safe_preview != "Order completed":
                 message_text += f"\n\n{interaction.safe_preview}"
 
@@ -154,23 +154,16 @@ class OutboxDispatcher:
 
             if is_active:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                    [InlineKeyboardButton(text=localize("btn.view_order", _locale=locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
-                if is_ar:
-                    note = "\n\n✅ المحادثة فعّالة الآن. أرسل الكود مباشرة داخل المحادثة."
-                    message_text = f"🔐 مطلوب رمز التحقق\n\nبدأنا بمعالجة طلبك.\nيرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n⚠️ للبدء:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم أرسل الكود.\n\nبعد ذلك يمكنك إرسال أي رسائل إضافية مباشرة دون الضغط على زر الرد مرة أخرى.{note}"
-                else:
-                    note = "\n\n✅ The conversation is already active. Send the code directly in this chat."
-                    message_text = f"🔐 Verification Required\n\nWe have started processing your Order.\nPlease send the verification code you received to continue processing your Order.\n\n⚠️ To start:\nTap “Reply to this Order” once, then send the code.\n\nAfter that, you can send any additional messages directly without pressing Reply again.{note}"
+                note = "\n\n" + localize("intake.conversation_already_active", _locale=locale)
+                message_text = localize("intake.verification_req", _locale=locale, note=note)
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{notif.order_id}_{notif.fulfillment_job_id}")],
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                    [InlineKeyboardButton(text=localize("intake.btn.reply_order", _locale=locale, default="Reply to this Order"), callback_data=f"reply_order_{notif.order_id}_{notif.fulfillment_job_id}")],
+                    [InlineKeyboardButton(text=localize("btn.view_order", _locale=locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
-                if is_ar:
-                    message_text = f"🔐 مطلوب رمز التحقق\n\nبدأنا بمعالجة طلبك.\nيرجى إرسال رمز التحقق الذي وصلك حتى نتمكن من متابعة تنفيذ الطلب.\n\n⚠️ للبدء:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم أرسل الكود.\n\nبعد ذلك يمكنك إرسال أي رسائل إضافية مباشرة دون الضغط على زر الرد مرة أخرى."
-                else:
-                    message_text = f"🔐 Verification Required\n\nWe have started processing your Order.\nPlease send the verification code you received to continue processing your Order.\n\n⚠️ To start:\nTap “Reply to this Order” once, then send the code.\n\nAfter that, you can send any additional messages directly without pressing Reply again."
+                message_text = localize("intake.verification_req", _locale=locale, note="")
 
         elif notif_type == 'msg':
             source_kind = "m"
@@ -178,21 +171,15 @@ class OutboxDispatcher:
 
             if is_active:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                    [InlineKeyboardButton(text=localize("btn.view_order", _locale=locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
-                if is_ar:
-                    message_text = f"💬 رسالة حول طلبك\n\nرقم الطلب:\n{public_id}\n\n{interaction.safe_preview}\n\n✅ المحادثة فعّالة الآن. يمكنك الرد مباشرة."
-                else:
-                    message_text = f"💬 Message About Your Order\n\nOrder ID:\n{public_id}\n\n{interaction.safe_preview}\n\n✅ The conversation is active. You can reply directly."
+                message_text = localize("intake.msg_about_order_active", _locale=locale, public_id=public_id, preview=interaction.safe_preview)
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="Reply to this Order", callback_data=f"reply_order_{notif.order_id}_{notif.fulfillment_job_id}")],
-                    [InlineKeyboardButton(text="View Order", callback_data=view_callback, style=ButtonStyle.PRIMARY)]
+                    [InlineKeyboardButton(text=localize("intake.btn.reply_order", _locale=locale, default="Reply to this Order"), callback_data=f"reply_order_{notif.order_id}_{notif.fulfillment_job_id}")],
+                    [InlineKeyboardButton(text=localize("btn.view_order", _locale=locale), callback_data=view_callback, style=ButtonStyle.PRIMARY)]
                 ])
-                if is_ar:
-                    message_text = f"💬 رسالة حول طلبك\n\nرقم الطلب:\n{public_id}\n\n{interaction.safe_preview}\n\n⚠️ للرد:\nاضغط زر «الرد على هذا الطلب» مرة واحدة، ثم اكتب رسالتك."
-                else:
-                    message_text = f"💬 Message About Your Order\n\nOrder ID:\n{public_id}\n\n{interaction.safe_preview}\n\n⚠️ To reply:\nTap “Reply to this Order” once, then type your message."
+                message_text = localize("intake.msg_about_order_inactive", _locale=locale, public_id=public_id, preview=interaction.safe_preview)
 
         msg = await self.bot.send_message(chat_id=telegram_id, text=message_text, reply_markup=kb)
         if interaction:

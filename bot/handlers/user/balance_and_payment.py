@@ -537,18 +537,18 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         public_order_id = purchase_data.get('public_order_id', purchase_data['unique_id'])
 
         receipt_header = (
-            f"✅ <b>Order Completed</b>\n\n"
-            f"🧾 <b>Order ID:</b> <code>{public_order_id}</code>\n"
-            f"📦 <b>Product:</b> {sanitize_html(purchase_request.item_name)}\n"
-            f"🔢 <b>Quantity:</b> {purchase_data['quantity']}\n"
-            f"💵 <b>Unit Price:</b> {unit_price} {currency}\n"
+            localize("shop.order_completed") + "\n\n" +
+            localize("shop.order_id", id=f"<code>{public_order_id}</code>") + "\n" +
+            localize("shop.product", name=sanitize_html(purchase_request.item_name)) + "\n" +
+            localize("shop.selected_quantity", quantity=purchase_data['quantity']) + "\n" +
+            localize("shop.unit_price", price=unit_price, currency=currency) + "\n"
         )
         if total_discount > 0:
-            receipt_header += f"🏷 <b>Discount:</b> {total_discount} {currency}\n"
+            receipt_header += localize("shop.discount", discount=total_discount, currency=currency) + "\n"
             
         receipt_header += (
-            f"💰 <b>Total Paid:</b> {total_paid} {currency}\n"
-            f"🕒 <b>Purchased:</b> {purchased_time}\n\n"
+            localize("shop.total_paid", total=total_paid, currency=currency) + "\n" +
+            localize("shop.purchased_at", purchased_time=purchased_time) + "\n\n"
         )
 
         delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])

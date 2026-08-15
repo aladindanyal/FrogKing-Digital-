@@ -88,12 +88,12 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     stock = -1 if has_infinite else quantity
 
     if stock == 0:
-        quantity_line = "📦 <b>Stock Status:</b> ❌ Out of Stock"
+        quantity_line = localize("shop.out_of_stock")
     else:
         quantity_line = (
-            f"📦 <b>Available Stock:</b> ♾ Unlimited"
+            localize("shop.unlimited_stock")
             if has_infinite
-            else f"📦 <b>Available Stock:</b> {quantity}"
+            else localize("shop.available_stock", stock=quantity)
         )
 
     reviews_enabled = EnvKeys.REVIEWS_ENABLED == "1"
@@ -108,10 +108,10 @@ async def _render_item_page(target, state: FSMContext, item_name: str, back_data
     total_price = unit_price * current_quantity
 
     price_line = (
-        f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
-        f"{quantity_line}\n"
-        f"🔢 <b>Selected Quantity:</b> {current_quantity}\n"
-        f"💰 <b>Total:</b> {total_price} {EnvKeys.PAY_CURRENCY}"
+        localize("shop.unit_price", price=unit_price, currency=EnvKeys.PAY_CURRENCY) + "\n" +
+        f"{quantity_line}\n" +
+        localize("shop.selected_quantity", quantity=current_quantity) + "\n" +
+        localize("shop.total", total=total_price, currency=EnvKeys.PAY_CURRENCY)
     )
 
     item_id = data.get('item_id')
@@ -745,7 +745,7 @@ async def qty_quick_handler(call: CallbackQuery, state: FSMContext):
     stock = await select_item_values_amount_cached(item_name)
 
     if not is_infinity and requested_qty > stock:
-        await answer_callback_safe(call, f"Only {stock} items are currently available.", show_alert=True)
+        await answer_callback_safe(call, localize("shop.qty_exceeds_stock", stock=stock), show_alert=True)
         return
 
     await answer_callback_safe(call)
@@ -779,14 +779,14 @@ async def _render_keypad_page(call: CallbackQuery, state: FSMContext, item_name:
 
     is_infinity = await check_value(item_name)
     stock = await select_item_values_amount_cached(item_name)
-    stock_line = "♾ Unlimited" if is_infinity else str(stock)
+    stock_line = localize("shop.unlimited") if is_infinity else str(stock)
 
     text = (
-        f"📦 <b>{item_name}</b>\n\n"
-        f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
-        f"📦 <b>Available Stock:</b> {stock_line}\n\n"
-        f"🔢 <b>Entered Quantity:</b> {qty}\n"
-        f"💰 <b>Total:</b> {total_price} {EnvKeys.PAY_CURRENCY}"
+        f"📦 <b>{item_name}</b>\n\n" +
+        localize("shop.unit_price", price=unit_price, currency=EnvKeys.PAY_CURRENCY) + "\n" +
+        localize("shop.available_stock", stock=stock_line) + "\n\n" +
+        localize("shop.entered_quantity", quantity=qty) + "\n" +
+        localize("shop.total", total=total_price, currency=EnvKeys.PAY_CURRENCY)
     )
 
     await safe_edit_or_send(call, text, reply_markup=numeric_keypad(int(item_id_str)))
@@ -863,7 +863,7 @@ async def qty_keypad_continue_handler(call: CallbackQuery, state: FSMContext):
     qty = data.get('item_quantity', 0)
 
     if qty <= 0:
-        await answer_callback_safe(call, "Quantity must be greater than zero.", show_alert=True)
+        await answer_callback_safe(call, localize("shop.qty_must_be_greater_than_zero", default="Quantity must be greater than zero."), show_alert=True)
         return
 
     await continue_product_checkout(call, state, int(item_id_str), qty)
@@ -914,9 +914,9 @@ async def continue_product_checkout(event: CallbackQuery | Message, state: FSMCo
 
     if is_infinity and quantity > 1000:
         if isinstance(event, CallbackQuery):
-            await answer_callback_safe(event, "Maximum 1000 allowed for unlimited products.", show_alert=True)
+            await answer_callback_safe(event, localize("shop.qty_max_unlimited"), show_alert=True)
         else:
-            await event.answer("Maximum 1000 allowed for unlimited products.")
+            await event.answer(localize("shop.qty_max_unlimited"))
         return
 
     if item_info_data.get("fulfillment_mode") == "manual":
@@ -1001,18 +1001,18 @@ async def _render_checkout_page(event: CallbackQuery | Message, state: FSMContex
     can_purchase = balance_after >= 0
 
     text = (
-        f"🛒 <b>Confirm Your Order</b>\n\n"
-        f"📦 <b>Product:</b> {item_name}\n"
-        f"💵 <b>Unit Price:</b> {unit_price} {EnvKeys.PAY_CURRENCY}\n"
-        f"🔢 <b>Quantity:</b> {current_quantity}\n"
-        f"💰 <b>Subtotal:</b> {subtotal} {EnvKeys.PAY_CURRENCY}\n"
-        f"🏷 <b>Discount:</b> {discount} {EnvKeys.PAY_CURRENCY}\n"
-        f"💳 <b>Total:</b> {total} {EnvKeys.PAY_CURRENCY}\n\n"
-        f"👛 <b>Wallet Balance:</b> {balance_dec} {EnvKeys.PAY_CURRENCY}\n"
+        localize("shop.confirm_your_order") + "\n\n" +
+        f"📦 <b>Product:</b> {item_name}\n" +
+        localize("shop.unit_price", price=unit_price, currency=EnvKeys.PAY_CURRENCY) + "\n" +
+        localize("shop.selected_quantity", quantity=current_quantity) + "\n" +
+        localize("shop.subtotal", subtotal=subtotal, currency=EnvKeys.PAY_CURRENCY) + "\n" +
+        localize("shop.discount", discount=discount, currency=EnvKeys.PAY_CURRENCY) + "\n" +
+        localize("shop.total", total=total, currency=EnvKeys.PAY_CURRENCY) + "\n\n" +
+        localize("shop.wallet_balance", balance=balance_dec, currency=EnvKeys.PAY_CURRENCY) + "\n"
     )
 
     if can_purchase:
-        text += f"📉 <b>Balance After Purchase:</b> {balance_after} {EnvKeys.PAY_CURRENCY}"
+        text += localize("shop.balance_after_purchase", balance_after=balance_after, currency=EnvKeys.PAY_CURRENCY)
     else:
         text += f"❌ <b>Insufficient Balance</b>"
 
@@ -1444,7 +1444,7 @@ async def refresh_item_handler(call: CallbackQuery, state: FSMContext):
             alert_text = "Stock changed. The item is now out of stock."
     elif stock != -1 and current_quantity > stock:
         await state.update_data(item_quantity=stock, keypad_value=str(stock))
-        alert_text = f"Stock changed. Selected quantity was adjusted to {stock}."
+        alert_text = localize("shop.qty_adjusted_max", stock=stock)
 
     if alert_text:
         await answer_callback_safe(call, alert_text, show_alert=True)
@@ -1528,7 +1528,7 @@ async def support_order_handler(call: CallbackQuery):
         from bot.keyboards.inline import simple_buttons
         markup = simple_buttons([
             ("Contact Support", f"tg://user?id={helper}"),
-            ("⬅️ Home", "back_to_menu")
+            (localize("btn.to_menu"), "back_to_menu")
         ])
         await safe_edit_or_send(call, text, reply_markup=markup, parse_mode='HTML')
     else:

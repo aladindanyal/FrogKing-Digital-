@@ -103,7 +103,7 @@ def wallet_keyboard(referral_percent: int) -> InlineKeyboardMarkup:
     kb.button(text=localize("wallet.history", default="📋 Wallet History"), callback_data="operation_history")
     if referral_percent != 0:
         kb.button(text=localize("btn.referral"), callback_data="referral_system")
-    kb.button(text="🏠 Home", callback_data="back_to_menu")
+    kb.button(text=localize("btn.to_menu"), callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -119,7 +119,7 @@ def profile_keyboard(helper: str | None = None) -> InlineKeyboardMarkup:
         kb.button(text=localize("btn.support", default="🆘 Support"), url=f"tg://user?id={helper}")
     else:
         kb.button(text=localize("btn.support", default="🆘 Support"), callback_data="support_none")
-    kb.button(text="🏠 Home", callback_data="back_to_menu")
+    kb.button(text=localize("btn.to_menu"), callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -144,7 +144,7 @@ def admin_console_keyboard(maintenance_mode: bool = False, role: int = 127) -> I
     if role & Permission.SETTINGS_MANAGE:
         maintenance_key = "admin.menu.maintenance_on" if maintenance_mode else "admin.menu.maintenance_off"
         kb.button(text=localize(maintenance_key), callback_data="toggle_maintenance")
-    kb.button(text="🏠 Home", callback_data="back_to_menu")
+    kb.button(text=localize("btn.to_menu"), callback_data="back_to_menu")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -165,12 +165,12 @@ def simple_buttons(buttons: Iterable[tuple], per_row: int = 1) -> InlineKeyboard
 
 def back(cb: str = "menu", text: str | None = None) -> InlineKeyboardMarkup:
     if not text and cb == "back_to_menu":
-        text = "🏠 Home"
+        text = localize("btn.to_menu")
         return simple_buttons([(text, cb)])
 
     return simple_buttons([
         (text or localize("btn.back"), cb),
-        ("🏠 Home", "back_to_menu")
+        (localize("btn.to_menu"), "back_to_menu")
     ], per_row=1)
 
 
@@ -219,17 +219,17 @@ async def lazy_paginated_keyboard(
         kb.row(*nav_buttons)
 
     if refresh_cb:
-        kb.row(InlineKeyboardButton(text="🔄 Refresh Stock", callback_data=refresh_cb))
+        kb.row(InlineKeyboardButton(text=localize("btn.refresh_stock"), callback_data=refresh_cb))
 
     if back_cb and home_cb:
         kb.row(
             InlineKeyboardButton(text=back_text or localize("btn.back"), callback_data=back_cb),
-            InlineKeyboardButton(text="🏠 Home", callback_data=home_cb)
+            InlineKeyboardButton(text=localize("btn.to_menu"), callback_data=home_cb)
         )
     elif back_cb:
         kb.row(InlineKeyboardButton(text=back_text or localize("btn.back"), callback_data=back_cb))
     elif home_cb:
-        kb.row(InlineKeyboardButton(text="🏠 Home", callback_data=home_cb))
+        kb.row(InlineKeyboardButton(text=localize("btn.to_menu"), callback_data=home_cb))
 
     return kb.as_markup()
 
@@ -268,12 +268,12 @@ def item_info(
             kb.row(*row)
 
         # Custom Amount & Continue
-        kb.row(InlineKeyboardButton(text="✏️ Custom Quantity", callback_data=f"qty:keypad:{item_id}"))
-        kb.row(InlineKeyboardButton(text="🛒 Continue", callback_data=f"checkout:{item_id}", style=ButtonStyle.SUCCESS))
-        kb.row(InlineKeyboardButton(text="🔄 Refresh Stock", callback_data=f"refresh:item:{item_id}"))
+        kb.row(InlineKeyboardButton(text=localize("btn.custom_quantity"), callback_data=f"qty:keypad:{item_id}"))
+        kb.row(InlineKeyboardButton(text=localize("btn.continue"), callback_data=f"checkout:{item_id}", style=ButtonStyle.SUCCESS))
+        kb.row(InlineKeyboardButton(text=localize("btn.refresh_stock"), callback_data=f"refresh:item:{item_id}"))
 
     kb.row(InlineKeyboardButton(text=localize("btn.back"), callback_data=back_data),
-           InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu"))
+           InlineKeyboardButton(text=localize("btn.to_menu"), callback_data="back_to_menu"))
 
     return kb.as_markup()
 
@@ -301,12 +301,12 @@ def numeric_keypad(item_id: int) -> InlineKeyboardMarkup:
     kb.row(
         InlineKeyboardButton(text="⌫", callback_data=f"qty:backspace:{item_id}"),
         InlineKeyboardButton(text="0", callback_data=f"qty:digit:{item_id}:0"),
-        InlineKeyboardButton(text="↺ Clear", callback_data=f"qty:clear:{item_id}")
+        InlineKeyboardButton(text=localize("btn.clear"), callback_data=f"qty:clear:{item_id}")
     )
-    kb.row(InlineKeyboardButton(text="✅ Continue", callback_data=f"qty:keypad_continue:{item_id}", style=ButtonStyle.SUCCESS))
+    kb.row(InlineKeyboardButton(text=localize("btn.keypad_continue"), callback_data=f"qty:keypad_continue:{item_id}", style=ButtonStyle.SUCCESS))
     kb.row(
-        InlineKeyboardButton(text="⬅️ Back", callback_data=f"qty:keypad_back:{item_id}"),
-        InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
+        InlineKeyboardButton(text=localize("btn.back"), callback_data=f"qty:keypad_back:{item_id}"),
+        InlineKeyboardButton(text=localize("btn.to_menu"), callback_data="back_to_menu")
     )
 
     return kb.as_markup()
@@ -318,11 +318,11 @@ def checkout_confirmation_keyboard(item_id: int, can_purchase: bool, applied_pro
     kb = InlineKeyboardBuilder()
 
     if can_purchase:
-        kb.row(InlineKeyboardButton(text="✅ Confirm Purchase", callback_data=f"confirm_purchase:{item_id}", style=ButtonStyle.SUCCESS))
+        kb.row(InlineKeyboardButton(text=localize("btn.confirm_purchase"), callback_data=f"confirm_purchase:{item_id}", style=ButtonStyle.SUCCESS))
     else:
         kb.row(InlineKeyboardButton(text=localize("btn.replenish"), callback_data="replenish_balance"))
 
-    kb.row(InlineKeyboardButton(text="✏️ Change Quantity", callback_data=f"checkout_change_qty:{item_id}"))
+    kb.row(InlineKeyboardButton(text=localize("btn.change_quantity"), callback_data=f"checkout_change_qty:{item_id}"))
 
     if applied_promo:
         kb.row(InlineKeyboardButton(text=localize("btn.remove_promo"), callback_data=f"remove_promo:{item_id}"))
@@ -330,8 +330,8 @@ def checkout_confirmation_keyboard(item_id: int, can_purchase: bool, applied_pro
         kb.row(InlineKeyboardButton(text=localize("btn.apply_promo"), callback_data=f"apply_promo:{item_id}"))
 
     kb.row(
-        InlineKeyboardButton(text="⬅️ Back", callback_data=f"checkout_change_qty:{item_id}"),
-        InlineKeyboardButton(text="🏠 Home", callback_data="back_to_menu")
+        InlineKeyboardButton(text=localize("btn.back"), callback_data=f"checkout_change_qty:{item_id}"),
+        InlineKeyboardButton(text=localize("btn.to_menu"), callback_data="back_to_menu")
     )
 
     return kb.as_markup()
@@ -392,7 +392,7 @@ def rating_keyboard(item_name: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for i in range(1, 6):
         kb.button(text="⭐" * i, callback_data=f"rating:{i}")
-    kb.button(text="🏠 Home", callback_data="back_to_menu")
+    kb.button(text=localize("btn.to_menu"), callback_data="back_to_menu")
     kb.adjust(5, 1)
     return kb.as_markup()
 

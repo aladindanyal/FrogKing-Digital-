@@ -117,8 +117,8 @@ async def order_view_handler(call: CallbackQuery):
         if item:
             text += (
                 f"🛍 <b>Product:</b> {sanitize_html(item.product_name_snapshot)}\n"
-                f"🔢 <b>Quantity:</b> {item.quantity}\n"
-                f"💵 <b>Unit Price:</b> {item.unit_price} {order.currency}\n"
+                f"🔢 <b>Quantity:</b> {item.quantity}\n" +
+                localize("shop.unit_price", price=item.unit_price, currency=order.currency) + "\n"
             )
 
             if order.status == "processing":
@@ -173,7 +173,7 @@ async def order_view_handler(call: CallbackQuery):
                         text += "\n"
 
         if order.discount_total > 0:
-            text += f"\n📉 <b>Discount:</b> {order.discount_total} {order.currency}"
+            text += "\n" + localize("shop.discount", discount=order.discount_total, currency=order.currency)
 
         text += f"\n💰 <b>Total:</b> {order.total} {order.currency}"
 
@@ -414,21 +414,21 @@ async def render_order_receipt(session: AsyncSession, order_id: int) -> tuple[st
 
     default_processing_msg = "Your order has been received and is now being prepared.\nYou will be notified when it is ready."
     text = (
-        f"📦 <b>{localize('intake.success.title', default='Order Received')}</b>\n\n"
-        f"<b>{localize('intake.review.order_id', default='Order ID')}:</b>\n<code>{order.public_id}</code>\n\n"
-        f"<b>{localize('intake.review.payment', default='Payment')}:</b>\n{localize('intake.payment.confirmed', default='Confirmed')}\n\n"
-        f"<b>{localize('intake.review.status', default='Status')}:</b>\n{localize(f'status.{order.status}', default=order.status.capitalize())}\n\n"
-        f"<b>{localize('intake.review.product', default='Product')}:</b>\n{sanitize_html(item.product_name_snapshot)}\n\n"
-        f"<b>{localize('intake.review.quantity', default='Quantity')}:</b>\n{item.quantity}\n\n"
-        f"<b>{localize('intake.review.total', default='Total')}:</b>\n{float(order.total):.2f} {order.currency}\n\n"
-        f"<b>{localize('intake.review.eta', default='Estimated Delivery')}:</b>\n{eta}\n\n"
+        f"📦 <b>{localize('intake.success.title', default='Order Received')}</b>\n\n" +
+        f"<b>{localize('intake.review.order_id', default='Order ID')}:</b>\n<code>{order.public_id}</code>\n\n" +
+        f"<b>{localize('intake.review.payment', default='Payment')}:</b>\n{localize('intake.payment.confirmed', default='Confirmed')}\n\n" +
+        f"<b>{localize('intake.review.status', default='Status')}:</b>\n{localize(f'status.{order.status}', default=order.status.capitalize())}\n\n" +
+        f"<b>{localize('intake.review.product', default='Product')}:</b>\n{sanitize_html(item.product_name_snapshot)}\n\n" +
+        f"<b>{localize('intake.review.quantity', default='Quantity')}:</b>\n{item.quantity}\n\n" +
+        f"<b>{localize('intake.review.total', default='Total')}:</b>\n{float(order.total):.2f} {order.currency}\n\n" +
+        f"<b>{localize('intake.review.eta', default='Estimated Delivery')}:</b>\n{eta}\n\n" +
         f"{localize('intake.processing_details', default=default_processing_msg)}"
     )
 
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     from aiogram.enums import ButtonStyle
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=localize("intake.btn.view_order", default="View Order"), callback_data=f"orders:view:{order.id}:r")],
+        [InlineKeyboardButton(text=localize("btn.view_order"), callback_data=f"orders:view:{order.id}:r")],
         [InlineKeyboardButton(text=localize("btn.to_menu", default="🏠 Home"), callback_data="back_to_menu")]
     ])
     if EnvKeys.HELPER_ID:
@@ -457,13 +457,13 @@ async def order_active_warning_handler(call: CallbackQuery):
 
         default_msg = f"You already have an order being processed for this product.\n\nOrder:\n{order.public_id}\n\nStatus:\nProcessing"
         msg = (
-            f"<b>{localize('intake.active_order.title', default='⚠️ Existing Order')}</b>\n\n"
+            f"<b>{localize('intake.active_order.title', default='⚠️ Existing Order')}</b>\n\n" +
             f"{localize('intake.active_order.body', order_id=order.public_id, default=default_msg)}"
         )
         from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         from aiogram.enums import ButtonStyle
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=localize("intake.btn.view_order", default="View Existing Order"), callback_data=f"orders:view:{order.id}:a")],
+            [InlineKeyboardButton(text=localize("btn.view_order"), callback_data=f"orders:view:{order.id}:a")],
             [InlineKeyboardButton(text=localize("intake.btn.buy_another", default="Buy Another"), callback_data="intake_buy_another")],
             [InlineKeyboardButton(text=localize("btn.back", default="🔙 Back"), callback_data="shop")]
         ])
