@@ -87,16 +87,16 @@ def test_obj_to_dict_exposes_columns():
 def test_sqladmin_config():
     # StoreSettingsAdmin
     assert not any(col.name.endswith('_en') or col.name.endswith('_ar') for col in StoreSettingsAdmin.column_list)
-    assert len(StoreSettingsAdmin.column_details_list) == 22
+    assert len(StoreSettingsAdmin.column_details_list) == 22 + 25  # Phase 5C-2 adds 25 localized columns (5 fields * 5 new locales)
     assert StoreSettingsAdmin.column_labels[StoreSettings.shop_root_title_en] == "Shop Root Title (English)"
 
     # CategoryAdmin
     assert not any(col.name.endswith('_en') or col.name.endswith('_ar') for col in CategoryAdmin.column_list)
-    assert len(CategoryAdmin.column_details_list) == 11
+    assert len(CategoryAdmin.column_details_list) == 11 + 10  # Phase 5C-2 adds 10 localized columns (2 fields * 5 new locales)
 
     # GoodsAdmin
     assert not any(col.name.endswith('_en') or col.name.endswith('_ar') for col in GoodsAdmin.column_list)
-    assert len(GoodsAdmin.column_details_list) == 17
+    assert len(GoodsAdmin.column_details_list) == 17 + 10  # Phase 5C-2 adds 10 localized columns (2 fields * 5 new locales)
 
 def test_unmodified_admins():
     assert 'label_en' in [col.name for col in MainMenuButtonSettingsAdmin.form_columns]
@@ -133,7 +133,7 @@ async def test_migration_cycle():
         # 2. Check heads
         res = subprocess.run(["alembic", "heads"], capture_output=True, text=True, env=env)
         assert res.returncode == 0
-        assert "ba8005f1874a" in res.stdout
+        assert "3f820c7a5211" in res.stdout  # Phase 5C-2 advances the head to 3f820c7a5211
 
         # 3. Downgrade to 23ba1f978d38
         res = subprocess.run(["alembic", "downgrade", "23ba1f978d38"], capture_output=True, text=True, env=env)

@@ -53,28 +53,19 @@ def get_localized_field(obj: Any, base_field: str, locale: str = None) -> str:
             return obj.get(field)
         return getattr(obj, field, None)
 
-    val_ar = get_val("_ar")
+    val_loc = get_val(f"_{norm_loc}") if norm_loc not in ("en", "") else get_val("_en")
     val_en = get_val("_en")
     val_base = get_val("")
 
-    if norm_loc == "ar":
-        if not _is_missing(val_ar):
-            return str(val_ar)
-        if not _is_missing(val_en):
-            return str(val_en)
-        if not _is_missing(val_base):
-            return str(val_base)
-        return ""
+    if not _is_missing(val_loc):
+        return str(val_loc)
 
-    if norm_loc == "en":
-        if not _is_missing(val_en):
-            return str(val_en)
-        if not _is_missing(val_base):
-            return str(val_base)
-        return ""
+    if not _is_missing(val_en):
+        return str(val_en)
 
     if not _is_missing(val_base):
         return str(val_base)
+
     return ""
 
 def get_localized_jsonb(json_obj: Any, locale: str = None) -> Any:
@@ -92,30 +83,13 @@ def get_localized_jsonb(json_obj: Any, locale: str = None) -> Any:
 
     norm_loc = normalize_locale(locale)
 
-    val_ar = json_obj.get("ar")
+    val_loc = json_obj.get(norm_loc)
     val_en = json_obj.get("en")
 
-    # In JSONB fields like label_i18n, there is no "base" key,
-    # but we might fallback to "en" or any available string if missing.
-    # We follow the same contract where "base" is considered missing or English fallback.
+    if not _is_missing(val_loc):
+        return val_loc
 
-    if norm_loc == "ar":
-        if not _is_missing(val_ar):
-            return val_ar
-        if not _is_missing(val_en):
-            return val_en
-
-    if norm_loc == "en":
-        if not _is_missing(val_en):
-            return val_en
-
-    # Fallback to base (for JSONB, it is usually "en" if available, else first key)
     if not _is_missing(val_en):
         return val_en
-
-    # If all else fails and it's a mapping of strings, return the first valid string
-    for k, v in json_obj.items():
-        if not _is_missing(v):
-            return v
 
     return ""

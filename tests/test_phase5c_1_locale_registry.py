@@ -18,16 +18,18 @@ def test_ten_locale_registry_metadata():
     expected_locales = {"en", "ar", "ru", "zh", "vi", "tr", "es", "id", "hi", "bn"}
     assert set(get_canonical_locales()) == expected_locales
 
-# 2. Enabled locales are exactly en, ar, and ru.
+# 2. Enabled locales are exactly en, ar, ru, zh, vi, tr, es.
 def test_enabled_locales_exactly_en_ar_ru():
-    expected = {"en", "ar", "ru"}
+    # Phase 5C-2 activates zh, vi, tr, es
+    expected = {"en", "ar", "ru", "zh", "vi", "tr", "es"}
     assert set(get_enabled_locales()) == expected
     for loc in expected:
         assert LOCALE_METADATA[loc]["enabled"] is True
 
-# 3. Planned locales are exactly zh, vi, tr, es, id, hi, and bn.
+# 3. Planned locales are exactly id, hi, and bn.
 def test_planned_locales():
-    expected = {"zh", "vi", "tr", "es", "id", "hi", "bn"}
+    # Phase 5C-2 activated zh, vi, tr, es, leaving id, hi, bn
+    expected = {"id", "hi", "bn"}
     for loc in expected:
         assert LOCALE_METADATA[loc]["enabled"] is False
 
@@ -77,10 +79,11 @@ def test_traditional_chinese_resolution():
     assert normalize_locale("zh-hant") is None
     assert is_supported("zh-hant") is False
 
-# 10. Planned locales resolve to en until enabled.
+# 10. Planned locales strictly return False from is_supported and None from normalize_locale.
 def test_planned_locales_resolve_to_en():
-    assert normalize_locale("zh") is None
-    assert is_supported("zh") is False
+    # Phase 5C-2 activated zh, so we test id instead
+    assert normalize_locale("id") is None
+    assert is_supported("id") is False
 
 # 11. Invalid, empty, whitespace-only, and None values resolve to en.
 def test_invalid_empty_none_resolution():
@@ -154,10 +157,10 @@ def test_placeholder_parity():
 # returning None which correctly maps to English in `get_locale()` without writing back to DB during resolution.
 def test_runtime_unsupported_locale_handling():
     with patch("bot.i18n.main.current_locale") as current_locale_mock:
-        # FSM/DB sets user.language_code to 'zh' in contextvar (e.g. from previous db state)
-        current_locale_mock.get.return_value = "zh"
+        # FSM/DB sets user.language_code to 'id' in contextvar (e.g. from previous db state)
+        current_locale_mock.get.return_value = "id"
         from bot.i18n.main import get_locale
-        # Should fallback to 'en' since 'zh' is unsupported
+        # Should fallback to 'en' since 'id' is unsupported
         assert get_locale() == "en"
 
 
@@ -196,10 +199,10 @@ async def test_selector_contents():
                             buttons.append(btn.text)
                             callbacks.append(btn.callback_data)
 
-                assert set(callbacks) == {'set_lang_en', 'set_lang_ar', 'set_lang_ru'}
-                assert set(buttons) == {'English', 'Русский', 'العربية'}
+                assert set(callbacks) == {'set_lang_en', 'set_lang_ar', 'set_lang_ru', 'set_lang_zh', 'set_lang_vi', 'set_lang_tr', 'set_lang_es'}
+                assert set(buttons) == {'English', 'Русский', 'العربية', '简体中文', 'Tiếng Việt', 'Türkçe', 'Español'}
 
-                excluded = ['zh', 'vi', 'tr', 'es', 'id', 'hi', 'bn']
+                excluded = ['id', 'hi', 'bn']
                 for exc in excluded:
                     assert f'set_lang_{exc}' not in callbacks
 
@@ -217,7 +220,7 @@ async def test_forged_callback_rejection():
     from bot.handlers.user.main import set_lang_callback
     from unittest.mock import MagicMock, AsyncMock, patch
 
-    invalid_callbacks = ['set_lang_zh', 'set_lang_zh-cn', 'set_lang_zh-hant', 'set_lang_bn', 'set_lang_unknown', 'set_lang_']
+    invalid_callbacks = ['set_lang_id', 'set_lang_bn', 'set_lang_unknown', 'set_lang_']
 
     for cb_data in invalid_callbacks:
         call = MagicMock()

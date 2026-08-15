@@ -47,7 +47,8 @@ def test_product_customer_field():
 def test_localization():
     assert get_localized_label({"en": "English", "ar": "Arabic"}, "ar") == "Arabic"
     assert get_localized_label({"en": "English", "ar": "Arabic"}, "fr") == "English"
-    assert get_localized_label({"fr": "French"}, "en") == "French"
+    # Phase 5C-2 strictly returns "" if requested locale and "en" are missing, rather than random first value
+    assert get_localized_label({"fr": "French"}, "en") == ""
     assert get_localized_label({}, "en") == ""
 
 def test_fingerprint():

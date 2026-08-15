@@ -279,6 +279,7 @@ async def normalize_parent_id(raw_val: Any, current_model_id: int | None = None)
 class CategoryBaseForm(Form):
     image_upload = FileField("Category Image (Upload new)", render_kw={"class": "form-control", "accept": "image/*"})
     remove_image = BooleanField("Remove existing image", render_kw={"class": "form-check-input"})
+    remove_image = BooleanField("Remove existing image", render_kw={"class": "form-check-input"})
 
 class CategoryAdmin(AuditModelView, model=Categories):
     column_list = [Categories.id, Categories.name, Categories.description, Categories.parent_id, Categories.display_order]
@@ -291,11 +292,9 @@ class CategoryAdmin(AuditModelView, model=Categories):
     column_details_list = [
         Categories.id,
         Categories.name,
-        Categories.name_en,
-        Categories.name_ar,
+        Categories.name_en, Categories.name_ar, Categories.name_ru, Categories.name_zh, Categories.name_vi, Categories.name_tr, Categories.name_es,
         Categories.description,
-        Categories.description_en,
-        Categories.description_ar,
+        Categories.description_en, Categories.description_ar, Categories.description_ru, Categories.description_zh, Categories.description_vi, Categories.description_tr, Categories.description_es,
         Categories.parent_id,
         Categories.image_path,
         Categories.children_buttons_per_row,
@@ -309,11 +308,9 @@ class CategoryAdmin(AuditModelView, model=Categories):
     }
     form_columns = [
         Categories.name,
-        Categories.name_en,
-        Categories.name_ar,
+        Categories.name_en, Categories.name_ar, Categories.name_ru, Categories.name_zh, Categories.name_vi, Categories.name_tr, Categories.name_es,
         Categories.description,
-        Categories.description_en,
-        Categories.description_ar,
+        Categories.description_en, Categories.description_ar, Categories.description_ru, Categories.description_zh, Categories.description_vi, Categories.description_tr, Categories.description_es,
         Categories.parent,
         Categories.children_buttons_per_row,
         Categories.display_order,
@@ -456,22 +453,17 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
     column_details_list = [
         StoreSettings.id,
         StoreSettings.shop_root_title,
-        StoreSettings.shop_root_title_en,
-        StoreSettings.shop_root_title_ar,
+        StoreSettings.shop_root_title_en, StoreSettings.shop_root_title_ar, StoreSettings.shop_root_title_ru, StoreSettings.shop_root_title_zh, StoreSettings.shop_root_title_vi, StoreSettings.shop_root_title_tr, StoreSettings.shop_root_title_es,
         StoreSettings.shop_root_description,
-        StoreSettings.shop_root_description_en,
-        StoreSettings.shop_root_description_ar,
+        StoreSettings.shop_root_description_en, StoreSettings.shop_root_description_ar, StoreSettings.shop_root_description_ru, StoreSettings.shop_root_description_zh, StoreSettings.shop_root_description_vi, StoreSettings.shop_root_description_tr, StoreSettings.shop_root_description_es,
         StoreSettings.main_menu_title,
-        StoreSettings.main_menu_title_en,
-        StoreSettings.main_menu_title_ar,
+        StoreSettings.main_menu_title_en, StoreSettings.main_menu_title_ar, StoreSettings.main_menu_title_ru, StoreSettings.main_menu_title_zh, StoreSettings.main_menu_title_vi, StoreSettings.main_menu_title_tr, StoreSettings.main_menu_title_es,
         StoreSettings.main_menu_description,
-        StoreSettings.main_menu_description_en,
-        StoreSettings.main_menu_description_ar,
+        StoreSettings.main_menu_description_en, StoreSettings.main_menu_description_ar, StoreSettings.main_menu_description_ru, StoreSettings.main_menu_description_zh, StoreSettings.main_menu_description_vi, StoreSettings.main_menu_description_tr, StoreSettings.main_menu_description_es,
         StoreSettings.main_menu_image_path,
         StoreSettings.main_menu_image_url,
         StoreSettings.main_menu_footer,
-        StoreSettings.main_menu_footer_en,
-        StoreSettings.main_menu_footer_ar,
+        StoreSettings.main_menu_footer_en, StoreSettings.main_menu_footer_ar, StoreSettings.main_menu_footer_ru, StoreSettings.main_menu_footer_zh, StoreSettings.main_menu_footer_vi, StoreSettings.main_menu_footer_tr, StoreSettings.main_menu_footer_es,
         StoreSettings.root_category_columns,
         StoreSettings.subcategory_columns,
         StoreSettings.product_columns,
@@ -491,20 +483,15 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
     }
     form_columns = [
         StoreSettings.shop_root_title,
-        StoreSettings.shop_root_title_en,
-        StoreSettings.shop_root_title_ar,
+        StoreSettings.shop_root_title_en, StoreSettings.shop_root_title_ar, StoreSettings.shop_root_title_ru, StoreSettings.shop_root_title_zh, StoreSettings.shop_root_title_vi, StoreSettings.shop_root_title_tr, StoreSettings.shop_root_title_es,
         StoreSettings.shop_root_description,
-        StoreSettings.shop_root_description_en,
-        StoreSettings.shop_root_description_ar,
+        StoreSettings.shop_root_description_en, StoreSettings.shop_root_description_ar, StoreSettings.shop_root_description_ru, StoreSettings.shop_root_description_zh, StoreSettings.shop_root_description_vi, StoreSettings.shop_root_description_tr, StoreSettings.shop_root_description_es,
         StoreSettings.main_menu_title,
-        StoreSettings.main_menu_title_en,
-        StoreSettings.main_menu_title_ar,
+        StoreSettings.main_menu_title_en, StoreSettings.main_menu_title_ar, StoreSettings.main_menu_title_ru, StoreSettings.main_menu_title_zh, StoreSettings.main_menu_title_vi, StoreSettings.main_menu_title_tr, StoreSettings.main_menu_title_es,
         StoreSettings.main_menu_description,
-        StoreSettings.main_menu_description_en,
-        StoreSettings.main_menu_description_ar,
+        StoreSettings.main_menu_description_en, StoreSettings.main_menu_description_ar, StoreSettings.main_menu_description_ru, StoreSettings.main_menu_description_zh, StoreSettings.main_menu_description_vi, StoreSettings.main_menu_description_tr, StoreSettings.main_menu_description_es,
         StoreSettings.main_menu_footer,
-        StoreSettings.main_menu_footer_en,
-        StoreSettings.main_menu_footer_ar,
+        StoreSettings.main_menu_footer_en, StoreSettings.main_menu_footer_ar, StoreSettings.main_menu_footer_ru, StoreSettings.main_menu_footer_zh, StoreSettings.main_menu_footer_vi, StoreSettings.main_menu_footer_tr, StoreSettings.main_menu_footer_es,
         StoreSettings.main_menu_image_path,
         StoreSettings.main_menu_image_url,
         StoreSettings.root_category_buttons_per_row,
@@ -552,7 +539,7 @@ class MainMenuButtonSettingsAdmin(AuditModelView, model=MainMenuButtonSettings):
     column_list = [MainMenuButtonSettings.action_key, MainMenuButtonSettings.label_en, MainMenuButtonSettings.label_ar,
                    MainMenuButtonSettings.row_order, MainMenuButtonSettings.column_order,
                    MainMenuButtonSettings.is_enabled, MainMenuButtonSettings.owner_only]
-    form_columns = [MainMenuButtonSettings.label_en, MainMenuButtonSettings.label_ar,
+    form_columns = [MainMenuButtonSettings.label_en, MainMenuButtonSettings.label_ar, MainMenuButtonSettings.label_ru, MainMenuButtonSettings.label_zh, MainMenuButtonSettings.label_vi, MainMenuButtonSettings.label_tr, MainMenuButtonSettings.label_es,
                     MainMenuButtonSettings.row_order, MainMenuButtonSettings.column_order,
                     MainMenuButtonSettings.is_enabled]
     can_create = False
@@ -640,8 +627,19 @@ class GoodsBaseForm(Form):
     remove_image = BooleanField("Remove existing image", render_kw={"class": "form-check-input"})
     manual_instr_en = TextAreaField("Manual Instructions - English", render_kw={"class": "form-control"})
     manual_instr_ar = TextAreaField("Manual Instructions - Arabic", render_kw={"class": "form-control"})
+    manual_instr_ru = TextAreaField("Manual Instructions - Russian", render_kw={"class": "form-control"})
+    manual_instr_zh = TextAreaField("Manual Instructions - Chinese", render_kw={"class": "form-control"})
+    manual_instr_vi = TextAreaField("Manual Instructions - Vietnamese", render_kw={"class": "form-control"})
+    manual_instr_tr = TextAreaField("Manual Instructions - Turkish", render_kw={"class": "form-control"})
+    manual_instr_es = TextAreaField("Manual Instructions - Spanish", render_kw={"class": "form-control"})
+
     input_intro_en = TextAreaField("Customer Input Intro - English", render_kw={"class": "form-control"})
     input_intro_ar = TextAreaField("Customer Input Intro - Arabic", render_kw={"class": "form-control"})
+    input_intro_ru = TextAreaField("Customer Input Intro - Russian", render_kw={"class": "form-control"})
+    input_intro_zh = TextAreaField("Customer Input Intro - Chinese", render_kw={"class": "form-control"})
+    input_intro_vi = TextAreaField("Customer Input Intro - Vietnamese", render_kw={"class": "form-control"})
+    input_intro_tr = TextAreaField("Customer Input Intro - Turkish", render_kw={"class": "form-control"})
+    input_intro_es = TextAreaField("Customer Input Intro - Spanish", render_kw={"class": "form-control"})
     eta_preset = SelectField("Fulfillment ETA", choices=[
         ("", "Not specified"),
         ("60", "1 hour"),
@@ -660,9 +658,19 @@ class GoodsBaseForm(Form):
             if obj.manual_instructions_i18n:
                 kwargs['manual_instr_en'] = obj.manual_instructions_i18n.get('en', '')
                 kwargs['manual_instr_ar'] = obj.manual_instructions_i18n.get('ar', '')
+                kwargs['manual_instr_ru'] = obj.manual_instructions_i18n.get('ru', '')
+                kwargs['manual_instr_zh'] = obj.manual_instructions_i18n.get('zh', '')
+                kwargs['manual_instr_vi'] = obj.manual_instructions_i18n.get('vi', '')
+                kwargs['manual_instr_tr'] = obj.manual_instructions_i18n.get('tr', '')
+                kwargs['manual_instr_es'] = obj.manual_instructions_i18n.get('es', '')
             if obj.customer_input_intro_i18n:
                 kwargs['input_intro_en'] = obj.customer_input_intro_i18n.get('en', '')
                 kwargs['input_intro_ar'] = obj.customer_input_intro_i18n.get('ar', '')
+                kwargs['input_intro_ru'] = obj.customer_input_intro_i18n.get('ru', '')
+                kwargs['input_intro_zh'] = obj.customer_input_intro_i18n.get('zh', '')
+                kwargs['input_intro_vi'] = obj.customer_input_intro_i18n.get('vi', '')
+                kwargs['input_intro_tr'] = obj.customer_input_intro_i18n.get('tr', '')
+                kwargs['input_intro_es'] = obj.customer_input_intro_i18n.get('es', '')
             if obj.fulfillment_eta_minutes is not None:
                 preset = str(obj.fulfillment_eta_minutes)
                 if preset in ["60", "180", "360", "720", "1440", "2880"]:
@@ -679,12 +687,10 @@ class GoodsAdmin(AuditModelView, model=Goods):
     column_details_list = [
         Goods.id,
         Goods.name,
-        Goods.name_en,
-        Goods.name_ar,
+        Goods.name_en, Goods.name_ar, Goods.name_ru, Goods.name_zh, Goods.name_vi, Goods.name_tr, Goods.name_es,
         Goods.price,
         Goods.description,
-        Goods.description_en,
-        Goods.description_ar,
+        Goods.description_en, Goods.description_ar, Goods.description_ru, Goods.description_zh, Goods.description_vi, Goods.description_tr, Goods.description_es,
         Goods.category_id,
         Goods.fulfillment_mode,
         Goods.fulfillment_eta_minutes,
@@ -703,12 +709,10 @@ class GoodsAdmin(AuditModelView, model=Goods):
     }
     form_columns = [
         Goods.name,
-        Goods.name_en,
-        Goods.name_ar,
+        Goods.name_en, Goods.name_ar, Goods.name_ru, Goods.name_zh, Goods.name_vi, Goods.name_tr, Goods.name_es,
         Goods.price,
         Goods.description,
-        Goods.description_en,
-        Goods.description_ar,
+        Goods.description_en, Goods.description_ar, Goods.description_ru, Goods.description_zh, Goods.description_vi, Goods.description_tr, Goods.description_es,
         Goods.category,
         Goods.is_enabled,
         Goods.fulfillment_mode,
@@ -737,23 +741,24 @@ class GoodsAdmin(AuditModelView, model=Goods):
     async def insert_model(self, request, data: dict):
         temp_data = getattr(request.state, "temp_form_data", {})
         temp_data.update({
-            "manual_instr_en": data.get("manual_instr_en"),
-            "manual_instr_ar": data.get("manual_instr_ar"),
-            "input_intro_en": data.get("input_intro_en"),
-            "input_intro_ar": data.get("input_intro_ar"),
+            "manual_instr_en": data.get("manual_instr_en"), "manual_instr_ar": data.get("manual_instr_ar"),
+            "manual_instr_ru": data.get("manual_instr_ru"), "manual_instr_zh": data.get("manual_instr_zh"),
+            "manual_instr_vi": data.get("manual_instr_vi"), "manual_instr_tr": data.get("manual_instr_tr"),
+            "manual_instr_es": data.get("manual_instr_es"),
+            "input_intro_en": data.get("input_intro_en"), "input_intro_ar": data.get("input_intro_ar"),
+            "input_intro_ru": data.get("input_intro_ru"), "input_intro_zh": data.get("input_intro_zh"),
+            "input_intro_vi": data.get("input_intro_vi"), "input_intro_tr": data.get("input_intro_tr"),
+            "input_intro_es": data.get("input_intro_es"),
             "eta_preset": data.get("eta_preset"),
             "is_enabled": data.get("is_enabled"),
         })
 
         request.state.temp_form_data = temp_data
         model_data = dict(data)
-        model_data.pop("manual_instr_en", None)
-        model_data.pop("manual_instr_ar", None)
-        model_data.pop("input_intro_en", None)
-        model_data.pop("input_intro_ar", None)
-        model_data.pop("eta_preset", None)
-        model_data.pop("image_upload", None)
-        model_data.pop("remove_image", None)
+        for field in ["manual_instr_en", "manual_instr_ar", "manual_instr_ru", "manual_instr_zh", "manual_instr_vi", "manual_instr_tr", "manual_instr_es",
+                      "input_intro_en", "input_intro_ar", "input_intro_ru", "input_intro_zh", "input_intro_vi", "input_intro_tr", "input_intro_es",
+                      "eta_preset", "image_upload", "remove_image"]:
+            model_data.pop(field, None)
 
         is_enabled = temp_data.get("is_enabled")
         if is_enabled is None:
@@ -773,23 +778,24 @@ class GoodsAdmin(AuditModelView, model=Goods):
     async def update_model(self, request, pk: str, data: dict):
         temp_data = getattr(request.state, "temp_form_data", {})
         temp_data.update({
-            "manual_instr_en": data.get("manual_instr_en"),
-            "manual_instr_ar": data.get("manual_instr_ar"),
-            "input_intro_en": data.get("input_intro_en"),
-            "input_intro_ar": data.get("input_intro_ar"),
+            "manual_instr_en": data.get("manual_instr_en"), "manual_instr_ar": data.get("manual_instr_ar"),
+            "manual_instr_ru": data.get("manual_instr_ru"), "manual_instr_zh": data.get("manual_instr_zh"),
+            "manual_instr_vi": data.get("manual_instr_vi"), "manual_instr_tr": data.get("manual_instr_tr"),
+            "manual_instr_es": data.get("manual_instr_es"),
+            "input_intro_en": data.get("input_intro_en"), "input_intro_ar": data.get("input_intro_ar"),
+            "input_intro_ru": data.get("input_intro_ru"), "input_intro_zh": data.get("input_intro_zh"),
+            "input_intro_vi": data.get("input_intro_vi"), "input_intro_tr": data.get("input_intro_tr"),
+            "input_intro_es": data.get("input_intro_es"),
             "eta_preset": data.get("eta_preset"),
             "is_enabled": data.get("is_enabled"),
         })
 
         request.state.temp_form_data = temp_data
         model_data = dict(data)
-        model_data.pop("manual_instr_en", None)
-        model_data.pop("manual_instr_ar", None)
-        model_data.pop("input_intro_en", None)
-        model_data.pop("input_intro_ar", None)
-        model_data.pop("eta_preset", None)
-        model_data.pop("image_upload", None)
-        model_data.pop("remove_image", None)
+        for field in ["manual_instr_en", "manual_instr_ar", "manual_instr_ru", "manual_instr_zh", "manual_instr_vi", "manual_instr_tr", "manual_instr_es",
+                      "input_intro_en", "input_intro_ar", "input_intro_ru", "input_intro_zh", "input_intro_vi", "input_intro_tr", "input_intro_es",
+                      "eta_preset", "image_upload", "remove_image"]:
+            model_data.pop(field, None)
 
         is_enabled = temp_data.get("is_enabled")
         if is_enabled is None:
@@ -840,43 +846,21 @@ class GoodsAdmin(AuditModelView, model=Goods):
             if old_image_path:
                 request.state.product_image_to_delete = old_image_path
         existing_manual = dict(getattr(model, "manual_instructions_i18n", {}) or {})
-        en_instr = temp_data.get("manual_instr_en")
-        if en_instr is None:
-            en_instr = data.pop("manual_instr_en", None)
-        ar_instr = temp_data.get("manual_instr_ar")
-        if ar_instr is None:
-            ar_instr = data.pop("manual_instr_ar", None)
-
-        if en_instr:
-            existing_manual["en"] = en_instr
-        elif "en" in existing_manual and not en_instr:
-            del existing_manual["en"]
-
-        if ar_instr:
-            existing_manual["ar"] = ar_instr
-        elif "ar" in existing_manual and not ar_instr:
-            del existing_manual["ar"]
-
+        for lang in ["en", "ar", "ru", "zh", "vi", "tr", "es"]:
+            val = temp_data.get(f"manual_instr_{lang}")
+            if val is None and f"manual_instr_{lang}" in data:
+                val = data.pop(f"manual_instr_{lang}")
+            if val is not None:
+                existing_manual[lang] = val.strip()
         model.manual_instructions_i18n = existing_manual if existing_manual else None
 
         existing_intro = dict(getattr(model, "customer_input_intro_i18n", {}) or {})
-        en_intro = temp_data.get("input_intro_en")
-        if en_intro is None:
-            en_intro = data.pop("input_intro_en", None)
-        ar_intro = temp_data.get("input_intro_ar")
-        if ar_intro is None:
-            ar_intro = data.pop("input_intro_ar", None)
-
-        if en_intro:
-            existing_intro["en"] = en_intro
-        elif "en" in existing_intro and not en_intro:
-            del existing_intro["en"]
-
-        if ar_intro:
-            existing_intro["ar"] = ar_intro
-        elif "ar" in existing_intro and not ar_intro:
-            del existing_intro["ar"]
-
+        for lang in ["en", "ar", "ru", "zh", "vi", "tr", "es"]:
+            val = temp_data.get(f"input_intro_{lang}")
+            if val is None and f"input_intro_{lang}" in data:
+                val = data.pop(f"input_intro_{lang}")
+            if val is not None:
+                existing_intro[lang] = val.strip()
         model.customer_input_intro_i18n = existing_intro if existing_intro else None
 
         preset = temp_data.get("eta_preset")
@@ -960,25 +944,40 @@ class CustomerFieldBaseForm(Form):
 
     label_en = StringField("Label - English", render_kw={"class": "form-control"})
     label_ar = StringField("Label - Arabic", render_kw={"class": "form-control"})
+    label_ru = StringField("Label - Russian", render_kw={"class": "form-control"})
+    label_zh = StringField("Label - Chinese", render_kw={"class": "form-control"})
+    label_vi = StringField("Label - Vietnamese", render_kw={"class": "form-control"})
+    label_tr = StringField("Label - Turkish", render_kw={"class": "form-control"})
+    label_es = StringField("Label - Spanish", render_kw={"class": "form-control"})
     placeholder_en = StringField("Placeholder - English", render_kw={"class": "form-control"})
     placeholder_ar = StringField("Placeholder - Arabic", render_kw={"class": "form-control"})
+    placeholder_ru = StringField("Placeholder - Russian", render_kw={"class": "form-control"})
+    placeholder_zh = StringField("Placeholder - Chinese", render_kw={"class": "form-control"})
+    placeholder_vi = StringField("Placeholder - Vietnamese", render_kw={"class": "form-control"})
+    placeholder_tr = StringField("Placeholder - Turkish", render_kw={"class": "form-control"})
+    placeholder_es = StringField("Placeholder - Spanish", render_kw={"class": "form-control"})
     help_text_en = StringField("Help Text - English", render_kw={"class": "form-control"})
     help_text_ar = StringField("Help Text - Arabic", render_kw={"class": "form-control"})
+    help_text_ru = StringField("Help Text - Russian", render_kw={"class": "form-control"})
+    help_text_zh = StringField("Help Text - Chinese", render_kw={"class": "form-control"})
+    help_text_vi = StringField("Help Text - Vietnamese", render_kw={"class": "form-control"})
+    help_text_tr = StringField("Help Text - Turkish", render_kw={"class": "form-control"})
+    help_text_es = StringField("Help Text - Spanish", render_kw={"class": "form-control"})
     select_options_raw = HiddenField("Select Options JSON", default="[]", render_kw={"id": "select_options_raw"})
 
     def process(self, formdata=None, obj=None, data=None, **kwargs):
         if obj and not formdata:
             if getattr(obj, "label_i18n", None):
-                kwargs['label_en'] = obj.label_i18n.get('en', '')
-                kwargs['label_ar'] = obj.label_i18n.get('ar', '')
+                for lang in ["en", "ar", "ru", "zh", "vi", "tr", "es"]:
+                    kwargs[f'label_{lang}'] = obj.label_i18n.get(lang, '')
             if getattr(obj, "placeholder_i18n", None):
-                kwargs['placeholder_en'] = obj.placeholder_i18n.get('en', '')
-                kwargs['placeholder_ar'] = obj.placeholder_i18n.get('ar', '')
+                for lang in ["en", "ar", "ru", "zh", "vi", "tr", "es"]:
+                    kwargs[f'placeholder_{lang}'] = obj.placeholder_i18n.get(lang, '')
             if getattr(obj, "help_text_i18n", None):
-                kwargs['help_text_en'] = obj.help_text_i18n.get('en', '')
-                kwargs['help_text_ar'] = obj.help_text_i18n.get('ar', '')
+                for lang in ["en", "ar", "ru", "zh", "vi", "tr", "es"]:
+                    kwargs[f'help_text_{lang}'] = obj.help_text_i18n.get(lang, '')
             if getattr(obj, "select_options_i18n", None):
-                arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", "")} for k, v in obj.select_options_i18n.items()]
+                arr = [{"key": k, "en": v.get("en", ""), "ar": v.get("ar", ""), "ru": v.get("ru", ""), "zh": v.get("zh", ""), "vi": v.get("vi", ""), "tr": v.get("tr", ""), "es": v.get("es", "")} for k, v in obj.select_options_i18n.items()]
                 kwargs['select_options_raw'] = json.dumps(arr)
 
         if not obj and not formdata:
@@ -1125,8 +1124,9 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
                 if not key or not en_label:
                     raise ValidationError("Each option must have a stable option key and an English label.")
                 translations = {"en": en_label}
-                if opt.get("ar", "").strip():
-                    translations["ar"] = opt.get("ar").strip()
+                for lang in ["ar", "ru", "zh", "vi", "tr", "es"]:
+                    if lang in opt and opt.get(lang) is not None:
+                        translations[lang] = str(opt.get(lang)).strip()
                 final_options[key] = translations
 
             model.select_options_i18n = final_options
@@ -1147,21 +1147,20 @@ class ProductCustomerFieldAdmin(AuditModelView, model=ProductCustomerField):
             open('traceback.txt', 'w').write(traceback.format_exc())
             raise e
 
-        def _update_i18n(attr_name, en_val, ar_val):
+        def _update_i18n(attr_name, vals):
             existing = dict(getattr(model, attr_name, {}) or {})
-            if en_val:
-                existing["en"] = en_val
-            elif "en" in existing and not en_val:
-                del existing["en"]
-            if ar_val:
-                existing["ar"] = ar_val
-            elif "ar" in existing and not ar_val:
-                del existing["ar"]
+            for lang, val in vals.items():
+                if val is not None:
+                    existing[lang] = val.strip()
             setattr(model, attr_name, existing if existing else None)
 
-        _update_i18n("label_i18n", data.pop("label_en", None), data.pop("label_ar", None))
-        _update_i18n("placeholder_i18n", data.pop("placeholder_en", None), data.pop("placeholder_ar", None))
-        _update_i18n("help_text_i18n", data.pop("help_text_en", None), data.pop("help_text_ar", None))
+        label_vals = {l: data.pop(f"label_{l}") for l in ["en", "ar", "ru", "zh", "vi", "tr", "es"] if f"label_{l}" in data}
+        placeholder_vals = {l: data.pop(f"placeholder_{l}") for l in ["en", "ar", "ru", "zh", "vi", "tr", "es"] if f"placeholder_{l}" in data}
+        help_text_vals = {l: data.pop(f"help_text_{l}") for l in ["en", "ar", "ru", "zh", "vi", "tr", "es"] if f"help_text_{l}" in data}
+
+        _update_i18n("label_i18n", label_vals)
+        _update_i18n("placeholder_i18n", placeholder_vals)
+        _update_i18n("help_text_i18n", help_text_vals)
 
         if getattr(super(), "on_model_change", None):
             await super().on_model_change(data, model, is_created, request)

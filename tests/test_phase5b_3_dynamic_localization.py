@@ -49,7 +49,8 @@ def test_dynamic_localization_fallback_behavior(isolated_locale):
     assert get_localized_field(data, "title") == "EN Title"
 
     isolated_locale.set("ru")
-    assert get_localized_field(data, "title") == "Base Title"
+    # ru is activated so it tries title_ru (missing) -> title_en
+    assert get_localized_field(data, "title") == "EN Title"
 
     # Missing AR falls back to EN
     data2 = {"title_ar": "", "title_en": "EN Title", "title": "Base Title"}
@@ -79,10 +80,10 @@ def test_dynamic_localization_jsonb(isolated_locale):
     isolated_locale.set("fr") # other locale
     assert get_localized_jsonb(jsonb_data) == "EN Label" # falls back to EN
 
-    # Missing EN falls back to first available
+    # Missing EN and requested locale returns empty string in 5c2
     jsonb_data2 = {"ru": "RU Label"}
     isolated_locale.set("fr")
-    assert get_localized_jsonb(jsonb_data2) == "RU Label"
+    assert get_localized_jsonb(jsonb_data2) == ""
 
 def test_legacy_tuple_compatibility(isolated_locale):
     """Test compatibility with legacy tuple query results"""
@@ -137,7 +138,8 @@ async def test_locale_isolation(isolated_locale):
     await asyncio.gather(
         process_request("ar", data, "AR"),
         process_request("en", data, "EN"),
-        process_request("ru", data, "Base")
+        # ru falls back to en
+        process_request("ru", data, "EN")
     )
 
 from bot.database.methods.transactions import buy_item_transaction, checkout_cart_transaction
