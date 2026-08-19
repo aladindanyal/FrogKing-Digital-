@@ -937,6 +937,62 @@ class ManualOrderConversationSession(Database.BASE):
         return f"Session #{self.id} ({self.status})"
 
 
+class BroadcastCampaign(Database.BASE):
+    __tablename__ = 'broadcast_campaigns'
+    id = Column(Integer, primary_key=True)
+    admin_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete='SET NULL'), nullable=True)
+    target_locale = Column(String(16), nullable=True)
+    message_text = Column(Text, nullable=True)
+    photo_file_id = Column(Text, nullable=True)
+    parse_mode = Column(String(16), nullable=True)
+    status = Column(String(20), nullable=False, default='draft')
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    run_started_at = Column(DateTime(timezone=True), nullable=True)
+    run_ended_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'confirmed', 'running', 'completed', 'cancelled', 'failed')", name='ck_broadcast_campaign_status'),
+        Index('uq_broadcast_campaign_single_active', text('(1)'), unique=True, postgresql_where=text("status IN ('confirmed', 'running')"), sqlite_where=text("status IN ('confirmed', 'running')")),
+    )
+    admin = relationship("User", foreign_keys=[admin_id], lazy='raise')
+    recipients = relationship("BroadcastRecipient", back_populates="campaign", cascade="all, delete-orphan", lazy='raise')
+
+    def __str__(self):
+        return f"Campaign #{self.id} ({self.status})"
+
+
+class BroadcastRecipient(Database.BASE):
+    __tablename__ = 'broadcast_recipients'
+    id = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True, autoincrement=True)
+    campaign_id = Column(Integer, ForeignKey('broadcast_campaigns.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete='CASCADE'), nullable=False)
+
+    status = Column(String(20), nullable=False, default='pending')
+    attempts = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('campaign_id', 'user_id', name='uq_broadcast_recipient_campaign_user'),
+        Index('ix_broadcast_recipients_campaign_status', 'campaign_id', 'status'),
+        CheckConstraint("status IN ('pending', 'sending', 'sent', 'failed', 'blocked', 'cancelled', 'uncertain')", name='ck_broadcast_recipient_status'),
+    )
+    campaign = relationship("BroadcastCampaign", back_populates="recipients", lazy='raise')
+    user = relationship("User", foreign_keys=[user_id], lazy='raise')
+
+    def __str__(self):
+        return f"Recipient #{self.id} (Camp {self.campaign_id}, User {self.user_id})"
+
+
+
+
 async def register_models():
     async with Database().engine.begin() as conn:
         await conn.run_sync(Database.BASE.metadata.create_all)

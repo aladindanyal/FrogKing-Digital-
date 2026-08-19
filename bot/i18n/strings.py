@@ -245,12 +245,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.shop.users.title": "Пользователи бота:",
         "admin.shop.bought.prompt_id": "Введите уникальный ID купленного товара",
         "admin.shop.bought.not_found": "❌ Товар с указанным уникальным ID не найден",
-        "broadcast.prompt": "Отправьте сообщение для рассылки:",
-        "broadcast.creating": "📤 Начинаем рассылку...\n👥 Всего пользователей: {ids}",
-        "broadcast.progress": "📤 Рассылка в процессе...\n\n📊 Прогресс: {progress:.1f}%\n✅ Отправлено: {sent}/{total}\n❌ Ошибок: {failed}\n⏱ Прошло времени: {time} сек",
-        "broadcast.done": "✅ Рассылка завершена!\n\n📊 Статистика:\n👥 Всего: {total}\n✅ Доставлено: {sent}\n❌ Не доставлено: {failed}\n🚫 Заблокировали бота: ~{blocked}\n📈 Успешность: {success}%\n⏱ Время: {duration} сек",
-        "broadcast.cancel": "❌ Рассылка отменена",
-        "broadcast.warning": "Нет активной рассылки",
         "payments.replenish_prompt": "Введите сумму пополнения в {currency}:",
         "payments.replenish_invalid": "❌ Неверная сумма. Введите число от {min_amount} до {max_amount} {currency}.",
         "payments.deduct_prompt": "Введите сумму списания в {currency}:",
@@ -480,7 +474,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.cancel_restock": "🔕 Отменить уведомление",
         "btn.notify_restock": "🔔 Сообщить о поступлении",
         "restock_notification_text": "🎉 <b>Снова в наличии!</b>\n\n<b>{item_name}</b> снова доступен.\n\nНажмите ниже, чтобы проверить наличие и продолжить покупку.",
-        "btn.view_product": "🛒 Смотреть товар"
+        "btn.view_product": "🛒 Смотреть товар",
+        "broadcast.target_all": "Все пользователи",
+        "broadcast.target_locale": "Язык: {name}",
+        "broadcast.btn_confirm": "✅ Подтвердить",
+        "broadcast.btn_cancel": "❌ Отменить",
+        "broadcast.select_audience": "Выберите аудиторию для рассылки:",
+        "broadcast.prompt": "Отправьте сообщение (текст или фото с текстом):",
+        "broadcast.error_empty": "Ошибка: Сообщение не может быть пустым.",
+        "broadcast.error_length": "Ошибка: Слишком длинное сообщение.",
+        "broadcast.preview_title": "👀 Предпросмотр рассылки:",
+        "broadcast.confirm_prompt": "Вы уверены, что хотите запустить рассылку?",
+        "broadcast.active_conflict": "Уже есть активная рассылка!",
+        "broadcast.already_confirmed": "Эта рассылка уже подтверждена.",
+        "broadcast.queued": "✅ Рассылка добавлена в очередь (пользователей: {count}).",
+        "broadcast.already_finished": "Эта рассылка уже завершена или отменена.",
+        "broadcast.cancel": "❌ Рассылка отменена.",
+        "broadcast.progress": "📤 Рассылка в процессе... Прогресс: {progress:.1f}%. Отправлено: {sent}/{total}.",
+        "broadcast.done": "✅ Рассылка завершена! Доставлено: {sent}. Ошибок: {failed}. Заблокировали: {blocked}.",
+        "broadcast.warning": "Нет активной рассылки."
     },
     "en": {
         "shop.available_stock": "📦 <b>Available Stock:</b> {stock}",
@@ -728,12 +740,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.shop.users.title": "Пользователи бота:",
         "admin.shop.bought.prompt_id": "Enter the exact ID of the purchased item:",
         "admin.shop.bought.not_found": "❌ Purchased item not found.",
-        "broadcast.prompt": "Send the message you want to broadcast to all users.\nUse /cancel to abort.",
-        "broadcast.creating": "📤 Starting broadcast...\n👥 Total users: {ids}",
-        "broadcast.progress": "📤 Рассылка в процессе...\n\n📊 Прогресс: {progress:.1f}%\n✅ Отправлено: {sent}/{total}\n❌ Ошибок: {failed}\n⏱ Прошло времени: {time} сек",
-        "broadcast.done": "✅ Рассылка завершена!\n\n📊 Статистика:\n👥 Всего: {total}\n✅ Доставлено: {sent}\n❌ Не доставлено: {failed}\n🚫 Заблокировали бота: ~{blocked}\n📈 Успешность: {success}%\n⏱ Время: {duration} сек",
-        "broadcast.cancel": "❌ Broadcast cancelled.",
-        "broadcast.warning": "Нет активной рассылки",
         "payments.replenish_prompt": "💳 Enter the amount to top up your balance in {currency}:",
         "payments.replenish_invalid": "❌ Неверная сумма. Введите число от {min_amount} до {max_amount} {currency}.",
         "payments.deduct_prompt": "💳 Enter the amount to deduct from the user's balance in {currency}:",
@@ -963,7 +969,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.cancel_restock": "🔕 Cancel Restock Alert",
         "btn.notify_restock": "🔔 Notify when available",
         "restock_notification_text": "🎉 <b>Back in Stock!</b>\n\nThe product <b>{item_name}</b> is back in stock.\n\nClick below to check availability and complete your purchase.",
-        "btn.view_product": "🛒 View Product"
+        "btn.view_product": "🛒 View Product",
+        "broadcast.target_all": "All users",
+        "broadcast.target_locale": "Language: {name}",
+        "broadcast.btn_confirm": "✅ Confirm",
+        "broadcast.btn_cancel": "❌ Cancel",
+        "broadcast.select_audience": "Select broadcast audience:",
+        "broadcast.prompt": "Send the message (text or photo with caption):",
+        "broadcast.error_empty": "Error: Message cannot be empty.",
+        "broadcast.error_length": "Error: Message too long.",
+        "broadcast.preview_title": "👀 Broadcast preview:",
+        "broadcast.confirm_prompt": "Are you sure you want to start the broadcast?",
+        "broadcast.active_conflict": "There is already an active broadcast!",
+        "broadcast.already_confirmed": "This broadcast is already confirmed.",
+        "broadcast.queued": "✅ Broadcast queued for {count} users.",
+        "broadcast.already_finished": "This broadcast is already finished or cancelled.",
+        "broadcast.cancel": "❌ Broadcast cancelled.",
+        "broadcast.progress": "📤 Broadcast running... Progress: {progress:.1f}%. Sent: {sent}/{total}.",
+        "broadcast.done": "✅ Broadcast done! Sent: {sent}. Failed: {failed}. Blocked: {blocked}.",
+        "broadcast.warning": "No active broadcast."
     },
     "ar": {
         "shop.available_stock": "📦 <b>المخزون المتاح:</b> {stock}",
@@ -1211,12 +1235,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.shop.users.title": "Пользователи бота:",
         "admin.shop.bought.prompt_id": "أدخل المعرف الدقيق للعنصر المشترى:",
         "admin.shop.bought.not_found": "❌ لم يتم العثور على العنصر المشترى.",
-        "broadcast.prompt": "أرسل الرسالة التي تريد بثها لجميع المستخدمين.\nاستخدم /cancel للإلغاء.",
-        "broadcast.creating": "📤 بدء البث...\n👥 إجمالي المستخدمين: {ids}",
-        "broadcast.progress": "📤 Рассылка в процессе...\n\n📊 Прогресс: {progress:.1f}%\n✅ Отправлено: {sent}/{total}\n❌ Ошибок: {failed}\n⏱ Прошло времени: {time} сек",
-        "broadcast.done": "✅ Рассылка завершена!\n\n📊 Статистика:\n👥 Всего: {total}\n✅ Доставлено: {sent}\n❌ Не доставлено: {failed}\n🚫 Заблокировали бота: ~{blocked}\n📈 Успешность: {success}%\n⏱ Время: {duration} сек",
-        "broadcast.cancel": "❌ تم إلغاء البث.",
-        "broadcast.warning": "Нет активной рассылки",
         "payments.replenish_prompt": "💳 أدخل المبلغ المراد شحنه إلى رصيدك بـ {currency}:",
         "payments.replenish_invalid": "❌ Неверная сумма. Введите число от {min_amount} до {max_amount} {currency}.",
         "payments.deduct_prompt": "💳 أدخل المبلغ المراد خصمه من رصيد المستخدم بـ {currency}:",
@@ -1446,7 +1464,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn.cancel_restock": "🔕 إلغاء التنبيه",
         "btn.notify_restock": "🔔 أعلمني عندما يتوفر",
         "restock_notification_text": "🎉 <b>المنتج متوفر من جديد!</b>\n\nعاد المنتج <b>{item_name}</b> إلى المخزون.\n\nاضغط بالأسفل للتحقق من الكمية وإكمال الشراء.",
-        "btn.view_product": "🛒 عرض المنتج"
+        "btn.view_product": "🛒 عرض المنتج",
+        "broadcast.target_all": "جميع المستخدمين",
+        "broadcast.target_locale": "اللغة: {name}",
+        "broadcast.btn_confirm": "✅ تأكيد",
+        "broadcast.btn_cancel": "❌ إلغاء",
+        "broadcast.select_audience": "اختر جمهور البث:",
+        "broadcast.prompt": "أرسل الرسالة (نص أو صورة مع تعليق):",
+        "broadcast.error_empty": "خطأ: لا يمكن أن تكون الرسالة فارغة.",
+        "broadcast.error_length": "خطأ: الرسالة طويلة جداً.",
+        "broadcast.preview_title": "👀 معاينة البث:",
+        "broadcast.confirm_prompt": "هل أنت متأكد من بدء البث؟",
+        "broadcast.active_conflict": "يوجد بث نشط حالياً!",
+        "broadcast.already_confirmed": "تم تأكيد هذا البث مسبقاً.",
+        "broadcast.queued": "✅ تم وضع البث في قائمة الانتظار لـ {count} مستخدم.",
+        "broadcast.already_finished": "هذا البث انتهى أو ألغي مسبقاً.",
+        "broadcast.cancel": "❌ تم إلغاء البث.",
+        "broadcast.progress": "📤 البث قيد التشغيل... التقدم: {progress:.1f}%. تم الإرسال: {sent}/{total}.",
+        "broadcast.done": "✅ اكتمل البث! تم الإرسال: {sent}. فشل: {failed}. محظور: {blocked}.",
+        "broadcast.warning": "لا يوجد بث نشط."
     },
     "zh": {
         "shop.available_stock": "📦 <b>可用库存:</b> {stock}",
@@ -1729,27 +1765,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "admin.shop.users.title": "机器人用户：",
         "admin.shop.bought.prompt_id": "输入已购物品的准确 ID：",
         "admin.shop.bought.not_found": "❌ 未找到已购物品。",
-        "broadcast.prompt": """""发送您想要广播给所有用户的消息。
-使用 /cancel 取消。""""",
-        "broadcast.creating": """""📤 开始广播...
-👥 总用户数: {ids}""""",
-        "broadcast.progress": """""📤 广播进行中...
-
-📊 进度: {progress:.1f}%
-✅ 已发送: {sent}/{total}
-❌ 错误: {failed}
-⏱ 已耗时: {time} 秒""""",
-        "broadcast.done": """""✅ 广播完成！
-
-📊 统计信息:
-👥 总计: {total}
-✅ 已送达: {sent}
-❌ 未送达: {failed}
-🚫 屏蔽了机器人的用户: ~{blocked}
-📈 成功率: {success}%
-⏱ 耗时: {duration} 秒""""",
-        "broadcast.cancel": "❌ 广播已取消。",
-        "broadcast.warning": "没有活跃的广播",
         "payments.replenish_prompt": "💳 输入充值余额的金额，单位为 {currency}：",
         "payments.replenish_invalid": "❌ 无效金额。请输入从 {min_amount} 到 {max_amount} {currency} 的数字。",
         "payments.deduct_prompt": "💳 输入要从用户余额中扣除的金额，单位为 {currency}：",
@@ -2026,7 +2041,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 产品 <b>{item_name}</b> 现已恢复库存。
 
 点击下方查看库存详情并完成购买。""""",
-        "btn.view_product": "🛒 查看产品"
+        "btn.view_product": "🛒 查看产品",
+        "broadcast.target_all": "所有用户",
+        "broadcast.target_locale": "语言: {name}",
+        "broadcast.btn_confirm": "✅ 确认",
+        "broadcast.btn_cancel": "❌ 取消",
+        "broadcast.select_audience": "选择广播目标受众:",
+        "broadcast.prompt": "发送消息（文本或带标题的照片）:",
+        "broadcast.error_empty": "错误：消息不能为空。",
+        "broadcast.error_length": "错误：消息太长。",
+        "broadcast.preview_title": "👀 广播预览:",
+        "broadcast.confirm_prompt": "你确定要开始广播吗？",
+        "broadcast.active_conflict": "已经有一个活跃的广播！",
+        "broadcast.already_confirmed": "此广播已被确认。",
+        "broadcast.queued": "✅ 广播已进入队列 (用户数: {count})。",
+        "broadcast.already_finished": "此广播已结束或取消。",
+        "broadcast.cancel": "❌ 广播已取消。",
+        "broadcast.progress": "📤 广播进行中... 进度: {progress:.1f}%. 已发送: {sent}/{total}。",
+        "broadcast.done": "✅ 广播完成！已发送: {sent}。失败: {failed}。屏蔽: {blocked}。",
+        "broadcast.warning": "没有活跃的广播。"
     },
     "vi": {
         "shop.available_stock": "📦 <b>Hàng có sẵn:</b> {stock}",
@@ -2309,27 +2342,6 @@ Khi hoàn tất, hãy nhấn 'Thêm Các Hàng Đã Chọn'.""""",
         "admin.shop.users.title": "Người dùng của bot:",
         "admin.shop.bought.prompt_id": "Nhập ID chính xác của món hàng đã mua:",
         "admin.shop.bought.not_found": "❌ Không tìm thấy hàng đã mua.",
-        "broadcast.prompt": """""Gửi tin nhắn bạn muốn thông báo cho tất cả người dùng.
-Sử dụng /cancel để hủy.""""",
-        "broadcast.creating": """""📤 Đang bắt đầu gửi thông báo...
-👥 Tổng người dùng: {ids}""""",
-        "broadcast.progress": """""📤 Đang gửi thông báo...
-
-📊 Tiến độ: {progress:.1f}%
-✅ Đã gửi: {sent}/{total}
-❌ Lỗi: {failed}
-⏱ Thời gian trôi qua: {time} giây""""",
-        "broadcast.done": """""✅ Đã gửi xong thông báo!
-
-📊 Thống kê:
-👥 Tổng số: {total}
-✅ Đã giao: {sent}
-❌ Không thể giao: {failed}
-🚫 Đã chặn bot: ~{blocked}
-📈 Tỉ lệ thành công: {success}%
-⏱ Thời gian: {duration} giây""""",
-        "broadcast.cancel": "❌ Đã hủy gửi thông báo.",
-        "broadcast.warning": "Không có phiên thông báo nào đang hoạt động",
         "payments.replenish_prompt": "💳 Nhập số tiền muốn nạp vào số dư của bạn bằng {currency}:",
         "payments.replenish_invalid": "❌ Số tiền không hợp lệ. Vui lòng nhập số từ {min_amount} đến {max_amount} {currency}.",
         "payments.deduct_prompt": "💳 Nhập số tiền muốn trừ khỏi số dư người dùng bằng {currency}:",
@@ -2606,7 +2618,25 @@ Bạn sẽ nhận được thông báo khi đơn hàng hoàn tất.""""",
 Sản phẩm <b>{item_name}</b> đã có hàng trở lại.
 
 Nhấn vào bên dưới để kiểm tra và hoàn tất giao dịch mua hàng của bạn.""""",
-        "btn.view_product": "🛒 Xem Sản phẩm"
+        "btn.view_product": "🛒 Xem Sản phẩm",
+        "broadcast.target_all": "Tất cả người dùng",
+        "broadcast.target_locale": "Ngôn ngữ: {name}",
+        "broadcast.btn_confirm": "✅ Xác nhận",
+        "broadcast.btn_cancel": "❌ Hủy bỏ",
+        "broadcast.select_audience": "Chọn đối tượng thông báo:",
+        "broadcast.prompt": "Gửi tin nhắn (văn bản hoặc ảnh có chú thích):",
+        "broadcast.error_empty": "Lỗi: Tin nhắn không được để trống.",
+        "broadcast.error_length": "Lỗi: Tin nhắn quá dài.",
+        "broadcast.preview_title": "👀 Xem trước thông báo:",
+        "broadcast.confirm_prompt": "Bạn có chắc chắn muốn bắt đầu thông báo?",
+        "broadcast.active_conflict": "Đã có một thông báo đang hoạt động!",
+        "broadcast.already_confirmed": "Thông báo này đã được xác nhận.",
+        "broadcast.queued": "✅ Đã đưa thông báo vào hàng đợi cho {count} người dùng.",
+        "broadcast.already_finished": "Thông báo này đã kết thúc hoặc bị hủy.",
+        "broadcast.cancel": "❌ Đã hủy thông báo.",
+        "broadcast.progress": "📤 Đang gửi... Tiến trình: {progress:.1f}%. Đã gửi: {sent}/{total}.",
+        "broadcast.done": "✅ Thông báo xong! Đã gửi: {sent}. Thất bại: {failed}. Bị chặn: {blocked}.",
+        "broadcast.warning": "Không có thông báo nào đang hoạt động."
     },
     "tr": {
         "shop.available_stock": "📦 <b>Mevcut Stok:</b> {stock}",
@@ -2889,27 +2919,6 @@ Bitirdiğinizde 'Belirtilen Eşyaları Ekle'ye basın.""""",
         "admin.shop.users.title": "Bot kullanıcıları:",
         "admin.shop.bought.prompt_id": "Satın alınan eşyanın tam ID'sini girin:",
         "admin.shop.bought.not_found": "❌ Satın alınan eşya bulunamadı.",
-        "broadcast.prompt": """""Tüm kullanıcılara göndermek istediğiniz mesajı gönderin.
-İptal etmek için /cancel kullanın.""""",
-        "broadcast.creating": """""📤 Toplu mesaj başlatılıyor...
-👥 Toplam kullanıcı: {ids}""""",
-        "broadcast.progress": """""📤 Toplu mesaj devam ediyor...
-
-📊 İlerleme: %{progress:.1f}
-✅ Gönderilen: {sent}/{total}
-❌ Hatalar: {failed}
-⏱ Geçen zaman: {time} sn""""",
-        "broadcast.done": """""✅ Toplu mesaj tamamlandı!
-
-📊 İstatistikler:
-👥 Toplam: {total}
-✅ İletilen: {sent}
-❌ İletilmeyen: {failed}
-🚫 Botu engelleyenler: ~{blocked}
-📈 Başarı oranı: %{success}
-⏱ Zaman: {duration} sn""""",
-        "broadcast.cancel": "❌ Toplu mesaj iptal edildi.",
-        "broadcast.warning": "Aktif bir toplu mesaj yok",
         "payments.replenish_prompt": "💳 Bakiyenize yüklenecek miktarı {currency} cinsinden girin:",
         "payments.replenish_invalid": "❌ Geçersiz miktar. Lütfen {min_amount} ile {max_amount} {currency} arasında bir sayı girin.",
         "payments.deduct_prompt": "💳 Kullanıcının bakiyesinden düşülecek miktarı {currency} cinsinden girin:",
@@ -3186,7 +3195,25 @@ Hazır olduğunda bir bildirim alacaksınız.""""",
 <b>{item_name}</b> ürünü tekrar stoklara girdi.
 
 Uygunluğu kontrol etmek ve satın alımınızı tamamlamak için aşağıya tıklayın.""""",
-        "btn.view_product": "🛒 Ürünü Görüntüle"
+        "btn.view_product": "🛒 Ürünü Görüntüle",
+        "broadcast.target_all": "Tüm kullanıcılar",
+        "broadcast.target_locale": "Dil: {name}",
+        "broadcast.btn_confirm": "✅ Onayla",
+        "broadcast.btn_cancel": "❌ İptal et",
+        "broadcast.select_audience": "Hedef kitleyi seçin:",
+        "broadcast.prompt": "Mesajı gönderin (metin veya açıklamalı fotoğraf):",
+        "broadcast.error_empty": "Hata: Mesaj boş olamaz.",
+        "broadcast.error_length": "Hata: Mesaj çok uzun.",
+        "broadcast.preview_title": "👀 Mesaj önizlemesi:",
+        "broadcast.confirm_prompt": "Mesajı başlatmak istediğinizden emin misiniz?",
+        "broadcast.active_conflict": "Zaten aktif bir mesajlaşma var!",
+        "broadcast.already_confirmed": "Bu mesaj zaten onaylandı.",
+        "broadcast.queued": "✅ Mesaj sıraya alındı (kullanıcı sayısı: {count}).",
+        "broadcast.already_finished": "Bu mesaj zaten bitti veya iptal edildi.",
+        "broadcast.cancel": "❌ Mesaj iptal edildi.",
+        "broadcast.progress": "📤 Mesaj gönderiliyor... İlerleme: {progress:.1f}%. Gönderilen: {sent}/{total}.",
+        "broadcast.done": "✅ Mesaj tamamlandı! Gönderilen: {sent}. Hata: {failed}. Engellenen: {blocked}.",
+        "broadcast.warning": "Aktif bir mesaj yok."
     },
     "es": {
         "shop.available_stock": "📦 <b>Stock disponible:</b> {stock}",
@@ -3469,27 +3496,6 @@ Cuando termines, pulsa 'Añadir Artículos Especificados'.""""",
         "admin.shop.users.title": "Usuarios del bot:",
         "admin.shop.bought.prompt_id": "Introduce el ID exacto del artículo comprado:",
         "admin.shop.bought.not_found": "❌ Artículo comprado no encontrado.",
-        "broadcast.prompt": """""Envía el mensaje que deseas difundir a todos los usuarios.
-Usa /cancel para abortar.""""",
-        "broadcast.creating": """""📤 Iniciando difusión...
-👥 Total de usuarios: {ids}""""",
-        "broadcast.progress": """""📤 Difusión en proceso...
-
-📊 Progreso: {progress:.1f}%
-✅ Enviados: {sent}/{total}
-❌ Errores: {failed}
-⏱ Tiempo transcurrido: {time} seg""""",
-        "broadcast.done": """""✅ ¡Difusión completada!
-
-📊 Estadísticas:
-👥 Total: {total}
-✅ Entregados: {sent}
-❌ No entregados: {failed}
-🚫 Bloquearon al bot: ~{blocked}
-📈 Éxito: {success}%
-⏱ Tiempo: {duration} seg""""",
-        "broadcast.cancel": "❌ Difusión cancelada.",
-        "broadcast.warning": "No hay difusión activa",
         "payments.replenish_prompt": "💳 Introduce la cantidad para recargar tu saldo en {currency}:",
         "payments.replenish_invalid": "❌ Cantidad inválida. Introduce un número de {min_amount} a {max_amount} {currency}.",
         "payments.deduct_prompt": "💳 Introduce la cantidad a deducir del saldo del usuario en {currency}:",
@@ -3766,7 +3772,25 @@ Recibirás una notificación cuando esté listo.""""",
 El producto <b>{item_name}</b> vuelve a estar en stock.
 
 Haz clic abajo para verificar la disponibilidad y completar tu compra.""""",
-        "btn.view_product": "🛒 Ver Producto"
+        "btn.view_product": "🛒 Ver Producto",
+        "broadcast.target_all": "Todos los usuarios",
+        "broadcast.target_locale": "Idioma: {name}",
+        "broadcast.btn_confirm": "✅ Confirmar",
+        "broadcast.btn_cancel": "❌ Cancelar",
+        "broadcast.select_audience": "Seleccione el público:",
+        "broadcast.prompt": "Envía el mensaje (texto o foto con pie de foto):",
+        "broadcast.error_empty": "Error: El mensaje no puede estar vacío.",
+        "broadcast.error_length": "Error: El mensaje es demasiado largo.",
+        "broadcast.preview_title": "👀 Vista previa de difusión:",
+        "broadcast.confirm_prompt": "¿Estás seguro de que quieres iniciar la difusión?",
+        "broadcast.active_conflict": "¡Ya hay una difusión activa!",
+        "broadcast.already_confirmed": "Esta difusión ya ha sido confirmada.",
+        "broadcast.queued": "✅ Difusión en cola para {count} usuarios.",
+        "broadcast.already_finished": "Esta difusión ya ha terminado o fue cancelada.",
+        "broadcast.cancel": "❌ Difusión cancelada.",
+        "broadcast.progress": "📤 Difusión en curso... Progreso: {progress:.1f}%. Enviado: {sent}/{total}.",
+        "broadcast.done": "✅ ¡Difusión completada! Enviado: {sent}. Fallido: {failed}. Bloqueado: {blocked}.",
+        "broadcast.warning": "No hay difusión activa."
     }
 }
 

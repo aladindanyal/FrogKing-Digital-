@@ -29,6 +29,7 @@ recovery_manager = None
 cleanup_manager = None
 restock_dispatcher = None
 outbox_dispatcher = None
+broadcast_dispatcher = None
 admin_server = None
 admin_server_task = None
 cache_scheduler = None
@@ -131,6 +132,12 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     outbox_dispatcher = od
     await outbox_dispatcher.start(bot)
 
+    # Start broadcast dispatcher
+    from bot.misc.services.broadcast_dispatcher import broadcast_dispatcher as bd
+    global broadcast_dispatcher
+    broadcast_dispatcher = bd
+    await broadcast_dispatcher.start(bot)
+
     # Start the admin web server
     import uvicorn
     from bot.web import create_admin_app
@@ -196,6 +203,10 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     # Outbox Dispatcher Stop
     if outbox_dispatcher:
         await outbox_dispatcher.stop()
+
+    # Broadcast Dispatcher Stop
+    if broadcast_dispatcher:
+        await broadcast_dispatcher.stop()
 
     # Delete webhook if it was active
     if webhook_active:

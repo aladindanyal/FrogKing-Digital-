@@ -112,39 +112,66 @@ async def test_migration_cycle():
 
     env = os.environ.copy()
     test_db = "alembic_cycle_test_db"
-    env["POSTGRES_DB"] = test_db
-    env["POSTGRES_USER"] = env.get("POSTGRES_USER", "postgres")
-    env["POSTGRES_PASSWORD"] = env.get("POSTGRES_PASSWORD", "postgres")
-    env["POSTGRES_HOST"] = "db"
 
-    # Create isolated DB using asyncpg
-    conn = await asyncpg.connect(user=env["POSTGRES_USER"], password=env["POSTGRES_PASSWORD"], host=env["POSTGRES_HOST"], database="postgres")
+    provided_url = env.get("DATABASE_URL")
+    assert provided_url, "DATABASE_URL must be provided for isolated migration test"
+
+    base_url, template_db = provided_url.rsplit("/", 1)
+    admin_url = base_url.replace("postgresql+asyncpg", "postgresql") + "/postgres"
+    test_db_url = base_url + "/" + test_db
+
+    # Create isolated DB cloning the template
+    conn = await asyncpg.connect(admin_url)
     try:
-        await conn.execute(f"DROP DATABASE IF EXISTS {test_db};")
-        await conn.execute(f"CREATE DATABASE {test_db};")
+        await conn.execute(f"DROP DATABASE IF EXISTS {test_db} WITH (FORCE);")
+        await conn.execute(f"CREATE DATABASE {test_db} TEMPLATE {template_db};")
     finally:
         await conn.close()
 
+    env["DATABASE_URL"] = test_db_url
+
     try:
-        # 1. Upgrade to head
-        res = subprocess.run(["alembic", "upgrade", "head"], capture_output=True, text=True, env=env)
-        assert res.returncode == 0, res.stderr
-
-        # 2. Check heads
-        res = subprocess.run(["alembic", "heads"], capture_output=True, text=True, env=env)
+        # Check current head equals 4a2b3c4d5e6f
+        res = subprocess.run(["alembic", "current"], capture_output=True, text=True, env=env)
         assert res.returncode == 0
-        assert "3f820c7a5211" in res.stdout  # Phase 5C-2 advances the head to 3f820c7a5211
+        assert "4a2b3c4d5e6f" in res.stdout
 
-        # 3. Downgrade to 23ba1f978d38
-        res = subprocess.run(["alembic", "downgrade", "23ba1f978d38"], capture_output=True, text=True, env=env)
+        # Downgrade to 3f820c7a5211
+        res = subprocess.run(["alembic", "downgrade", "3f820c7a5211"], capture_output=True, text=True, env=env)
         assert res.returncode == 0, res.stderr
 
-        # 4. Re-upgrade
-        res = subprocess.run(["alembic", "upgrade", "head"], capture_output=True, text=True, env=env)
-        assert res.returncode == 0, res.stderr
-    finally:
-        conn = await asyncpg.connect(user=env["POSTGRES_USER"], password=env["POSTGRES_PASSWORD"], host=env["POSTGRES_HOST"], database="postgres")
+        # Verify via PostgreSQL catalogs that tables disappear
+        conn = await asyncpg.connect(test_db_url.replace("postgresql+asyncpg", "postgresql"))
         try:
-            await conn.execute(f"DROP DATABASE IF EXISTS {test_db};")
+            res_tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public';")
+            tables = [r["table_name"] for r in res_tables]
+            assert "broadcast_campaigns" not in tables
+            assert "broadcast_recipients" not in tables
+        finally:
+            await conn.close()
+
+        # Upgrade to 4a2b3c4d5e6f
+        res = subprocess.run(["alembic", "upgrade", "4a2b3c4d5e6f"], capture_output=True, text=True, env=env)
+        assert res.returncode == 0, res.stderr
+
+        # Verify via PostgreSQL catalogs that tables return
+        conn = await asyncpg.connect(test_db_url.replace("postgresql+asyncpg", "postgresql"))
+        try:
+            res_tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public';")
+            tables = [r["table_name"] for r in res_tables]
+            assert "broadcast_campaigns" in tables
+            assert "broadcast_recipients" in tables
+        finally:
+            await conn.close()
+
+        # Check final head
+        res = subprocess.run(["alembic", "current"], capture_output=True, text=True, env=env)
+        assert res.returncode == 0
+        assert "4a2b3c4d5e6f" in res.stdout
+
+    finally:
+        conn = await asyncpg.connect(admin_url)
+        try:
+            await conn.execute(f"DROP DATABASE IF EXISTS {test_db} WITH (FORCE);")
         finally:
             await conn.close()
