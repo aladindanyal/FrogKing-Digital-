@@ -87,9 +87,32 @@ class AdminAuth(AuthenticationBackend):
             ):
                 await log_audit("web_login_blocked_default_creds", level="WARNING", details=f"ip={ip}", ip_address=ip)
                 return False
-            request.session.update({"authenticated": True})
+
+            # Identify mapped Telegram ID
+            from sqlalchemy import select
+            mapped_id = EnvKeys.DASHBOARD_ADMIN_TELEGRAM_ID
+            if not mapped_id:
+                mapped_id = str(EnvKeys.OWNER_ID)
+
+            try:
+                telegram_id = int(mapped_id)
+            except ValueError:
+                telegram_id = None
+
+            if not telegram_id:
+                await log_audit("web_login_failed_mapping", level="WARNING", details=f"invalid mapping {mapped_id}")
+                return False
+
+            from bot.database.models import User
+            async with Database().session() as session:
+                user = await session.get(User, telegram_id)
+                if not user:
+                    await log_audit("web_login_failed_mapping", level="WARNING", details=f"user not found {telegram_id}")
+                    return False
+
+            request.session.update({"authenticated": True, "authenticated_user_id": telegram_id})
             _login_limiter.reset(ip)
-            await log_audit("web_login", user_id=None, details=f"user={username}", ip_address=ip)
+            await log_audit("web_login", user_id=telegram_id, details=f"user={username}", ip_address=ip)
             return True
 
         _login_limiter.record_failure(ip)
@@ -103,7 +126,6 @@ class AdminAuth(AuthenticationBackend):
 
     async def authenticate(self, request: Request) -> bool:
         auth_val = request.session.get("authenticated", False)
-        print("AUTHENTICATE CALLED! Returning:", auth_val)
         return auth_val
 
 
@@ -1643,7 +1665,13 @@ def create_admin_app() -> Starlette:
     admin.add_view(CheckoutIntakeDraftAdmin)
     admin.add_view(ManualFulfillmentJobAdmin)
 
+    from bot.web.broadcast_admin import BroadcastCampaignAdmin, BroadcastRecipientAdmin, BroadcastCenterView
+    admin.add_view(BroadcastCampaignAdmin)
+    admin.add_view(BroadcastRecipientAdmin)
+    admin.add_view(BroadcastCenterView)
+
     if EnvKeys.REVIEWS_ENABLED == "1":
+
         admin.add_view(ReviewsAdmin)
 
     return app

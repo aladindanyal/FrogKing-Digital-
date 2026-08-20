@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Preview Campaign #{{ campaign.id }}</h3>
+        </div>
+        <div class="card-body">
+            {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+
+            <div class="alert alert-info">
+                <strong>Target:</strong> {{ campaign.target_locale if campaign.target_locale else 'All Users' }}<br>
+                <strong>Estimated Audience:</strong> {{ estimated_count }} eligible users
+            </div>
+
+            <div class="card mb-4" style="max-width: 400px; margin: 0 auto; background: #e3f2fd;">
+                <div class="card-body">
+                    {% if campaign.photo_file_id %}
+                    <div class="text-center mb-3 text-muted">
+                        <i class="fa-solid fa-image fa-3x"></i><br>
+                        [Photo attached: {{ campaign.photo_file_id[:15] }}...]
+                    </div>
+                    {% endif %}
+                    {% if campaign.message_text %}
+                    <div class="message-preview" style="white-space: pre-wrap;">{{ campaign.message_text | safe }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-center gap-2">
+                <form action="{{ url_for('admin:confirm_campaign_post') ~ "?id=" ~ campaign.id }}" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-success"><i class="fa-solid fa-paper-plane"></i> Confirm & Send</button>
+                </form>
+
+                <form action="{{ url_for('admin:cancel_campaign_post') ~ "?id=" ~ campaign.id }}" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-danger"><i class="fa-solid fa-times"></i> Cancel/Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

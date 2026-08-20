@@ -79,6 +79,8 @@ class EnvKeys(ABC):
     ADMIN_USERNAME: Final = _get_optional("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD: Final = _get_optional("ADMIN_PASSWORD", "admin")
     SECRET_KEY: Final = _get_optional("SECRET_KEY", "change-me-in-production")
+    DASHBOARD_ADMIN_TELEGRAM_ID: Final = _get_optional("DASHBOARD_ADMIN_TELEGRAM_ID", "")
+    BROADCAST_STORAGE_CHAT_ID: Final = _get_optional("BROADCAST_STORAGE_CHAT_ID", "")
 
     # Webhook
     WEBHOOK_ENABLED: Final = _get_optional("WEBHOOK_ENABLED", "0")

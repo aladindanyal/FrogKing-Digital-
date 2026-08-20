@@ -131,7 +131,22 @@ from decimal import Decimal
 
 
 @pytest.mark.asyncio
-async def test_sqladmin_real_integration():
+async def test_sqladmin_real_integration(monkeypatch, user_factory, role_factory):
+    from bot.database.models.main import Permission
+
+    role_id = await role_factory(
+        name="PopularDealsWebAdmin",
+        permissions=Permission.BROADCAST,
+    )
+    dashboard_user = await user_factory(
+        telegram_id=9_600_000_001,
+        role_id=role_id,
+    )
+    monkeypatch.setattr(
+        EnvKeys,
+        "DASHBOARD_ADMIN_TELEGRAM_ID",
+        str(dashboard_user["telegram_id"]),
+    )
     from bot.database.main import Database
     from sqlalchemy import select
     import uuid

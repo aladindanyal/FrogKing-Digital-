@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="col-12">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">New Broadcast Campaign</h3>
+        </div>
+        <div class="card-body">
+            {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+            <form action="{{ url_for('admin:new_campaign') }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                <div class="mb-3">
+                    <label for="target_locale" class="form-label">Target Audience</label>
+                    <select class="form-select" id="target_locale" name="target_locale">
+                        <option value="">All Eligible Users</option>
+                        {% for loc_code, loc_name in locales %}
+                        <option value="{{ loc_code }}">Locale: {{ loc_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="message_text" class="form-label">Message Text (HTML allowed)</label>
+                    <textarea class="form-control" id="message_text" name="message_text" rows="5"></textarea>
+                    <div class="form-text">Max 4000 characters. Standard Telegram HTML tags supported.</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="photo_upload" class="form-label">Attach Photo (Optional)</label>
+                    <input class="form-control" type="file" id="photo_upload" name="photo_upload" accept="image/jpeg,image/png,image/webp">
+                    <div class="form-text">Max 5MB. Will be uploaded via bot to BROADCAST_STORAGE_CHAT_ID.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Preview Campaign</button>
+                <a href="{{ url_for('admin:list', identity='broadcastcampaign') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
