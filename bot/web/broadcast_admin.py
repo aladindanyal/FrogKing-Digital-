@@ -49,10 +49,6 @@ class BroadcastCenterView(BaseView):
     name = "Broadcast Center"
     icon = "fa-solid fa-bullhorn"
 
-    @expose("/broadcast-center", methods=["GET"])
-    async def index(self, request: Request):
-        return RedirectResponse(request.url_for("admin:new_campaign"), status_code=303)
-
     @expose("/broadcasts/new", methods=["GET", "POST"])
     async def new_campaign(self, request: Request):
         if not await check_broadcast_permission(request):
@@ -190,7 +186,7 @@ class BroadcastActionView(BaseView):
         from bot.misc.services.broadcast_dispatcher import broadcast_dispatcher
         broadcast_dispatcher.wake_up()
 
-        return RedirectResponse(request.url_for("admin:list", identity="broadcastcampaign"), status_code=303)
+        return RedirectResponse(request.url_for("admin:list", identity=BroadcastCampaignAdmin.identity), status_code=303)
 
     @expose("/broadcasts/cancel", methods=["POST"])
     async def cancel_campaign_post(self, request: Request):
@@ -209,7 +205,7 @@ class BroadcastActionView(BaseView):
         if not success:
             request.session["broadcast_error"] = msg
 
-        return RedirectResponse(request.url_for("admin:list", identity="broadcastcampaign"), status_code=303)
+        return RedirectResponse(request.url_for("admin:list", identity=BroadcastCampaignAdmin.identity), status_code=303)
 
 
 class BroadcastCampaignAdmin(AuditModelView, model=BroadcastCampaign):

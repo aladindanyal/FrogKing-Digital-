@@ -146,11 +146,11 @@ async def test_read_only_recipient_campaign_modelviews(admin_app, monkeypatch, u
     client = TestClient(admin_app)
     client.post("/admin/login", data={"username": "testadmin", "password": "testpass"}, follow_redirects=False)
 
-    res = client.get("/admin/broadcastcampaign/create", follow_redirects=False)
-    assert res.status_code == 404 # can_create = False
+    res = client.get("/admin/broadcast-campaign/create", follow_redirects=False)
+    assert res.status_code == 403  # can_create = False rejects the registered route
 
-    res = client.get("/admin/broadcastrecipient/create", follow_redirects=False)
-    assert res.status_code == 404 # can_create = False
+    res = client.get("/admin/broadcast-recipient/create", follow_redirects=False)
+    assert res.status_code == 403  # can_create = False rejects the registered route
 
 @pytest.mark.asyncio
 async def test_media_upload_validation(admin_app, monkeypatch, user_factory, role_factory):
@@ -243,6 +243,31 @@ async def test_dashboard_uses_shared_service(admin_app, monkeypatch, user_factor
         )
         mock_create_draft.assert_called_once_with(user["telegram_id"], "en", "Hello Service", None)
 
+from html.parser import HTMLParser
+
+class SidebarParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_a = False
+        self.current_href = None
+        self.found_href = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self.in_a = True
+            for k, v in attrs:
+                if k == "href":
+                    self.current_href = v
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            self.in_a = False
+            self.current_href = None
+
+    def handle_data(self, data):
+        if self.in_a and "Broadcast Center" in data:
+            self.found_href = self.current_href
+
 @pytest.mark.asyncio
 async def test_sidebar_menu_url_regression(admin_app, monkeypatch, user_factory, role_factory):
     role = await role_factory(name="AdminBC10", permissions=Permission.BROADCAST)
@@ -259,16 +284,15 @@ async def test_sidebar_menu_url_regression(admin_app, monkeypatch, user_factory,
     res = client.get("/admin/")
     assert res.status_code == 200
 
-    # Find the link for Broadcast Center in the nav
-    import re
-    # We look for <a ... href="URL">... Broadcast Center ...</a>
-    match = re.search(r'<a[^>]+href="([^"]+)"[^>]*>\s*(?:<span[^>]*>.*?</span>\s*)?<span[^>]*>Broadcast Center</span>', res.text, re.IGNORECASE | re.DOTALL)
-    assert match, "Broadcast Center menu item not found in sidebar"
-    menu_url = match.group(1)
+    # Find the link for Broadcast Center in the nav using HTML parser
+    p = SidebarParser()
+    p.feed(res.text)
 
-    # URL must not contain /cancel or /confirm
-    assert "/cancel" not in menu_url
-    assert "/confirm" not in menu_url
+    menu_url = p.found_href
+    assert menu_url, "Broadcast Center menu item not found in sidebar"
+
+    # URL must precisely point to the new campaign route
+    assert menu_url.endswith("/admin/broadcasts/new"), f"Sidebar URL is incorrect: {menu_url}"
 
     # 2. GET through the real menu URL returns 200 or a deliberate redirect to the creation page
     res_menu = client.get(menu_url, follow_redirects=False)
