@@ -136,6 +136,12 @@ class BroadcastCenterView(BaseView):
 
         return RedirectResponse(f"{request.url_for('admin:preview_campaign')}?id={campaign.id}", status_code=303)
 
+class BroadcastActionView(BaseView):
+    name = "Broadcast Actions"
+
+    def is_visible(self, request: Request) -> bool:
+        return False
+
     @expose("/broadcasts/preview", methods=["GET"])
     async def preview_campaign(self, request: Request):
         if not await check_broadcast_permission(request):

@@ -1665,10 +1665,11 @@ def create_admin_app() -> Starlette:
     admin.add_view(CheckoutIntakeDraftAdmin)
     admin.add_view(ManualFulfillmentJobAdmin)
 
-    from bot.web.broadcast_admin import BroadcastCampaignAdmin, BroadcastRecipientAdmin, BroadcastCenterView
+    from bot.web.broadcast_admin import BroadcastCampaignAdmin, BroadcastRecipientAdmin, BroadcastCenterView, BroadcastActionView
     admin.add_view(BroadcastCampaignAdmin)
     admin.add_view(BroadcastRecipientAdmin)
     admin.add_view(BroadcastCenterView)
+    admin.add_view(BroadcastActionView)
 
     if EnvKeys.REVIEWS_ENABLED == "1":
 

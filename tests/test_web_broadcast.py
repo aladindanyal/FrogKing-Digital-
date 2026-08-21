@@ -242,3 +242,61 @@ async def test_dashboard_uses_shared_service(admin_app, monkeypatch, user_factor
             follow_redirects=False
         )
         mock_create_draft.assert_called_once_with(user["telegram_id"], "en", "Hello Service", None)
+
+@pytest.mark.asyncio
+async def test_sidebar_menu_url_regression(admin_app, monkeypatch, user_factory, role_factory):
+    role = await role_factory(name="AdminBC10", permissions=Permission.BROADCAST)
+    user = await user_factory(telegram_id=1003, role_id=role)
+
+    monkeypatch.setattr(EnvKeys, "DASHBOARD_ADMIN_TELEGRAM_ID", "1003")
+    monkeypatch.setattr(EnvKeys, "ADMIN_USERNAME", "testadmin")
+    monkeypatch.setattr(EnvKeys, "ADMIN_PASSWORD", "testpass")
+
+    client = TestClient(admin_app)
+    client.post("/admin/login", data={"username": "testadmin", "password": "testpass"}, follow_redirects=False)
+
+    # 1. Inspect actual SQLAdmin-generated sidebar link on index page
+    res = client.get("/admin/")
+    assert res.status_code == 200
+
+    # Find the link for Broadcast Center in the nav
+    import re
+    # We look for <a ... href="URL">... Broadcast Center ...</a>
+    match = re.search(r'<a[^>]+href="([^"]+)"[^>]*>\s*(?:<span[^>]*>.*?</span>\s*)?<span[^>]*>Broadcast Center</span>', res.text, re.IGNORECASE | re.DOTALL)
+    assert match, "Broadcast Center menu item not found in sidebar"
+    menu_url = match.group(1)
+
+    # URL must not contain /cancel or /confirm
+    assert "/cancel" not in menu_url
+    assert "/confirm" not in menu_url
+
+    # 2. GET through the real menu URL returns 200 or a deliberate redirect to the creation page
+    res_menu = client.get(menu_url, follow_redirects=False)
+    assert res_menu.status_code in (200, 302, 303)
+    if res_menu.status_code in (302, 303):
+        assert "/broadcasts/new" in res_menu.headers["location"]
+
+    # 3. GET cancellation remains 405
+    res_cancel_get = client.get("/admin/broadcasts/cancel?id=1", follow_redirects=False)
+    assert res_cancel_get.status_code == 405
+
+    # 4. POST cancellation without valid CSRF remains rejected
+    res_cancel_post = client.post("/admin/broadcasts/cancel?id=1", data={"csrf_token": "invalid"}, follow_redirects=False)
+    assert res_cancel_post.status_code == 403
+
+    # 5. No Telegram delivery occurs during navigation or preview
+    with patch("bot.misc.services.broadcast_dispatcher.BroadcastDispatcher.wake_up") as mock_wakeup:
+        with patch("aiogram.Bot.send_message") as mock_send:
+            client.get(menu_url)
+            client.get("/admin/broadcasts/new")
+
+            # create draft to get an ID for preview
+            res_new = client.get("/admin/broadcasts/new")
+            token = res_new.text.split('name="csrf_token" value="')[1].split('"')[0]
+            res_post = client.post("/admin/broadcasts/new", data={"message_text": "Test", "csrf_token": token, "target_locale": "en"}, follow_redirects=False)
+
+            preview_url = res_post.headers["location"]
+            client.get(preview_url)
+
+            mock_wakeup.assert_not_called()
+            mock_send.assert_not_called()
