@@ -81,9 +81,17 @@ class BroadcastCenterView(BaseView):
         photo_file_id = None
 
         if photo_upload and getattr(photo_upload, "filename", None):
-            storage_chat = EnvKeys.BROADCAST_STORAGE_CHAT_ID or EnvKeys.DASHBOARD_ADMIN_TELEGRAM_ID or EnvKeys.OWNER_ID
+            storage_chat = EnvKeys.BROADCAST_STORAGE_CHAT_ID
             if not storage_chat:
                 request.session["broadcast_error"] = "Media upload failed: No BROADCAST_STORAGE_CHAT_ID configured."
+                return RedirectResponse(request.url_for("admin:new_campaign"), status_code=303)
+
+            try:
+                storage_chat_id = int(storage_chat)
+                if storage_chat_id >= 0:
+                    raise ValueError("must be a negative")
+            except ValueError:
+                request.session["broadcast_error"] = "Media upload failed: BROADCAST_STORAGE_CHAT_ID must be a negative chat ID."
                 return RedirectResponse(request.url_for("admin:new_campaign"), status_code=303)
 
             content = await photo_upload.read()
@@ -114,12 +122,20 @@ class BroadcastCenterView(BaseView):
             input_file = BufferedInputFile(content, filename=photo_upload.filename)
 
             try:
-                msg = await broadcast_dispatcher.bot.send_photo(chat_id=storage_chat, photo=input_file)
+                msg = await broadcast_dispatcher.bot.send_photo(
+                    chat_id=storage_chat_id,
+                    photo=input_file,
+                    disable_notification=True
+                )
                 photo_file_id = msg.photo[-1].file_id
+                await broadcast_dispatcher.bot.delete_message(
+                    chat_id=storage_chat_id,
+                    message_id=msg.message_id
+                )
             except Exception as e:
                 import logging
-                logging.error(f"Failed to upload broadcast media to Telegram: {e}")
-                request.session["broadcast_error"] = "Media upload failed: Telegram API error. Check BROADCAST_STORAGE_CHAT_ID."
+                logging.error(f"Failed to upload or cleanup broadcast media: {e}")
+                request.session["broadcast_error"] = "Media upload failed: Telegram API error during staging or cleanup."
                 return RedirectResponse(request.url_for("admin:new_campaign"), status_code=303)
 
         is_valid, err_msg, safe_text = await validate_payload(message_text, photo_file_id, target_locale)

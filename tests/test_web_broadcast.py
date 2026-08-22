@@ -198,9 +198,12 @@ async def test_storage_chat_upload_occurs_once(admin_app, monkeypatch, user_fact
     mock_msg.photo = [MagicMock(file_id="abc"), MagicMock(file_id="reusable_file_id_123")]
 
     with patch("bot.misc.services.broadcast_dispatcher.broadcast_dispatcher") as mock_dispatcher:
+        mock_bot = MagicMock()
+        mock_dispatcher.bot = mock_bot
         mock_send_photo = AsyncMock()
-        mock_dispatcher.bot.send_photo = mock_send_photo
-        mock_send_photo.return_value = mock_msg
+        mock_delete_message = AsyncMock()
+        mock_bot.send_photo = mock_send_photo
+        mock_bot.delete_message = mock_delete_message
         mock_send_photo.return_value = mock_msg
 
         # Valid JPEG
@@ -324,3 +327,71 @@ async def test_sidebar_menu_url_regression(admin_app, monkeypatch, user_factory,
 
             mock_wakeup.assert_not_called()
             mock_send.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_preview_defects(admin_app, monkeypatch, user_factory, role_factory):
+    role = await role_factory(name="AdminBCX", permissions=Permission.BROADCAST)
+    user = await user_factory(telegram_id=999, role_id=role)
+    monkeypatch.setattr(EnvKeys, "DASHBOARD_ADMIN_TELEGRAM_ID", "999")
+    monkeypatch.setattr(EnvKeys, "ADMIN_USERNAME", "admin")
+    monkeypatch.setattr(EnvKeys, "ADMIN_PASSWORD", "pass")
+
+    client = TestClient(admin_app, raise_server_exceptions=True)
+    client.post("/admin/login", data={"username": "admin", "password": "pass"}, follow_redirects=False)
+
+    with patch("bot.misc.services.broadcast_dispatcher.broadcast_dispatcher") as mock_disp:
+        mock_send_photo = AsyncMock()
+        mock_delete_message = AsyncMock()
+        mock_disp.bot.send_photo = mock_send_photo
+        mock_disp.bot.delete_message = mock_delete_message
+
+        mock_msg = MagicMock()
+        mock_msg.message_id = 42
+        mock_msg.photo = [MagicMock(file_id="staged_file_id")]
+        mock_send_photo.return_value = mock_msg
+
+        # Test 1: Positive storage chat ID rejected
+        monkeypatch.setattr(EnvKeys, "BROADCAST_STORAGE_CHAT_ID", "12345")
+        res = client.get("/admin/broadcasts/new", follow_redirects=False)
+        token = res.text.split('name="csrf_token" value="')[1].split('"')[0]
+
+        res1 = client.post("/admin/broadcasts/new", data={"message_text": "H", "csrf_token": token}, files={"photo_upload": ("test.jpg", b"\xff\xd8\xffvalid", "image/jpeg")}, follow_redirects=False)
+        res1_err = client.get("/admin/broadcasts/new", follow_redirects=False)
+        assert "must be a negative" in res1_err.text
+
+        # Test 2: OWNER_ID fallback is removed, meaning if BROADCAST_STORAGE_CHAT_ID is missing, it fails
+        monkeypatch.setattr(EnvKeys, "BROADCAST_STORAGE_CHAT_ID", "")
+        res_t2 = client.get("/admin/broadcasts/new", follow_redirects=False)
+        token2 = res_t2.text.split('name="csrf_token" value="')[1].split('"')[0]
+
+        res2 = client.post("/admin/broadcasts/new", data={"message_text": "H", "csrf_token": token2}, files={"photo_upload": ("test.jpg", b"\xff\xd8\xffvalid", "image/jpeg")}, follow_redirects=False)
+        res2_err = client.get("/admin/broadcasts/new", follow_redirects=False)
+        assert "must be a negative" in res2_err.text or "configured" in res2_err.text
+
+        # Test 3: Photo Preview one silent staging upload to negative storage chat, followed by deletion
+        monkeypatch.setattr(EnvKeys, "BROADCAST_STORAGE_CHAT_ID", "-100999")
+        res_t3 = client.get("/admin/broadcasts/new", follow_redirects=False)
+        token3 = res_t3.text.split('name="csrf_token" value="')[1].split('"')[0]
+
+        res3 = client.post("/admin/broadcasts/new", data={"message_text": "H", "csrf_token": token3}, files={"photo_upload": ("test.jpg", b"\xff\xd8\xffvalid", "image/jpeg")}, follow_redirects=False)
+        assert res3.status_code == 303
+
+        mock_send_photo.assert_called_once()
+        args, kwargs = mock_send_photo.call_args
+        assert kwargs.get("chat_id") == -100999
+        assert kwargs.get("disable_notification") is True
+
+        mock_delete_message.assert_called_once_with(chat_id=-100999, message_id=42)
+
+        # Test 4: Cleanup failure -> fail closed
+        mock_send_photo.reset_mock()
+        mock_delete_message.reset_mock()
+        mock_delete_message.side_effect = Exception("Failed to delete")
+
+        res_t4 = client.get("/admin/broadcasts/new", follow_redirects=False)
+        token4 = res_t4.text.split('name="csrf_token" value="')[1].split('"')[0]
+
+        res4 = client.post("/admin/broadcasts/new", data={"message_text": "H", "csrf_token": token4}, files={"photo_upload": ("test.jpg", b"\xff\xd8\xffvalid", "image/jpeg")}, follow_redirects=False)
+        assert res4.status_code == 303
+        res4_err = client.get("/admin/broadcasts/new", follow_redirects=False)
+        assert "cleanup" in res4_err.text.lower() or "error" in res4_err.text.lower()
