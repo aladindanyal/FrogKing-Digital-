@@ -3,7 +3,7 @@ from decimal import Decimal
 from functools import wraps
 from typing import Optional, Dict, TypeVar, Callable, Any, Coroutine
 
-from sqlalchemy import func, exists, select
+from sqlalchemy import case, func, exists, select
 
 from bot.database.models import Database, User, ItemValues, Goods, Categories, Role, BoughtGoods, \
     Operations, ReferralEarnings, Permission
@@ -440,24 +440,64 @@ async def get_user_referral(user_id: int) -> Optional[int]:
 
 
 async def get_referral_earnings_stats(referrer_id: int) -> Dict:
-    """Get statistics on user referral charges."""
+    """Return wallet lifecycle totals without counting reversal rows twice."""
     async with Database().session() as s:
         result = await s.execute(
             select(
-                func.count(ReferralEarnings.id).label('total_earnings_count'),
-                func.sum(ReferralEarnings.amount).label('total_amount'),
-                func.sum(ReferralEarnings.original_amount).label('total_original_amount'),
-                func.count(func.distinct(ReferralEarnings.referral_id)).label('active_referrals_count')
+                func.count(case((ReferralEarnings.amount > 0, 1))).label('total_earnings_count'),
+                func.sum(case((
+                    (ReferralEarnings.amount > 0)
+                    & (ReferralEarnings.status != 'reversed'),
+                    ReferralEarnings.amount,
+                ), else_=0)).label('total_amount'),
+                func.sum(case((
+                    (ReferralEarnings.amount > 0)
+                    & (ReferralEarnings.status != 'reversed')
+                    & (ReferralEarnings.earning_type.in_(['order_purchase', 'legacy_topup'])),
+                    ReferralEarnings.original_amount,
+                ), else_=0)).label('total_original_amount'),
+                func.count(func.distinct(case((
+                    (ReferralEarnings.referral_id.is_not(None))
+                    & (ReferralEarnings.amount > 0),
+                    ReferralEarnings.referral_id,
+                )))).label('active_referrals_count'),
+                func.sum(case((
+                    (ReferralEarnings.status == 'available')
+                    & (ReferralEarnings.amount > 0),
+                    ReferralEarnings.amount,
+                ), else_=0)).label('available_amount'),
+                func.sum(case((
+                    (ReferralEarnings.status == 'pending')
+                    & (ReferralEarnings.amount > 0),
+                    ReferralEarnings.amount,
+                ), else_=0)).label('pending_amount'),
+                func.sum(case((
+                    (ReferralEarnings.status.in_(['converted', 'settled']))
+                    & (ReferralEarnings.amount > 0),
+                    ReferralEarnings.amount,
+                ), else_=0)).label('converted_amount'),
             ).where(ReferralEarnings.referrer_id == referrer_id)
         )
         stats = result.first()
+        debt = (await s.execute(
+            select(User.referral_debt).where(User.telegram_id == referrer_id)
+        )).scalar_one_or_none()
 
         return {
             'total_earnings_count': stats.total_earnings_count or 0,
             'total_amount': stats.total_amount or Decimal(0),
             'total_original_amount': stats.total_original_amount or Decimal(0),
-            'active_referrals_count': stats.active_referrals_count or 0
+            'active_referrals_count': stats.active_referrals_count or 0,
+            'available_amount': stats.available_amount or Decimal(0),
+            'pending_amount': stats.pending_amount or Decimal(0),
+            'converted_amount': stats.converted_amount or Decimal(0),
+            'referral_debt': debt or Decimal(0),
         }
+
+
+async def get_referral_percent() -> Decimal:
+    from bot.database.methods.referrals import get_referral_rate
+    return await get_referral_rate()
 
 
 async def get_one_referral_earning(earning_id: int) -> dict | None:

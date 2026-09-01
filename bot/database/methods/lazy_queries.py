@@ -1,5 +1,5 @@
 from typing import Any
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy import desc
 from bot.database import Database
 from bot.database.models import (
@@ -148,7 +148,11 @@ async def query_user_referrals(user_id: int, offset: int = 0, limit: int = 10, c
         earnings_subq = (
             select(
                 ReferralEarnings.referral_id,
-                func.coalesce(func.sum(ReferralEarnings.amount), 0).label('total_earned')
+                func.coalesce(func.sum(case((
+                    (ReferralEarnings.amount > 0)
+                    & (ReferralEarnings.status != 'reversed'),
+                    ReferralEarnings.amount,
+                ), else_=0)), 0).label('total_earned')
             )
             .where(ReferralEarnings.referrer_id == user_id)
             .group_by(ReferralEarnings.referral_id)

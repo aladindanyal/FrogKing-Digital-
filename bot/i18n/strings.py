@@ -94,21 +94,31 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "referral.title": "💚 Реферальная система",
         "referral.link": "🔗 Ссылка: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "Количество рефералов: {count}",
-        "referral.description": "📔 Реферальная система позволит Вам заработать деньги без всяких вложений. Необходимо всего лишь распространять свою реферальную ссылку и Вы будете получать {percent}% от суммы пополнений Ваших рефералов на Ваш баланс бота.",
+        "referral.description": "📔 Делитесь реферальной ссылкой и получайте {percent}% от оплаченных покупок приглашённых пользователей. Начисления становятся доступными после защитного периода.",
         "btn.view_referrals": "👥 Мои рефералы",
         "btn.view_earnings": "💰 Мои поступления",
+        "btn.convert_referral": "💳 Перевести доступные начисления",
         "btn.back_to_referral": "⬅️ К реферальной системе",
         "referrals.list.title": "👥 Ваши рефералы:",
         "referrals.list.empty": "У вас пока нет активных рефералов",
         "referrals.item.format": "ID: {telegram_id} | Принёс: {total_earned} {currency}",
         "referral.earnings.title": "💰 Поступления от реферала <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>):",
         "referral.earnings.empty": "От данного реферала <code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>) пока не было поступлений",
-        "referral.earning.format": "{amount} {currency} | {date} | (с {original_amount} {currency})",
-        "referral.item.info": "💰 Поступление номер: <code>{id}</code>\n👤 Реферал: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)\n🔢 Количество: {amount} {currency}\n🕘 Дата: <code>{date}</code>\n💵 С пополнения на {original_amount} {currency}",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | покупка {original_amount} {currency}",
+        "referral.item.info": "💰 Начисление: <code>{id}</code>\n👤 Источник: <code>{telegram_id}</code> ({name})\n🔢 Сумма: {amount} {currency}\n📌 Статус: {status}\n🕘 Дата: <code>{date}</code>\n💵 Покупка: {original_amount} {currency}",
         "all.earnings.title": "💰 Все ваши реферальные поступления:",
         "all.earnings.empty": "У вас пока нет реферальных поступлений",
-        "all.earning.format": "{amount} {currency} от ID:{referral_id} | {date}",
-        "referrals.stats.template": "📊 Статистика реферальной системы:\n\n👥 Активных рефералов: {active_count}\n💰 Всего заработано: {total_earned} {currency}\n📈 Общая сумма пополнений рефералов: {total_original} {currency}\n🔢 Количество начислений: {earnings_count}",
+        "all.earning.format": "{amount} {currency} от ID:{referral_id} | {status} | {date}",
+        "referrals.stats.template": "📊 Статистика реферальной системы:\n\n👥 Активных рефералов: {active_count}\n⏳ Ожидает: {pending} {currency}\n✅ Доступно: {available} {currency}\n💳 Переведено: {converted} {currency}\n⚠️ Долг: {debt} {currency}\n💰 Всего начислено: {total_earned} {currency}\n📈 Сумма покупок: {total_original} {currency}\n🔢 Начислений: {earnings_count}",
+        "referral.status.pending": "ожидает",
+        "referral.status.available": "доступно",
+        "referral.status.converted": "переведено",
+        "referral.status.settled": "выплачено ранее",
+        "referral.status.applied": "применено",
+        "referral.status.reversed": "отменено",
+        "referral.conversion.success": "✅ Переведено {gross} {currency}. Оставшийся реферальный долг: {debt} {currency}.",
+        "referral.conversion.empty": "Нет доступных начислений для перевода.",
+        "referral.conversion.failed": "Не удалось перевести начисления. Попробуйте позже.",
         "admin.menu.main": "⛩️ Меню администратора",
         "admin.menu.shop": "🛒 Управление магазином",
         "admin.menu.goods": "📦 Управление позициями",
@@ -589,21 +599,31 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "referral.title": "💚 Referral System",
         "referral.link": "🔗 Link: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "Number of referrals: {count}",
-        "referral.description": "📔 The referral system allows you to earn without any investment. Just share your referral link and receive {percent}% of your referrals' top-ups to your bot balance.",
+        "referral.description": "📔 Share your referral link and earn {percent}% from referred users' paid purchases. Earnings become available after the protection period.",
         "btn.view_referrals": "👥 My Referrals",
         "btn.view_earnings": "💰 My Earnings",
+        "btn.convert_referral": "💳 Convert Available Earnings",
         "btn.back_to_referral": "⬅️ Back to Referral System",
         "referrals.list.title": "👥 Your Referrals:",
         "referrals.list.empty": "You have no active referrals yet",
         "referrals.item.format": "ID: {telegram_id} | Earned: {total_earned} {currency}",
         "referral.earnings.title": "💰 Earnings from referral <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>):",
         "referral.earnings.empty": "No earnings from referral <code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>) yet",
-        "referral.earning.format": "{amount} {currency} | {date} | (from {original_amount} {currency})",
-        "referral.item.info": "💰 Earning ID: <code>{id}</code>\n👤 Referral: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)\n🔢 Amount: {amount} {currency}\n🕘 Date: <code>{date}</code>\n💵 From top-up of {original_amount} {currency}",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | purchase {original_amount} {currency}",
+        "referral.item.info": "💰 Earning ID: <code>{id}</code>\n👤 Source: <code>{telegram_id}</code> ({name})\n🔢 Amount: {amount} {currency}\n📌 Status: {status}\n🕘 Date: <code>{date}</code>\n💵 Purchase: {original_amount} {currency}",
         "all.earnings.title": "💰 All your referral earnings:",
         "all.earnings.empty": "You have no referral earnings yet",
-        "all.earning.format": "{amount} {currency} from ID:{referral_id} | {date}",
-        "referrals.stats.template": "📊 Referral System Statistics:\n\n👥 Active Referrals: {active_count}\n💰 Total Earned: {total_earned} {currency}\n📈 Total Referral Top-ups: {total_original} {currency}\n🔢 Total Payouts: {earnings_count}",
+        "all.earning.format": "{amount} {currency} from ID:{referral_id} | {status} | {date}",
+        "referrals.stats.template": "📊 Referral System Statistics:\n\n👥 Active referrals: {active_count}\n⏳ Pending: {pending} {currency}\n✅ Available: {available} {currency}\n💳 Converted: {converted} {currency}\n⚠️ Referral debt: {debt} {currency}\n💰 Total earned: {total_earned} {currency}\n📈 Purchase base: {total_original} {currency}\n🔢 Earnings: {earnings_count}",
+        "referral.status.pending": "pending",
+        "referral.status.available": "available",
+        "referral.status.converted": "converted",
+        "referral.status.settled": "previously paid",
+        "referral.status.applied": "applied",
+        "referral.status.reversed": "reversed",
+        "referral.conversion.success": "✅ Converted {gross} {currency}. Remaining referral debt: {debt} {currency}.",
+        "referral.conversion.empty": "There are no available earnings to convert.",
+        "referral.conversion.failed": "The conversion could not be completed. Please try again later.",
         "admin.menu.main": "⛩️ Admin Menu",
         "admin.menu.shop": "🛒 Manage Shop",
         "admin.menu.goods": "📦 Manage Items",
@@ -1084,21 +1104,31 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "referral.title": "💚 نظام الإحالة",
         "referral.link": "🔗 الرابط: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "عدد الإحالات: {count}",
-        "referral.description": "📔 يتيح لك نظام الإحالة الكسب بدون استثمار. فقط شارك رابط الإحالة الخاص بك واحصل على {percent}% من شحنات المحالين إلى رصيدك في البوت.",
+        "referral.description": "📔 شارك رابط الإحالة واربح {percent}% من مشتريات المستخدمين المحالين المدفوعة. تصبح الأرباح متاحة بعد انتهاء فترة الحماية.",
         "btn.view_referrals": "👥 إحالاتي",
         "btn.view_earnings": "💰 أرباحي",
+        "btn.convert_referral": "💳 تحويل الأرباح المتاحة",
         "btn.back_to_referral": "⬅️ العودة لنظام الإحالة",
         "referrals.list.title": "👥 إحالاتك:",
         "referrals.list.empty": "ليس لديك إحالات نشطة بعد",
         "referrals.item.format": "المعرف: {telegram_id} | الأرباح: {total_earned} {currency}",
         "referral.earnings.title": "💰 أرباح من الإحالة <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>):",
         "referral.earnings.empty": "لا توجد أرباح من الإحالة <code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>) بعد",
-        "referral.earning.format": "{amount} {currency} | {date} | (من {original_amount} {currency})",
-        "referral.item.info": "💰 معرف الربح: <code>{id}</code>\n👤 الإحالة: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)\n🔢 المبلغ: {amount} {currency}\n🕘 التاريخ: <code>{date}</code>\n💵 من شحنة بقيمة {original_amount} {currency}",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | شراء {original_amount} {currency}",
+        "referral.item.info": "💰 معرف الربح: <code>{id}</code>\n👤 المصدر: <code>{telegram_id}</code> ({name})\n🔢 المبلغ: {amount} {currency}\n📌 الحالة: {status}\n🕘 التاريخ: <code>{date}</code>\n💵 قيمة الشراء: {original_amount} {currency}",
         "all.earnings.title": "💰 جميع أرباح الإحالة الخاصة بك:",
         "all.earnings.empty": "ليس لديك أرباح إحالة بعد",
-        "all.earning.format": "{amount} {currency} من المعرف:{referral_id} | {date}",
-        "referrals.stats.template": "📊 إحصائيات نظام الإحالة:\n\n👥 الإحالات النشطة: {active_count}\n💰 إجمالي الأرباح: {total_earned} {currency}\n📈 إجمالي شحنات الإحالة: {total_original} {currency}\n🔢 إجمالي المدفوعات: {earnings_count}",
+        "all.earning.format": "{amount} {currency} من المعرف:{referral_id} | {status} | {date}",
+        "referrals.stats.template": "📊 إحصائيات نظام الإحالة:\n\n👥 الإحالات النشطة: {active_count}\n⏳ معلقة: {pending} {currency}\n✅ متاحة: {available} {currency}\n💳 محولة: {converted} {currency}\n⚠️ دين الإحالة: {debt} {currency}\n💰 إجمالي الأرباح: {total_earned} {currency}\n📈 قيمة المشتريات: {total_original} {currency}\n🔢 عدد القيود: {earnings_count}",
+        "referral.status.pending": "معلق",
+        "referral.status.available": "متاح",
+        "referral.status.converted": "محول",
+        "referral.status.settled": "مدفوع سابقًا",
+        "referral.status.applied": "مطبق",
+        "referral.status.reversed": "معكوس",
+        "referral.conversion.success": "✅ تم تحويل {gross} {currency}. دين الإحالة المتبقي: {debt} {currency}.",
+        "referral.conversion.empty": "لا توجد أرباح متاحة للتحويل.",
+        "referral.conversion.failed": "تعذر إتمام التحويل. حاول لاحقًا.",
         "admin.menu.main": "⛩️ قائمة الإدارة",
         "admin.menu.shop": "🛒 إدارة المتجر",
         "admin.menu.goods": "📦 إدارة المنتجات",
@@ -1579,30 +1609,45 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "referral.title": "💚 邀请系统",
         "referral.link": "🔗 链接: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "邀请人数: {count}",
-        "referral.description": "📔 邀请系统允许您零投资赚钱。只需分享您的邀请链接，即可获得受邀者充值金额的 {percent}% 作为您的机器人余额。",
+        "referral.description": "📔 分享邀请链接，即可从受邀用户的已付款购买中获得 {percent}% 奖励。奖励会在保护期结束后可用。",
         "btn.view_referrals": "👥 我的邀请",
         "btn.view_earnings": "💰 我的收益",
+        "btn.convert_referral": "💳 转换可用收益",
         "btn.back_to_referral": "⬅️ 返回邀请系统",
         "referrals.list.title": "👥 您的邀请:",
         "referrals.list.empty": "您还没有活跃的邀请",
         "referrals.item.format": "ID: {telegram_id} | 赚取: {total_earned} {currency}",
         "referral.earnings.title": "💰 来自邀请 <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>) 的收益:",
         "referral.earnings.empty": "暂无来自邀请 <code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>) 的收益",
-        "referral.earning.format": "{amount} {currency} | {date} | (来自 {original_amount} {currency})",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | 购买 {original_amount} {currency}",
         "referral.item.info": """""💰 收益 ID: <code>{id}</code>
-👤 受邀者: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)
+👤 来源: <code>{telegram_id}</code> ({name})
 🔢 金额: {amount} {currency}
 🕘 日期: <code>{date}</code>
-💵 来自充值 {original_amount} {currency}""""",
+📌 状态: {status}
+💵 购买金额 {original_amount} {currency}""""",
         "all.earnings.title": "💰 您的所有邀请收益:",
         "all.earnings.empty": "您还没有邀请收益",
-        "all.earning.format": "从 ID:{referral_id} 获得 {amount} {currency} | {date}",
+        "all.earning.format": "从 ID:{referral_id} 获得 {amount} {currency} | {status} | {date}",
         "referrals.stats.template": """""📊 邀请系统统计:
 
 👥 活跃邀请: {active_count}
+⏳ 待处理: {pending} {currency}
+✅ 可用: {available} {currency}
+💳 已转换: {converted} {currency}
+⚠️ 邀请债务: {debt} {currency}
 💰 总收益: {total_earned} {currency}
-📈 邀请总充值: {total_original} {currency}
-🔢 总支付次数: {earnings_count}""""",
+📈 购买总额: {total_original} {currency}
+🔢 收益记录: {earnings_count}""""",
+        "referral.status.pending": "待处理",
+        "referral.status.available": "可用",
+        "referral.status.converted": "已转换",
+        "referral.status.settled": "以前已支付",
+        "referral.status.applied": "已应用",
+        "referral.status.reversed": "已撤销",
+        "referral.conversion.success": "✅ 已转换 {gross} {currency}。剩余邀请债务：{debt} {currency}。",
+        "referral.conversion.empty": "没有可转换的收益。",
+        "referral.conversion.failed": "转换失败，请稍后重试。",
         "admin.menu.main": "⛩️ 管理员菜单",
         "admin.menu.shop": "🛒 管理商店",
         "admin.menu.goods": "📦 管理商品",
@@ -2156,30 +2201,45 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "referral.title": "💚 Hệ thống Giới thiệu",
         "referral.link": "🔗 Liên kết: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "Số lượng người được giới thiệu: {count}",
-        "referral.description": "📔 Hệ thống giới thiệu cho phép bạn kiếm tiền không cần đầu tư. Chỉ cần chia sẻ liên kết giới thiệu và nhận {percent}% từ các lần nạp tiền của người bạn giới thiệu vào số dư bot của bạn.",
+        "referral.description": "📔 Chia sẻ liên kết giới thiệu và nhận {percent}% từ các giao dịch mua đã thanh toán của người được giới thiệu. Thu nhập khả dụng sau thời gian bảo vệ.",
         "btn.view_referrals": "👥 Danh sách Giới thiệu",
         "btn.view_earnings": "💰 Thu nhập của tôi",
+        "btn.convert_referral": "💳 Chuyển thu nhập khả dụng",
         "btn.back_to_referral": "⬅️ Quay lại Hệ thống Giới thiệu",
         "referrals.list.title": "👥 Những người bạn đã giới thiệu:",
         "referrals.list.empty": "Bạn chưa có lượt giới thiệu hoạt động nào",
         "referrals.item.format": "ID: {telegram_id} | Đã kiếm: {total_earned} {currency}",
         "referral.earnings.title": "💰 Thu nhập từ lượt giới thiệu <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>):",
         "referral.earnings.empty": "Chưa có thu nhập từ lượt giới thiệu <code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>)",
-        "referral.earning.format": "{amount} {currency} | {date} | (từ {original_amount} {currency})",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | mua {original_amount} {currency}",
         "referral.item.info": """""💰 ID Thu nhập: <code>{id}</code>
-👤 Người được giới thiệu: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)
+👤 Nguồn: <code>{telegram_id}</code> ({name})
 🔢 Số tiền: {amount} {currency}
 🕘 Ngày: <code>{date}</code>
-💵 Từ khoản nạp {original_amount} {currency}""""",
+📌 Trạng thái: {status}
+💵 Giá trị mua: {original_amount} {currency}""""",
         "all.earnings.title": "💰 Tất cả thu nhập từ giới thiệu của bạn:",
         "all.earnings.empty": "Bạn chưa có thu nhập từ giới thiệu",
-        "all.earning.format": "{amount} {currency} từ ID:{referral_id} | {date}",
+        "all.earning.format": "{amount} {currency} từ ID:{referral_id} | {status} | {date}",
         "referrals.stats.template": """""📊 Thống kê Hệ thống Giới thiệu:
 
 👥 Người được giới thiệu hoạt động: {active_count}
-💰 Tổng số tiền kiếm được: {total_earned} {currency}
-📈 Tổng tiền nạp từ giới thiệu: {total_original} {currency}
-🔢 Tổng số lần thanh toán: {earnings_count}""""",
+⏳ Đang chờ: {pending} {currency}
+✅ Khả dụng: {available} {currency}
+💳 Đã chuyển: {converted} {currency}
+⚠️ Nợ giới thiệu: {debt} {currency}
+💰 Tổng thu nhập: {total_earned} {currency}
+📈 Tổng giá trị mua: {total_original} {currency}
+🔢 Số khoản thu nhập: {earnings_count}""""",
+        "referral.status.pending": "đang chờ",
+        "referral.status.available": "khả dụng",
+        "referral.status.converted": "đã chuyển",
+        "referral.status.settled": "đã thanh toán trước đây",
+        "referral.status.applied": "đã áp dụng",
+        "referral.status.reversed": "đã hoàn",
+        "referral.conversion.success": "✅ Đã chuyển {gross} {currency}. Nợ giới thiệu còn lại: {debt} {currency}.",
+        "referral.conversion.empty": "Không có thu nhập khả dụng để chuyển.",
+        "referral.conversion.failed": "Không thể hoàn tất chuyển đổi. Vui lòng thử lại sau.",
         "admin.menu.main": "⛩️ Menu Quản trị",
         "admin.menu.shop": "🛒 Quản lý Cửa hàng",
         "admin.menu.goods": "📦 Quản lý Sản phẩm",
@@ -2733,30 +2793,45 @@ Nhấn vào bên dưới để kiểm tra và hoàn tất giao dịch mua hàng 
         "referral.title": "💚 Referans Sistemi",
         "referral.link": "🔗 Bağlantı: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "Referans sayısı: {count}",
-        "referral.description": "📔 Referans sistemi hiç yatırım yapmadan kazanmanızı sağlar. Sadece referans bağlantınızı paylaşın ve referanslarınızın yüklemelerinden %{percent} bot bakiyenize gelsin.",
+        "referral.description": "📔 Referans bağlantınızı paylaşın ve davet edilen kullanıcıların ödenmiş alışverişlerinden %{percent} kazanın. Kazançlar koruma süresinden sonra kullanılabilir.",
         "btn.view_referrals": "👥 Referanslarım",
         "btn.view_earnings": "💰 Kazançlarım",
+        "btn.convert_referral": "💳 Kullanılabilir Kazancı Aktar",
         "btn.back_to_referral": "⬅️ Referans Sistemine Dön",
         "referrals.list.title": "👥 Referanslarınız:",
         "referrals.list.empty": "Henüz aktif referansınız yok",
         "referrals.item.format": "ID: {telegram_id} | Kazanılan: {total_earned} {currency}",
         "referral.earnings.title": "💰 <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>) referansından kazançlar:",
         "referral.earnings.empty": "<code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>) referansından henüz kazanç yok",
-        "referral.earning.format": "{amount} {currency} | {date} | ({original_amount} {currency} üzerinden)",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | alışveriş {original_amount} {currency}",
         "referral.item.info": """""💰 Kazanç ID: <code>{id}</code>
-👤 Referans: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)
+👤 Kaynak: <code>{telegram_id}</code> ({name})
 🔢 Miktar: {amount} {currency}
 🕘 Tarih: <code>{date}</code>
-💵 {original_amount} {currency} yüklemesinden""""",
+📌 Durum: {status}
+💵 Alışveriş: {original_amount} {currency}""""",
         "all.earnings.title": "💰 Tüm referans kazançlarınız:",
         "all.earnings.empty": "Henüz referans kazancınız yok",
-        "all.earning.format": "ID:{referral_id} üzerinden {amount} {currency} | {date}",
+        "all.earning.format": "ID:{referral_id} üzerinden {amount} {currency} | {status} | {date}",
         "referrals.stats.template": """""📊 Referans Sistemi İstatistikleri:
 
 👥 Aktif Referanslar: {active_count}
-💰 Toplam Kazanılan: {total_earned} {currency}
-📈 Toplam Referans Yüklemeleri: {total_original} {currency}
-🔢 Toplam Ödemeler: {earnings_count}""""",
+⏳ Bekleyen: {pending} {currency}
+✅ Kullanılabilir: {available} {currency}
+💳 Aktarılan: {converted} {currency}
+⚠️ Referans borcu: {debt} {currency}
+💰 Toplam kazanç: {total_earned} {currency}
+📈 Alışveriş toplamı: {total_original} {currency}
+🔢 Kazanç kaydı: {earnings_count}""""",
+        "referral.status.pending": "bekliyor",
+        "referral.status.available": "kullanılabilir",
+        "referral.status.converted": "aktarıldı",
+        "referral.status.settled": "önceden ödendi",
+        "referral.status.applied": "uygulandı",
+        "referral.status.reversed": "geri alındı",
+        "referral.conversion.success": "✅ {gross} {currency} aktarıldı. Kalan referans borcu: {debt} {currency}.",
+        "referral.conversion.empty": "Aktarılabilir kazanç yok.",
+        "referral.conversion.failed": "Aktarım tamamlanamadı. Lütfen daha sonra tekrar deneyin.",
         "admin.menu.main": "⛩️ Admin Menüsü",
         "admin.menu.shop": "🛒 Mağazayı Yönet",
         "admin.menu.goods": "📦 Ürünleri Yönet",
@@ -3310,30 +3385,45 @@ Uygunluğu kontrol etmek ve satın alımınızı tamamlamak için aşağıya tı
         "referral.title": "💚 Sistema de Referidos",
         "referral.link": "🔗 Enlace: https://t.me/{bot_username}?start={user_id}",
         "referral.count": "Número de referidos: {count}",
-        "referral.description": "📔 El sistema de referidos te permite ganar sin ninguna inversión. Solo comparte tu enlace de referido y recibe el {percent}% de las recargas de tus referidos en el saldo de tu bot.",
+        "referral.description": "📔 Comparte tu enlace y gana el {percent}% de las compras pagadas por tus referidos. Las ganancias quedan disponibles tras el período de protección.",
         "btn.view_referrals": "👥 Mis Referidos",
         "btn.view_earnings": "💰 Mis Ganancias",
+        "btn.convert_referral": "💳 Convertir Ganancias Disponibles",
         "btn.back_to_referral": "⬅️ Volver al Sistema de Referidos",
         "referrals.list.title": "👥 Tus Referidos:",
         "referrals.list.empty": "Aún no tienes referidos activos",
         "referrals.item.format": "ID: {telegram_id} | Ganado: {total_earned} {currency}",
         "referral.earnings.title": "💰 Ganancias del referido <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>):",
         "referral.earnings.empty": "Aún no hay ganancias del referido <code>{id}</code> (<a href='tg://user?id={id}'>{name}</a>)",
-        "referral.earning.format": "{amount} {currency} | {date} | (de {original_amount} {currency})",
+        "referral.earning.format": "{amount} {currency} | {status} | {date} | compra {original_amount} {currency}",
         "referral.item.info": """""💰 ID de Ganancia: <code>{id}</code>
-👤 Referido: <code>{telegram_id}</code> (<a href='tg://user?id={telegram_id}'>{name}</a>)
+👤 Origen: <code>{telegram_id}</code> ({name})
 🔢 Cantidad: {amount} {currency}
 🕘 Fecha: <code>{date}</code>
-💵 Por recarga de {original_amount} {currency}""""",
+📌 Estado: {status}
+💵 Compra: {original_amount} {currency}""""",
         "all.earnings.title": "💰 Todas tus ganancias de referidos:",
         "all.earnings.empty": "Aún no tienes ganancias de referidos",
-        "all.earning.format": "{amount} {currency} del ID:{referral_id} | {date}",
+        "all.earning.format": "{amount} {currency} del ID:{referral_id} | {status} | {date}",
         "referrals.stats.template": """""📊 Estadísticas del Sistema de Referidos:
 
 👥 Referidos Activos: {active_count}
-💰 Total Ganado: {total_earned} {currency}
-📈 Recargas Totales de Referidos: {total_original} {currency}
-🔢 Pagos Totales: {earnings_count}""""",
+⏳ Pendiente: {pending} {currency}
+✅ Disponible: {available} {currency}
+💳 Convertido: {converted} {currency}
+⚠️ Deuda de referidos: {debt} {currency}
+💰 Total ganado: {total_earned} {currency}
+📈 Total de compras: {total_original} {currency}
+🔢 Registros de ganancias: {earnings_count}""""",
+        "referral.status.pending": "pendiente",
+        "referral.status.available": "disponible",
+        "referral.status.converted": "convertido",
+        "referral.status.settled": "pagado anteriormente",
+        "referral.status.applied": "aplicado",
+        "referral.status.reversed": "revertido",
+        "referral.conversion.success": "✅ Se convirtieron {gross} {currency}. Deuda de referidos restante: {debt} {currency}.",
+        "referral.conversion.empty": "No hay ganancias disponibles para convertir.",
+        "referral.conversion.failed": "No se pudo completar la conversión. Inténtalo más tarde.",
         "admin.menu.main": "⛩️ Menú de Administración",
         "admin.menu.shop": "🛒 Gestionar Tienda",
         "admin.menu.goods": "📦 Gestionar Artículos",

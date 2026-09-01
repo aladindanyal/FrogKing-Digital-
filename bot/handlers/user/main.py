@@ -12,7 +12,7 @@ from bot.database.methods import (
     select_max_role_id, create_user, check_role, check_user,
     select_user_operations, select_user_items, check_user_cached
 )
-from bot.database.methods.read import get_cart_count, get_store_settings
+from bot.database.methods.read import get_cart_count, get_store_settings, get_referral_percent
 from bot.database.methods.lazy_queries import query_user_operations_history
 from bot.handlers.other import check_sub_channel, _parse_channel_username
 from bot.keyboards import main_menu, back, profile_keyboard, check_sub
@@ -274,7 +274,6 @@ async def profile_callback_handler(call: CallbackQuery, state: FSMContext):
     operations = await select_user_operations(user_id)
     overall_balance = sum(operations) if operations else 0
     items = await select_user_items(user_id)
-    referral = EnvKeys.REFERRAL_PERCENT
     markup = profile_keyboard(helper=EnvKeys.HELPER_ID)
     text = (
         f"{localize('profile.caption', name=tg_user.first_name, id=user_id)}\n"
@@ -386,7 +385,7 @@ async def wallet_command_handler(message: Message, state: FSMContext):
     balance = user_info.get('balance') if user_info else 0
     operations = await select_user_operations(user_id)
     overall_balance = sum(operations) if operations else 0
-    referral = EnvKeys.REFERRAL_PERCENT
+    referral = await get_referral_percent()
 
     from bot.keyboards.inline import wallet_keyboard
     markup = wallet_keyboard(referral)
@@ -412,7 +411,7 @@ async def wallet_callback_handler(call: CallbackQuery, state: FSMContext):
     balance = user_info.get('balance') if user_info else 0
     operations = await select_user_operations(user_id)
     overall_balance = sum(operations) if operations else 0
-    referral = EnvKeys.REFERRAL_PERCENT
+    referral = await get_referral_percent()
 
     markup = wallet_keyboard(referral)
     text = (

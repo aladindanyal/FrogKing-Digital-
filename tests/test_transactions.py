@@ -225,7 +225,7 @@ class TestProcessPaymentWithReferral:
         # Balance only credited once
         assert await _get_balance(200002) == 300.0
 
-    async def test_payment_with_referral_bonus(self, user_factory):
+    async def test_top_up_does_not_create_referral_commission(self, user_factory):
         # Create referrer first
         await user_factory(telegram_id=200010, balance=0)
         # Create user with referrer
@@ -245,8 +245,8 @@ class TestProcessPaymentWithReferral:
         # User got 100
         assert await _get_balance(200003) == 100.0
 
-        # Referrer got 10 (10% of 100)
-        assert await _get_balance(200010) == 10.0
+        # Phase 6B pays commissions on purchases, not balance top-ups.
+        assert await _get_balance(200010) == 0.0
 
         # ReferralEarnings record created
         async with Database().session() as s:
@@ -254,9 +254,7 @@ class TestProcessPaymentWithReferral:
                 ReferralEarnings.referrer_id == 200010,
                 ReferralEarnings.referral_id == 200003,
             ))).scalars().all()
-            assert len(earnings) == 1
-            assert float(earnings[0].amount) == 10.0
-            assert float(earnings[0].original_amount) == 100.0
+            assert earnings == []
 
     async def test_payment_no_referrer(self, user_factory):
         # User without referral_id

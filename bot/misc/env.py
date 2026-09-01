@@ -45,6 +45,9 @@ class EnvKeys(ABC):
     CRYPTO_PAY_TOKEN: Final = _get_optional("CRYPTO_PAY_TOKEN", "")
     STARS_PER_VALUE: Final = float(_get_optional("STARS_PER_VALUE", "0.91"))
     REFERRAL_PERCENT: Final = int(_get_optional("REFERRAL_PERCENT", "0"))
+    REFERRAL_HOLD_HOURS: Final = int(_get_optional("REFERRAL_HOLD_HOURS", "72"))
+    REFERRAL_WORKER_INTERVAL: Final = int(_get_optional("REFERRAL_WORKER_INTERVAL", "300"))
+    REFERRAL_WORKER_BATCH_SIZE: Final = int(_get_optional("REFERRAL_WORKER_BATCH_SIZE", "100"))
     PAY_CURRENCY: Final = _get_optional("PAY_CURRENCY", "RUB")
     PAYMENT_TIME: Final = int(_get_optional("PAYMENT_TIME", "1800"))
     MIN_AMOUNT: Final = int(_get_optional("MIN_AMOUNT", "20"))
@@ -124,3 +127,9 @@ class EnvKeys(ABC):
             "CONFIG: REFERRAL_PERCENT=%s is outside the valid range [0, 99].",
             REFERRAL_PERCENT,
         )
+    if REFERRAL_HOLD_HOURS < 0:
+        raise ValueError("REFERRAL_HOLD_HOURS must be zero or greater.")
+    if REFERRAL_WORKER_INTERVAL <= 0:
+        raise ValueError("REFERRAL_WORKER_INTERVAL must be greater than zero.")
+    if REFERRAL_WORKER_BATCH_SIZE <= 0:
+        raise ValueError("REFERRAL_WORKER_BATCH_SIZE must be greater than zero.")

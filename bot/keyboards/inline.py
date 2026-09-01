@@ -397,7 +397,11 @@ def rating_keyboard(item_name: str) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def referral_system_keyboard(has_referrals: bool = False, has_earnings: bool = False) -> InlineKeyboardMarkup:
+def referral_system_keyboard(
+    has_referrals: bool = False,
+    has_earnings: bool = False,
+    has_convertible: bool = False,
+) -> InlineKeyboardMarkup:
     """
     Referral system keyboard with additional buttons.
     """
@@ -408,6 +412,9 @@ def referral_system_keyboard(has_referrals: bool = False, has_earnings: bool = F
 
     if has_earnings:
         kb.button(text=localize("btn.view_earnings"), callback_data="view_all_earnings")
+
+    if has_convertible:
+        kb.button(text=localize("btn.convert_referral"), callback_data="convert_referral_earnings")
 
     kb.button(text=localize("btn.back"), callback_data="profile")
     kb.adjust(1)

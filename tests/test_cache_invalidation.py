@@ -160,7 +160,7 @@ class TestCacheInvalidationAfterMutations:
         assert f"user:{user_id}" not in fake_cache.store
         assert "user_count" not in fake_cache.store
 
-    async def test_payment_with_referral_invalidates_referrer_cache(
+    async def test_top_up_does_not_mutate_referrer_cache(
             self, user_factory, fake_cache
     ):
         referrer = await user_factory(telegram_id=200001)
@@ -183,4 +183,4 @@ class TestCacheInvalidationAfterMutations:
         await asyncio.sleep(0)
 
         assert success is True
-        assert f"user:{referrer_id}" not in fake_cache.store
+        assert f"user:{referrer_id}" in fake_cache.store

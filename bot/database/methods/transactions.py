@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -6,13 +6,14 @@ from sqlalchemy import select, update, exists as sa_exists, delete as sa_delete
 from sqlalchemy.exc import IntegrityError
 
 from bot.database.models import User, ItemValues, Goods, BoughtGoods, Payments, Operations
-from bot.database.models.main import PromoCodes, PromoCodeUsages, CartItems, ReferralEarnings, CheckoutIntakeDraft, OrderCustomerInput, ManualFulfillmentJob
+from bot.database.models.main import PromoCodes, PromoCodeUsages, CartItems, CheckoutIntakeDraft, OrderCustomerInput, ManualFulfillmentJob
 from bot.database import Database
 from bot.misc import EnvKeys, encryption, masking
 from bot.misc.utils import ensure_utc
 from bot.database.methods.read import invalidate_user_cache, invalidate_stats_cache, invalidate_item_cache
 from bot.database.methods.cache_utils import safe_create_task
 from bot.database.methods.audit import log_audit
+from bot.database.methods.referrals import create_purchase_referral_earning
 
 
 async def buy_item_transaction(
@@ -302,6 +303,19 @@ async def buy_item_transaction(
                     draft.order_id = order.id
                     s.add(draft)
 
+                hold_ready_at = None
+                if not is_manual:
+                    hold_ready_at = order_item.completed_at + timedelta(
+                        hours=EnvKeys.REFERRAL_HOLD_HOURS
+                    )
+                await create_purchase_referral_earning(
+                    s,
+                    buyer=user,
+                    commission_base_amount=total,
+                    ready_at=hold_ready_at,
+                    order_item_id=order_item.id,
+                )
+
                 # 8. Record Operation History
                 s.add(Operations(
                     user_id=telegram_id,
@@ -379,7 +393,10 @@ async def process_payment_with_referral(
         referral_percent: int = 0
 ) -> tuple[bool, str]:
     """
-    Processing a payment with a referral bonus in one transaction.
+    Process a balance top-up in one transaction.
+
+    ``referral_percent`` remains in the signature for API compatibility only.
+    Phase 6B deliberately awards referral earnings on purchases, never top-ups.
     Returns (success, message)
     """
 
@@ -424,43 +441,10 @@ async def process_payment_with_referral(
             )
             s.add(operation)
 
-            # 4. Process the referral bonus
-            clamped_percent = min(max(referral_percent, 0), 99)
-            if clamped_percent > 0 and user.referral_id and user.referral_id != user_id:
-                referral_amount = (Decimal(clamped_percent) / Decimal(100)) * amount
-
-                if referral_amount > 0:
-                    referrer = (await s.execute(
-                        select(User).where(User.telegram_id == user.referral_id).with_for_update()
-                    )).scalars().one_or_none()
-
-                    if referrer:
-                        referrer.balance += referral_amount
-                        await log_audit(
-                            "referral_bonus",
-                            user_id=user.referral_id,
-                            resource_type="User",
-                            resource_id=str(user_id),
-                            details=f"paid={amount}, bonus={referral_amount}",
-                        )
-
-                        earning = ReferralEarnings(
-                            referrer_id=user.referral_id,
-                            referral_id=user_id,
-                            amount=referral_amount,
-                            original_amount=amount
-                        )
-                        s.add(earning)
-
-            referrer_id = user.referral_id if clamped_percent > 0 else None
-
             await s.commit()
 
             safe_create_task(invalidate_user_cache(user_id))
             safe_create_task(invalidate_stats_cache())
-            if referrer_id:
-                safe_create_task(invalidate_user_cache(referrer_id))
-
             return True, "success"
 
         except IntegrityError:
@@ -622,6 +606,15 @@ async def checkout_cart_transaction(user_id: int) -> tuple[bool, str, list | Non
                     )
                     s.add(bought_item)
                     await s.flush()
+                    await create_purchase_referral_earning(
+                        s,
+                        buyer=user,
+                        commission_base_amount=p['price'],
+                        ready_at=datetime.now(timezone.utc) + timedelta(
+                            hours=EnvKeys.REFERRAL_HOLD_HOURS
+                        ),
+                        bought_goods_id=bought_item.id,
+                    )
                     results.append({
                         "item_name": p['goods'].name,
                         "value": p['item_value'].value,

@@ -105,6 +105,7 @@ class User(Database.BASE):
     profile_updated_at = Column(DateTime(timezone=True), nullable=True)
     role_id = Column(Integer, ForeignKey('roles.id', ondelete="RESTRICT"), default=1, index=True)
     balance = Column(Numeric(12, 2), nullable=False, default=0)
+    referral_debt = Column(Numeric(12, 2), nullable=False, default=0, server_default=text("0.00"))
     referral_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="SET NULL"), nullable=True, index=True)
     registration_date = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     is_blocked = Column(Boolean, default=False, index=True)
@@ -114,6 +115,7 @@ class User(Database.BASE):
 
     __table_args__ = (
         CheckConstraint('referral_id != telegram_id', name='ck_users_no_self_referral'),
+        CheckConstraint('referral_debt >= 0', name='ck_users_referral_debt_nonnegative'),
         Index('ix_users_registration_date', 'registration_date'),
     )
 
@@ -205,12 +207,14 @@ class StoreSettings(Database.BASE):
     subcategory_columns = Column(Integer, nullable=False, default=2, server_default="2")
     product_columns = Column(Integer, nullable=False, default=1, server_default="1")
     root_category_buttons_per_row = Column(Integer, nullable=False, default=1, server_default="1")
+    referral_percent = Column(Numeric(5, 2), nullable=False, default=5, server_default="5.00")
 
     __table_args__ = (
         CheckConstraint('root_category_columns IN (1, 2)', name='ck_store_settings_root_cols'),
         CheckConstraint('subcategory_columns IN (1, 2)', name='ck_store_settings_subcat_cols'),
         CheckConstraint('product_columns IN (1, 2)', name='ck_store_settings_product_cols'),
         CheckConstraint('root_category_buttons_per_row IN (1, 2)', name='ck_store_settings_root_btns'),
+        CheckConstraint('referral_percent >= 0 AND referral_percent <= 100', name='ck_store_settings_referral_percent'),
     )
 
 
@@ -568,15 +572,60 @@ class Payments(Database.BASE):
         return f"{self.provider}:{self.external_id}"
 
 
+class ReferralConversions(Database.BASE):
+    __tablename__ = 'referral_conversions'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="RESTRICT"), nullable=False, index=True)
+    gross_amount = Column(Numeric(12, 2), nullable=False)
+    debt_offset = Column(Numeric(12, 2), nullable=False)
+    balance_credit = Column(Numeric(12, 2), nullable=False)
+    balance_operation_id = Column(Integer, ForeignKey('operations.id', ondelete="RESTRICT"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User", backref="referral_conversions", lazy='raise')
+    operation = relationship("Operations", lazy='raise')
+
+    __table_args__ = (
+        CheckConstraint('gross_amount > 0', name='ck_rc_gross_positive'),
+        CheckConstraint('debt_offset >= 0', name='ck_rc_debt_offset_nonnegative'),
+        CheckConstraint('balance_credit >= 0', name='ck_rc_balance_credit_nonnegative'),
+        CheckConstraint('gross_amount = debt_offset + balance_credit', name='ck_rc_gross_math'),
+        CheckConstraint(
+            '(balance_credit = 0 AND balance_operation_id IS NULL) OR '
+            '(balance_credit > 0 AND balance_operation_id IS NOT NULL)',
+            name='ck_rc_balance_operation',
+        ),
+        Index('ix_referral_conversions_user_created', 'user_id', 'created_at'),
+    )
+
+
 class ReferralEarnings(Database.BASE):
     __tablename__ = 'referral_earnings'
 
     id = Column(Integer, primary_key=True)
-    referrer_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
-    referral_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="CASCADE"), nullable=False, index=True)
+    referrer_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="RESTRICT"), nullable=False, index=True)
+    referral_id = Column(BigInteger, ForeignKey('users.telegram_id', ondelete="RESTRICT"), nullable=True, index=True)
     amount = Column(Numeric(12, 2), nullable=False)
     original_amount = Column(Numeric(12, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    status = Column(String(32), nullable=False, default="pending", server_default="pending")
+    earning_type = Column(String(32), nullable=False, default="order_purchase", server_default="order_purchase")
+    bought_goods_id = Column(Integer, ForeignKey('bought_goods.id', ondelete="RESTRICT"), nullable=True)
+    order_item_id = Column(Integer, ForeignKey('order_items.id', ondelete="RESTRICT"), nullable=True)
+    admin_identity = Column(String(100), nullable=True)
+    reason = Column(Text, nullable=True)
+    ready_at = Column(DateTime(timezone=True), nullable=True)
+    converted_at = Column(DateTime(timezone=True), nullable=True)
+    reversed_at = Column(DateTime(timezone=True), nullable=True)
+    commission_base_amount = Column(Numeric(12, 2), nullable=True)
+    commission_rate = Column(Numeric(5, 2), nullable=True)
+    balance_recovered = Column(Numeric(12, 2), nullable=True)
+    debt_added = Column(Numeric(12, 2), nullable=True)
+    reversal_of_id = Column(Integer, ForeignKey('referral_earnings.id', ondelete='RESTRICT'), nullable=True)
+    conversion_id = Column(Integer, ForeignKey('referral_conversions.id', ondelete='RESTRICT'), nullable=True, index=True)
+    idempotency_key = Column(String(100), nullable=True)
 
     referrer = relationship(
         "User",
@@ -590,11 +639,83 @@ class ReferralEarnings(Database.BASE):
         back_populates="referral_earnings_generated",
         lazy='raise',
     )
+    bought_goods = relationship("BoughtGoods", lazy='raise')
+    order_item = relationship("OrderItem", lazy='raise')
+    reversal_of = relationship("ReferralEarnings", remote_side=[id], lazy='raise')
+    conversion = relationship("ReferralConversions", backref="earnings", lazy='raise')
 
     __table_args__ = (
-        CheckConstraint('referrer_id != referral_id', name='ck_referral_earnings_no_self_referral'),
+        CheckConstraint('referral_id IS NULL OR referrer_id != referral_id', name='ck_referral_earnings_no_self_referral'),
+        CheckConstraint('amount <> 0', name='ck_re_amount_not_zero'),
+        CheckConstraint(
+            "status IN ('pending', 'available', 'converted', 'settled', 'applied', 'reversed')",
+            name='ck_re_status',
+        ),
+        CheckConstraint(
+            "earning_type IN ('order_purchase', 'legacy_topup', 'manual_adjustment', 'compensating_reversal')",
+            name='ck_re_type',
+        ),
+        CheckConstraint(
+            "(earning_type = 'order_purchase' AND amount > 0 "
+            "AND referral_id IS NOT NULL "
+            "AND ((bought_goods_id IS NOT NULL AND order_item_id IS NULL) "
+            "OR (bought_goods_id IS NULL AND order_item_id IS NOT NULL)) "
+            "AND commission_base_amount > 0 "
+            "AND commission_rate >= 0 AND commission_rate <= 100 "
+            "AND status IN ('pending', 'available', 'converted', 'reversed')) "
+            "OR (earning_type = 'legacy_topup' AND amount > 0 AND referral_id IS NOT NULL "
+            "AND status = 'settled' AND bought_goods_id IS NULL AND order_item_id IS NULL) "
+            "OR (earning_type = 'manual_adjustment' AND admin_identity IS NOT NULL "
+            "AND reason IS NOT NULL AND length(trim(reason)) > 0 "
+            "AND ((amount > 0 AND status IN ('available', 'converted')) "
+            "OR (amount < 0 AND status = 'applied'))) "
+            "OR (earning_type = 'compensating_reversal' AND amount < 0 "
+            "AND status = 'applied' AND reversal_of_id IS NOT NULL)",
+            name='ck_re_status_matrix',
+        ),
+        CheckConstraint(
+            "(status = 'pending') OR (status = 'available' AND ready_at IS NOT NULL) "
+            "OR (status = 'converted' AND conversion_id IS NOT NULL AND converted_at IS NOT NULL) "
+            "OR (status = 'reversed' AND reversed_at IS NOT NULL) "
+            "OR status IN ('settled', 'applied')",
+            name='ck_re_lifecycle_fields',
+        ),
+        CheckConstraint(
+            "earning_type NOT IN ('manual_adjustment', 'compensating_reversal') "
+            "OR amount > 0 "
+            "OR (balance_recovered IS NOT NULL AND debt_added IS NOT NULL "
+            "AND balance_recovered >= 0 AND debt_added >= 0 "
+            "AND balance_recovered + debt_added = -amount)",
+            name='ck_re_debit_audit_math',
+        ),
+        CheckConstraint(
+            "earning_type = 'order_purchase' OR (bought_goods_id IS NULL AND order_item_id IS NULL)",
+            name='ck_re_sources_order_only',
+        ),
         Index('ix_referral_earnings_referrer_created', 'referrer_id', 'created_at'),
         Index('ix_referral_earnings_referral_created', 'referral_id', 'created_at'),
+        Index('ix_referral_earnings_referrer_status', 'referrer_id', 'status'),
+        Index('ix_referral_earnings_status_ready_at', 'status', 'ready_at', 'id'),
+        Index(
+            'uq_ref_earning_bought_goods', 'bought_goods_id', unique=True,
+            postgresql_where=text("earning_type = 'order_purchase' AND bought_goods_id IS NOT NULL"),
+            sqlite_where=text("earning_type = 'order_purchase' AND bought_goods_id IS NOT NULL"),
+        ),
+        Index(
+            'uq_ref_earning_order_item', 'order_item_id', unique=True,
+            postgresql_where=text("earning_type = 'order_purchase' AND order_item_id IS NOT NULL"),
+            sqlite_where=text("earning_type = 'order_purchase' AND order_item_id IS NOT NULL"),
+        ),
+        Index(
+            'uq_ref_earning_reversal_of', 'reversal_of_id', unique=True,
+            postgresql_where=text("earning_type = 'compensating_reversal' AND reversal_of_id IS NOT NULL"),
+            sqlite_where=text("earning_type = 'compensating_reversal' AND reversal_of_id IS NOT NULL"),
+        ),
+        Index(
+            'uq_ref_earning_idempotency', 'idempotency_key', unique=True,
+            postgresql_where=text('idempotency_key IS NOT NULL'),
+            sqlite_where=text('idempotency_key IS NOT NULL'),
+        ),
     )
 
     def __init__(self, referrer_id: int = None, referral_id: int = None, amount=None, original_amount=None, **kw: Any):

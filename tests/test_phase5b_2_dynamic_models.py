@@ -87,7 +87,7 @@ def test_obj_to_dict_exposes_columns():
 def test_sqladmin_config():
     # StoreSettingsAdmin
     assert not any(col.name.endswith('_en') or col.name.endswith('_ar') for col in StoreSettingsAdmin.column_list)
-    assert len(StoreSettingsAdmin.column_details_list) == 22 + 25  # Phase 5C-2 adds 25 localized columns (5 fields * 5 new locales)
+    assert len(StoreSettingsAdmin.column_details_list) == 23 + 25  # Phase 6B adds referral_percent
     assert StoreSettingsAdmin.column_labels[StoreSettings.shop_root_title_en] == "Shop Root Title (English)"
 
     # CategoryAdmin
@@ -116,22 +116,26 @@ async def test_migration_cycle():
     provided_url = env.get("DATABASE_URL")
     assert provided_url, "DATABASE_URL must be provided for isolated migration test"
 
-    base_url, template_db = provided_url.rsplit("/", 1)
+    base_url, source_db = provided_url.rsplit("/", 1)
+    source_db = source_db.split("?", 1)[0]
+    assert "test" in source_db.lower(), "Migration cycle refuses a non-test DATABASE_URL"
     admin_url = base_url.replace("postgresql+asyncpg", "postgresql") + "/postgres"
     test_db_url = base_url + "/" + test_db
 
-    # Create isolated DB cloning the template
+    # Create an empty isolated database; never clone or disconnect a live database.
     conn = await asyncpg.connect(admin_url)
     try:
         await conn.execute(f"DROP DATABASE IF EXISTS {test_db} WITH (FORCE);")
-        await conn.execute(f"CREATE DATABASE {test_db} TEMPLATE {template_db};")
+        await conn.execute(f"CREATE DATABASE {test_db};")
     finally:
         await conn.close()
 
     env["DATABASE_URL"] = test_db_url
 
     try:
-        # Check current head equals 4a2b3c4d5e6f
+        # Build the approved pre-Phase-6B baseline.
+        res = subprocess.run(["alembic", "upgrade", "4a2b3c4d5e6f"], capture_output=True, text=True, env=env)
+        assert res.returncode == 0, res.stderr
         res = subprocess.run(["alembic", "current"], capture_output=True, text=True, env=env)
         assert res.returncode == 0
         assert "4a2b3c4d5e6f" in res.stdout
@@ -150,8 +154,8 @@ async def test_migration_cycle():
         finally:
             await conn.close()
 
-        # Upgrade to 4a2b3c4d5e6f
-        res = subprocess.run(["alembic", "upgrade", "4a2b3c4d5e6f"], capture_output=True, text=True, env=env)
+        # Upgrade through Phase 6B head.
+        res = subprocess.run(["alembic", "upgrade", "head"], capture_output=True, text=True, env=env)
         assert res.returncode == 0, res.stderr
 
         # Verify via PostgreSQL catalogs that tables return
@@ -167,7 +171,7 @@ async def test_migration_cycle():
         # Check final head
         res = subprocess.run(["alembic", "current"], capture_output=True, text=True, env=env)
         assert res.returncode == 0
-        assert "4a2b3c4d5e6f" in res.stdout
+        assert "b6e3f4a5c6d7" in res.stdout
 
     finally:
         conn = await asyncpg.connect(admin_url)

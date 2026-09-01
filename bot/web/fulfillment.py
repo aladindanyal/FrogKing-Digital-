@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, func, update
 from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +16,8 @@ from bot.database.models.main import (
     ManualFulfillmentJob, Order, OrderItem, User, OrderCustomerInput,
     ManualOrderInteraction, ManualOrderNotification, AuditLog
 )
+from bot.misc import EnvKeys
+from bot.database.methods.referrals import start_manual_referral_hold
 from bot.misc.encryption import decrypt_text
 from bot.misc.services.outbox_dispatcher import outbox_dispatcher
 import logging
@@ -614,10 +616,18 @@ async def api_complete(request: Request):
                 return JSONResponse({"ok": True, "status": job.status})
 
             job.status = 'completed'
-            job.completed_at = func.now()
+            completed_at = datetime.now(timezone.utc)
+            job.completed_at = completed_at
             job.completed_by = actor_id
 
-            job.order_item.status = 'completed'
+            job.order_item.fulfillment_status = 'delivered'
+            job.order_item.completed_at = completed_at
+
+            await start_manual_referral_hold(
+                session,
+                order_item_id=job.order_item.id,
+                ready_at=completed_at + timedelta(hours=EnvKeys.REFERRAL_HOLD_HOURS),
+            )
 
             # Check if all order items are completed to complete the order
             all_completed = True
@@ -627,11 +637,12 @@ async def api_complete(request: Request):
             order_items = order_items_result.scalars().all()
 
             for oi in order_items:
-                if oi.id != job.order_item.id and oi.status != 'completed':
+                if oi.id != job.order_item.id and oi.fulfillment_status != 'delivered':
                     all_completed = False
                     break
             if all_completed:
                 job.order_item.order.status = 'completed'
+                job.order_item.order.completed_at = completed_at
 
             interaction = ManualOrderInteraction(
                 order_id=job.order_item.order_id,

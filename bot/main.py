@@ -30,6 +30,7 @@ cleanup_manager = None
 restock_dispatcher = None
 outbox_dispatcher = None
 broadcast_dispatcher = None
+referral_worker = None
 admin_server = None
 admin_server_task = None
 cache_scheduler = None
@@ -138,6 +139,12 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     broadcast_dispatcher = bd
     await broadcast_dispatcher.start(bot)
 
+    # Mature held referral earnings. This worker never changes store balances.
+    from bot.misc.services.referral_worker import referral_availability_worker
+    global referral_worker
+    referral_worker = referral_availability_worker
+    await referral_worker.start()
+
     # Start the admin web server
     import uvicorn
     from bot.web import create_admin_app
@@ -207,6 +214,9 @@ async def __on_shutdown(dp: Dispatcher, bot: Bot) -> None:
     # Broadcast Dispatcher Stop
     if broadcast_dispatcher:
         await broadcast_dispatcher.stop()
+
+    if referral_worker:
+        await referral_worker.stop()
 
     # Delete webhook if it was active
     if webhook_active:

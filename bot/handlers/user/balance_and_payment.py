@@ -8,7 +8,7 @@ from bot.misc.utils import answer_callback_safe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-from bot.database.methods import get_user_referral, buy_item_transaction, process_payment_with_referral, create_pending_payment
+from bot.database.methods import buy_item_transaction, process_payment_with_referral, create_pending_payment
 from bot.misc.utils import safe_edit_or_send
 from bot.keyboards import back, payment_menu, close, get_payment_choice
 from bot.logger_mesh import logger
@@ -24,25 +24,6 @@ from bot.i18n import localize
 from bot.states import BalanceStates
 
 router = Router()
-
-
-async def _notify_referrer_bonus(bot, user_id: int, amount: int, payer_name: str, payer_id: int):
-    """Send referral bonus notification to the referrer if applicable."""
-    referral_id = await get_user_referral(user_id)
-    if not referral_id or not EnvKeys.REFERRAL_PERCENT:
-        return
-    try:
-        bonus = int(Decimal(EnvKeys.REFERRAL_PERCENT) / Decimal(100) * Decimal(amount))
-        if bonus > 0:
-            await bot.send_message(
-                referral_id,
-                localize('payments.referral.bonus',
-                         amount=bonus, name=payer_name,
-                         id=payer_id, currency=EnvKeys.PAY_CURRENCY),
-                reply_markup=close()
-            )
-    except (TelegramBadRequest, TelegramForbiddenError) as e:
-        logger.error(f"Failed to send referral notification to user {referral_id}: {e}")
 
 
 @router.callback_query(F.data == "replenish_balance")
@@ -280,9 +261,6 @@ async def checking_payment(call: CallbackQuery, state: FSMContext):
             if metrics:
                 metrics.track_event("payment", user_id, {"amount": balance_amount, "provider": "cryptopay"})
 
-            # Send a notification to the referrer
-            await _notify_referrer_bonus(call.bot, user_id, balance_amount, call.from_user.first_name, call.from_user.id)
-
             await safe_edit_or_send(call,
                 localize("payments.topped_simple",
                          amount=balance_amount,
@@ -386,9 +364,6 @@ async def successful_payment_handler(message: Message):
         else:
             await message.answer(localize("payments.processing_error"), reply_markup=close())
         return
-
-    # Sending notification to referrer
-    await _notify_referrer_bonus(message.bot, user_id, amount, message.from_user.first_name, message.from_user.id)
 
     metrics = get_metrics()
     if metrics:
@@ -529,7 +504,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         total_discount = Decimal(str(purchase_data.get('discount_total', 0))).quantize(Decimal("0.01"))
         total_paid = Decimal(str(purchase_data['total'])).quantize(Decimal("0.01"))
         currency = purchase_data.get('currency', EnvKeys.PAY_CURRENCY)
-        
+
         from datetime import datetime
         dt = datetime.fromisoformat(purchase_data['purchase_timestamp'])
         purchased_time = dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -545,7 +520,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         )
         if total_discount > 0:
             receipt_header += localize("shop.discount", discount=total_discount, currency=currency) + "\n"
-            
+
         receipt_header += (
             localize("shop.total_paid", total=total_paid, currency=currency) + "\n" +
             localize("shop.purchased_at", purchased_time=purchased_time) + "\n\n"
@@ -554,7 +529,7 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         delivered_values = purchase_data.get('delivered_values', [purchase_data.get('value', '')])
         messages_to_send = []
         current_msg = "🔑 <b>Delivered Value:</b>\n<code>\n"
-        
+
         if purchase_data['quantity'] > 1:
             for i, val in enumerate(delivered_values, 1):
                 val_str = f"{i}) {sanitize_html(val)}\n"
@@ -567,10 +542,10 @@ async def buy_item_callback_handler(call: CallbackQuery, state: FSMContext):
         else:
             safe_value = sanitize_html(delivered_values[0] if delivered_values else purchase_data.get('value', ''))
             current_msg += f"{safe_value}\n"
-            
+
         current_msg += "</code>\n\n⚠️ Keep this message for future reference and support."
         messages_to_send.append(current_msg)
-        
+
         for msg in messages_to_send:
             await call.message.answer(msg, parse_mode='HTML')
 

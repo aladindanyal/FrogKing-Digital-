@@ -14,6 +14,7 @@ from bot.database.methods.update import (
 from bot.database.methods.delete import *
 from bot.database.methods.lazy_queries import *
 from bot.database.methods.transactions import *
+from bot.database.methods.referrals import *
 from bot.database.methods.cache_utils import *
 from bot.database.methods.audit import log_audit
 from .profile import sync_telegram_user_profile

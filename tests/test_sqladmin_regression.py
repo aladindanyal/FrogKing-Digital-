@@ -446,7 +446,10 @@ async def test_db_cleanup_isolation(db_session):
         schema_fingerprint="dummy",
         encrypted_payload="dummy",
         encryption_version=1,
-        expires_at=datetime.datetime.now(datetime.timezone.utc)
+        expires_at=(
+            datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(minutes=30)
+        )
     )
 
     db_session.add_all([order_item, cart_item, draft])

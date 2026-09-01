@@ -149,14 +149,20 @@ async def create_pending_payment(provider: str, external_id: str, user_id: int, 
 
 
 async def create_referral_earning(referrer_id: int, referral_id: int, amount: int, original_amount: int) -> None:
-    """Create a referral credit record."""
+    """Create a settled legacy row for compatibility with historical tooling.
+
+    New Phase 6B earnings must be created from purchase transactions instead.
+    """
     async with Database().session() as s:
         s.add(
             ReferralEarnings(
                 referrer_id=referrer_id,
                 referral_id=referral_id,
                 amount=Decimal(amount),
-                original_amount=Decimal(original_amount)
+                original_amount=Decimal(original_amount),
+                status="settled",
+                earning_type="legacy_topup",
+                reason="Compatibility import for pre-Phase 6B earning",
             )
         )
 

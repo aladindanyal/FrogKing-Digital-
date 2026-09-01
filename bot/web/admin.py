@@ -58,7 +58,7 @@ _login_limiter = LoginRateLimiter()
 from bot.database.main import Database
 from bot.database.models import User, Role, Categories, Goods, ItemValues, BoughtGoods, Operations, Payments
 from bot.database.models.main import (
-    StoreSettings, MainMenuButtonSettings, ReferralEarnings, AuditLog,
+    StoreSettings, MainMenuButtonSettings, ReferralEarnings, ReferralConversions, AuditLog,
     PromoCodes, PromoCodeUsages, CartItems, Reviews,
     ProductCustomerField, ProductRestockSubscription, Order, OrderItem,
     CheckoutIntakeDraft, OrderCustomerInput, ManualFulfillmentJob
@@ -465,7 +465,8 @@ class CategoryAdmin(AuditModelView, model=Categories):
 
 
 class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
-    column_list = [StoreSettings.id, StoreSettings.shop_root_title, StoreSettings.main_menu_title]
+    column_list = [StoreSettings.id, StoreSettings.shop_root_title, StoreSettings.main_menu_title,
+                   StoreSettings.referral_percent]
     name = "Store Setting"
     name_plural = "Store Settings"
     icon = "fa-solid fa-gear"
@@ -490,6 +491,7 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
         StoreSettings.subcategory_columns,
         StoreSettings.product_columns,
         StoreSettings.root_category_buttons_per_row,
+        StoreSettings.referral_percent,
     ]
     column_labels = {
         StoreSettings.shop_root_title_en: "Shop Root Title (English)",
@@ -520,6 +522,7 @@ class StoreSettingsAdmin(AuditModelView, model=StoreSettings):
         StoreSettings.root_category_columns,
         StoreSettings.subcategory_columns,
         StoreSettings.product_columns,
+        StoreSettings.referral_percent,
     ]
 
     from sqladmin.fields import FileField
@@ -1244,7 +1247,8 @@ class PaymentsAdmin(ModelView, model=Payments):
 class ReferralEarningsAdmin(ModelView, model=ReferralEarnings):
     column_list = [ReferralEarnings.id, ReferralEarnings.referrer_id,
                    ReferralEarnings.referral_id, ReferralEarnings.amount,
-                   ReferralEarnings.original_amount, ReferralEarnings.created_at]
+                   ReferralEarnings.original_amount, ReferralEarnings.status,
+                   ReferralEarnings.earning_type, ReferralEarnings.created_at]
     column_searchable_list = [ReferralEarnings.referrer_id, ReferralEarnings.referral_id]
     column_sortable_list = [ReferralEarnings.id, ReferralEarnings.created_at, ReferralEarnings.amount]
     column_default_sort = (ReferralEarnings.id, True)
@@ -1254,6 +1258,21 @@ class ReferralEarningsAdmin(ModelView, model=ReferralEarnings):
     name = "Referral Earning"
     name_plural = "Referral Earnings"
     icon = "fa-solid fa-handshake"
+
+
+class ReferralConversionsAdmin(ModelView, model=ReferralConversions):
+    column_list = [ReferralConversions.id, ReferralConversions.user_id,
+                   ReferralConversions.gross_amount, ReferralConversions.debt_offset,
+                   ReferralConversions.balance_credit, ReferralConversions.created_at]
+    column_searchable_list = [ReferralConversions.user_id]
+    column_sortable_list = [ReferralConversions.id, ReferralConversions.created_at]
+    column_default_sort = (ReferralConversions.id, True)
+    can_create = False
+    can_edit = False
+    can_delete = False
+    name = "Referral Conversion"
+    name_plural = "Referral Conversions"
+    icon = "fa-solid fa-right-left"
 
 
 class AuditLogAdmin(ModelView, model=AuditLog):
@@ -1654,6 +1673,9 @@ def create_admin_app() -> Starlette:
     admin.add_view(OperationsAdmin)
     admin.add_view(PaymentsAdmin)
     admin.add_view(ReferralEarningsAdmin)
+    admin.add_view(ReferralConversionsAdmin)
+    from bot.web.referral_admin import ReferralAdjustmentView
+    admin.add_view(ReferralAdjustmentView)
     admin.add_view(AuditLogAdmin)
     admin.add_view(PromoCodeAdmin)
     admin.add_view(CartItemsAdmin)

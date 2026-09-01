@@ -20,9 +20,10 @@ async def log_audit(
     resource_id: str | None = None,
     details: str | None = None,
     ip_address: str | None = None,
+    session=None,
 ) -> None:
-    resource_id = str(resource_id) if resource_id is not None else None
     """Write audit entry to both the log file and the database."""
+    resource_id = str(resource_id) if resource_id is not None else None
     # 1. File log
     log_level = _LOG_LEVELS.get(level, logging.INFO)
     parts = [f"action={action}"]
@@ -49,7 +50,10 @@ async def log_audit(
             details=details,
             ip_address=ip_address,
         )
-        async with Database().session() as s:
-            s.add(entry)
+        if session is not None:
+            session.add(entry)
+        else:
+            async with Database().session() as s:
+                s.add(entry)
     except Exception:
         audit_logger.warning("Failed to write audit entry to DB", exc_info=True)
