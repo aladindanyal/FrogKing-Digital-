@@ -171,7 +171,7 @@ async def test_migration_cycle():
         # Check final head
         res = subprocess.run(["alembic", "current"], capture_output=True, text=True, env=env)
         assert res.returncode == 0
-        assert "b6e3f4a5c6d7" in res.stdout
+        assert "c7d8e9f0a1b2" in res.stdout
 
     finally:
         conn = await asyncpg.connect(admin_url)

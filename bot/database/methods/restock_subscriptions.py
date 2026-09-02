@@ -1,7 +1,24 @@
+from dataclasses import dataclass, field
+from typing import Any
 import datetime
-from sqlalchemy import select, insert, func, update
+from sqlalchemy import select, insert, func, update, exists
 from bot.database.main import Database
-from bot.database.models import Goods, ItemValues, ProductRestockSubscription
+from bot.database.models import Goods, ItemValues, ProductRestockSubscription, User
+
+
+@dataclass
+class ClaimedRestockSubscription:
+    id: int
+    user_id: int
+    item_id: int
+    attempts: int = 0
+    status: str = 'processing'
+    user_language_code: str | None = None
+    item_data: dict[str, Any] = field(default_factory=dict)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default)
+
 
 async def is_restock_subscription_active(user_id: int, item_id: int) -> bool:
     """Check if the user has an active or processing restock subscription."""
@@ -149,69 +166,120 @@ async def recover_stale_processing_subscriptions(stale_timeout_seconds: int) -> 
         return result.rowcount
 
 async def get_dispatchable_restock_count() -> int:
-    """Return count of active subscriptions that are due for a retry."""
+    """Return count of active subscriptions that are due for a retry with live stock and enabled goods."""
     now = datetime.datetime.now(datetime.timezone.utc)
     async with Database().session() as session:
-        stmt = select(func.count(ProductRestockSubscription.id)).where(
-            ProductRestockSubscription.status == 'active',
-            (ProductRestockSubscription.next_attempt_at == None) | (ProductRestockSubscription.next_attempt_at <= now)
+        stock_exists = exists(
+            select(1).where(ItemValues.item_id == Goods.id)
+        )
+        stmt = (
+            select(func.count(ProductRestockSubscription.id))
+            .join(Goods, Goods.id == ProductRestockSubscription.item_id)
+            .where(
+                ProductRestockSubscription.status == 'active',
+                (ProductRestockSubscription.next_attempt_at == None) | (ProductRestockSubscription.next_attempt_at <= now),
+                Goods.is_enabled == True,
+                stock_exists,
+            )
         )
         result = await session.execute(stmt)
         return result.scalar() or 0
 
-async def claim_ready_restock_subscriptions(limit: int) -> list[ProductRestockSubscription]:
+async def claim_ready_restock_subscriptions(limit: int) -> list[ClaimedRestockSubscription]:
     """Atomically claim a batch of restock subscriptions that are ready."""
     now = datetime.datetime.now(datetime.timezone.utc)
     async with Database().session() as session:
-        from bot.database.methods.read import get_stock_for_items
-        
-        # 1. lock candidate active subscriptions using FOR UPDATE SKIP LOCKED
+        # 1. Lock only ProductRestockSubscription rows using FOR UPDATE OF product_restock_subscriptions SKIP LOCKED.
+        # Exclude disabled goods and out-of-stock items at query level to prevent starvation.
+        stock_exists = exists(
+            select(1).where(ItemValues.item_id == Goods.id)
+        )
         query = (
             select(ProductRestockSubscription)
             .join(Goods, Goods.id == ProductRestockSubscription.item_id)
             .where(
                 ProductRestockSubscription.status == 'active',
-                (ProductRestockSubscription.next_attempt_at == None) | (ProductRestockSubscription.next_attempt_at <= now)
+                (ProductRestockSubscription.next_attempt_at == None) | (ProductRestockSubscription.next_attempt_at <= now),
+                Goods.is_enabled == True,
+                stock_exists,
             )
             .order_by(ProductRestockSubscription.created_at.asc())
             .limit(limit)
-            .with_for_update(skip_locked=True)
+            .with_for_update(of=ProductRestockSubscription, skip_locked=True)
         )
-        
+
         result = await session.execute(query)
         candidates = list(result.scalars().all())
-        
+
         if not candidates:
             return []
-            
-        # 2. evaluate the candidate products using the canonical live-stock logic
-        item_ids = list(set(c.item_id for c in candidates))
-        stock_dict = await get_stock_for_items(item_ids)
-        
-        to_process_ids = []
-        claimed = []
-        
-        for sub in candidates:
-            stock = stock_dict.get(sub.item_id, 0)
-            if stock == -1 or stock > 0:
-                to_process_ids.append(sub.id)
-                claimed.append(sub)
-                
-        # 3. transition only currently available candidates to processing
-        if to_process_ids:
-            stmt = (
-                update(ProductRestockSubscription)
-                .where(ProductRestockSubscription.id.in_(to_process_ids))
-                .values(
-                    status='processing',
-                    processing_started_at=now,
-                    updated_at=now
-                )
+
+        to_process_ids = [c.id for c in candidates]
+
+        # 2. Transition claimed candidates to processing
+        stmt = (
+            update(ProductRestockSubscription)
+            .where(ProductRestockSubscription.id.in_(to_process_ids))
+            .values(
+                status='processing',
+                processing_started_at=now,
+                updated_at=now
             )
-            await session.execute(stmt)
-            
-        # 4. leave out-of-stock candidates active without modifying timestamps
-        # 5. commit and return only truly claimed subscriptions
+        )
+        await session.execute(stmt)
+
+        # 3. Eagerly load user locales and goods data to avoid detached ORM access
+        claimed_user_ids = list(set(c.user_id for c in candidates))
+        claimed_item_ids = list(set(c.item_id for c in candidates))
+
+        users_result = await session.execute(
+            select(User.telegram_id, User.language_code).where(User.telegram_id.in_(claimed_user_ids))
+        )
+        user_lang_map = {row.telegram_id: row.language_code for row in users_result}
+
+        goods_result = await session.execute(
+            select(
+                Goods.id,
+                Goods.name,
+                Goods.name_en,
+                Goods.name_ar,
+                Goods.name_ru,
+                Goods.name_zh,
+                Goods.name_vi,
+                Goods.name_tr,
+                Goods.name_es,
+                Goods.is_enabled,
+            ).where(Goods.id.in_(claimed_item_ids))
+        )
+        goods_map = {
+            row.id: {
+                "name": row.name,
+                "name_en": row.name_en,
+                "name_ar": row.name_ar,
+                "name_ru": row.name_ru,
+                "name_zh": row.name_zh,
+                "name_vi": row.name_vi,
+                "name_tr": row.name_tr,
+                "name_es": row.name_es,
+                "is_enabled": row.is_enabled,
+            }
+            for row in goods_result
+        }
+
+        # 4. Build detached structures
+        claimed = [
+            ClaimedRestockSubscription(
+                id=c.id,
+                user_id=c.user_id,
+                item_id=c.item_id,
+                attempts=c.attempts,
+                status='processing',
+                user_language_code=user_lang_map.get(c.user_id),
+                item_data=goods_map.get(c.item_id, {}),
+            )
+            for c in candidates
+        ]
+
         return claimed
 
 async def release_restock_for_retry(subscription_id: int, next_attempt_at: datetime.datetime, error_code: str) -> None:

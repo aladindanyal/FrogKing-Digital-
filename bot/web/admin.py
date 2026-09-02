@@ -911,6 +911,9 @@ class GoodsAdmin(AuditModelView, model=Goods):
             cleanup_orphaned_image(old_image, resolve_product_image_path)
         if getattr(super(), "after_model_change", None):
             await super().after_model_change(data, model, is_created, request)
+        if getattr(model, "is_enabled", False):
+            from bot.misc.services.restock_dispatcher import wake_restock_dispatcher
+            wake_restock_dispatcher()
     async def on_model_delete(self, model, request):
         from bot.database import Database
         from bot.database.models import OrderItem, BoughtGoods
@@ -1199,6 +1202,11 @@ class ItemValuesAdmin(AuditModelView, model=ItemValues):
     name = "Stock Item"
     name_plural = "Stock Items"
     icon = "fa-solid fa-warehouse"
+
+    async def after_model_change(self, data: dict, model: Any, is_created: bool, request: Request) -> None:
+        await super().after_model_change(data, model, is_created, request)
+        from bot.misc.services.restock_dispatcher import wake_restock_dispatcher
+        wake_restock_dispatcher()
 
 
 class BoughtGoodsAdmin(ModelView, model=BoughtGoods):

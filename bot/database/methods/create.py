@@ -71,29 +71,36 @@ async def add_values_to_item(item_name: str, value: str, is_infinity: bool) -> b
     if not value_norm:
         return False
 
-    async with Database().session() as s:
-        item_id = (await s.execute(select(Goods.id).where(Goods.name == item_name))).scalar()
-        if not item_id:
-            return False
+    inserted = False
+    try:
+        async with Database().session() as s:
+            item_id = (await s.execute(select(Goods.id).where(Goods.name == item_name))).scalar()
+            if not item_id:
+                return False
 
-        dup = (await s.execute(
-            select(exists().where(
-                ItemValues.item_id == item_id,
-                ItemValues.value == value_norm,
-            ))
-        )).scalar()
-        if dup:
-            return False
+            dup = (await s.execute(
+                select(exists().where(
+                    ItemValues.item_id == item_id,
+                    ItemValues.value == value_norm,
+                ))
+            )).scalar()
+            if dup:
+                return False
 
-        try:
             s.add(ItemValues(item_id=item_id, value=value_norm, is_infinity=bool(is_infinity)))
             await s.flush()
             from bot.database.methods.read import invalidate_item_cache
             from bot.database.methods.cache_utils import safe_create_task
             safe_create_task(invalidate_item_cache(item_name))
-            return True
-        except Exception:
-            return False
+            inserted = True
+    except Exception:
+        return False
+
+    if inserted:
+        from bot.misc.services.restock_dispatcher import wake_restock_dispatcher
+        wake_restock_dispatcher()
+
+    return inserted
 
 
 async def get_next_display_order(parent_id: int | None, s) -> int:

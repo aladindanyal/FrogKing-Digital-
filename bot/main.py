@@ -122,10 +122,10 @@ async def __on_start_up(dp: Dispatcher, bot: Bot) -> None:
     await cleanup_manager.start()
 
     # Start the restock dispatcher
-    from bot.misc.services.restock_dispatcher import RestockDispatcher
+    from bot.misc.services.restock_dispatcher import restock_dispatcher as rd
     global restock_dispatcher
-    restock_dispatcher = RestockDispatcher(bot)
-    await restock_dispatcher.start()
+    restock_dispatcher = rd
+    await restock_dispatcher.start(bot)
 
     # Start outbox dispatcher
     from bot.misc.services.outbox_dispatcher import outbox_dispatcher as od
